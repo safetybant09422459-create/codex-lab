@@ -3,21 +3,21 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Jarvis Dev v0.2</title>
+    <title>Jarvis Dev v0.3</title>
     <style>
       :root {
         color-scheme: light dark;
-        --bg: #f7f7f2;
+        --bg: #f6f7f4;
         --panel: #ffffff;
         --text: #1d2328;
-        --muted: #67727c;
-        --border: #d9ded6;
+        --muted: #64717a;
+        --border: #d8ded8;
         --accent: #0b6b5b;
         --accent-pressed: #07574a;
         --danger: #a63a2d;
         --success: #23724f;
         --warning: #8a5a12;
-        --code-bg: #111817;
+        --code-bg: #101614;
         --code-text: #d8eee8;
       }
 
@@ -47,69 +47,46 @@
         min-height: 100dvh;
         background: var(--bg);
         color: var(--text);
-        font-family:
-          system-ui,
-          -apple-system,
-          BlinkMacSystemFont,
-          "Segoe UI",
-          sans-serif;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
 
       main {
-        width: min(100%, 820px);
+        width: min(100%, 920px);
         margin: 0 auto;
-        padding: 16px 12px 24px;
+        padding: 14px 10px 28px;
       }
 
-      header {
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      .project {
         display: grid;
-        grid-template-columns: 1fr auto;
-        gap: 12px;
-        align-items: start;
-        margin-bottom: 14px;
+        gap: 10px;
+        margin-bottom: 12px;
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--panel);
+      }
+
+      .project-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
       }
 
       h1 {
-        margin: 0 0 4px;
-        font-size: 1.42rem;
+        font-size: 1.35rem;
         line-height: 1.2;
-      }
-
-      .target {
-        margin: 0;
-        color: var(--muted);
-        font-size: 0.9rem;
-        overflow-wrap: anywhere;
-      }
-
-      .panel,
-      details {
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: 8px;
-      }
-
-      .panel {
-        padding: 12px;
-      }
-
-      .run-state {
-        display: grid;
-        gap: 5px;
-        min-width: 110px;
-        padding: 8px 10px;
-        text-align: right;
-      }
-
-      .run-state span:first-child {
-        color: var(--muted);
-        font-size: 0.75rem;
-        font-weight: 700;
       }
 
       .state-value {
         color: var(--muted);
-        font-size: 1rem;
         font-weight: 800;
       }
 
@@ -125,54 +102,63 @@
         color: var(--danger);
       }
 
-      label {
-        display: block;
-        margin-bottom: 8px;
-        color: var(--muted);
-        font-size: 0.92rem;
-        font-weight: 650;
+      .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
       }
 
-      textarea,
-      input {
-        width: 100%;
+      .meta {
+        min-width: 0;
+        padding: 9px;
         border: 1px solid var(--border);
         border-radius: 8px;
-        padding: 12px;
-        background: transparent;
-        color: var(--text);
-        font: inherit;
       }
 
-      textarea {
-        min-height: 150px;
-        resize: vertical;
-        line-height: 1.45;
+      .meta span {
+        display: block;
+        color: var(--muted);
+        font-size: 0.75rem;
+        font-weight: 750;
       }
 
-      textarea:focus,
-      input:focus {
-        border-color: var(--accent);
-        outline: 2px solid color-mix(in srgb, var(--accent) 24%, transparent);
+      .meta strong {
+        display: block;
+        margin-top: 3px;
+        overflow-wrap: anywhere;
+        font-size: 0.9rem;
       }
 
-      .actions,
-      .git-buttons {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-top: 12px;
+      .tabs {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 6px;
+        margin: 12px 0;
       }
 
+      .tab,
       button {
         min-height: 44px;
         border: 0;
         border-radius: 8px;
-        padding: 0 16px;
+        padding: 0 12px;
         background: var(--accent);
         color: #fff;
         font: inherit;
         font-weight: 750;
+      }
+
+      .tab {
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--text);
+        font-size: 0.9rem;
+      }
+
+      .tab.active {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: #fff;
       }
 
       button:active {
@@ -193,38 +179,6 @@
         background: var(--danger);
       }
 
-      .status {
-        color: var(--muted);
-        font-size: 0.92rem;
-      }
-
-      .status.error,
-      .danger-text {
-        color: var(--danger);
-      }
-
-      .tabs {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 6px;
-        margin: 14px 0 10px;
-      }
-
-      .tab {
-        min-height: 42px;
-        border: 1px solid var(--border);
-        background: var(--panel);
-        color: var(--text);
-        padding: 0 8px;
-        font-size: 0.9rem;
-      }
-
-      .tab.active {
-        border-color: var(--accent);
-        background: var(--accent);
-        color: #fff;
-      }
-
       .tab-panel {
         display: none;
       }
@@ -232,6 +186,17 @@
       .tab-panel.active {
         display: grid;
         gap: 12px;
+      }
+
+      .panel,
+      details {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--panel);
+      }
+
+      .panel {
+        padding: 12px;
       }
 
       .section-head,
@@ -243,14 +208,109 @@
       }
 
       .section-head {
-        margin-bottom: 8px;
-        color: var(--muted);
-        font-size: 0.92rem;
+        margin-bottom: 10px;
       }
 
-      .section-head span:first-child {
+      h2,
+      h3,
+      summary {
+        font-size: 1rem;
+        font-weight: 800;
+      }
+
+      label {
+        display: block;
+        margin: 0 0 7px;
+        color: var(--muted);
+        font-size: 0.88rem;
+        font-weight: 700;
+      }
+
+      input,
+      textarea {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 11px;
+        background: transparent;
         color: var(--text);
-        font-weight: 750;
+        font: inherit;
+      }
+
+      textarea {
+        min-height: 96px;
+        resize: vertical;
+        line-height: 1.45;
+      }
+
+      textarea.large {
+        min-height: 260px;
+      }
+
+      input:focus,
+      textarea:focus {
+        border-color: var(--accent);
+        outline: 2px solid color-mix(in srgb, var(--accent) 24%, transparent);
+      }
+
+      .form-grid {
+        display: grid;
+        gap: 12px;
+      }
+
+      .chat-history {
+        display: grid;
+        gap: 8px;
+        min-height: 220px;
+        max-height: 46dvh;
+        overflow: auto;
+        padding: 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+      }
+
+      .message {
+        display: grid;
+        gap: 4px;
+        padding: 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--panel) 94%, var(--accent));
+      }
+
+      .message.user {
+        background: transparent;
+      }
+
+      .message strong {
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      .message pre {
+        padding: 0;
+        background: transparent;
+        color: var(--text);
+      }
+
+      .actions,
+      .git-buttons {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-top: 12px;
+        flex-wrap: wrap;
+      }
+
+      .status,
+      .muted {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .status.error,
+      .danger-text {
+        color: var(--danger);
       }
 
       .pill {
@@ -261,7 +321,7 @@
         border-radius: 8px;
         padding: 0 9px;
         color: var(--text);
-        font-size: 0.84rem;
+        font-size: 0.82rem;
         font-weight: 750;
       }
 
@@ -280,14 +340,14 @@
       }
 
       .answer {
-        min-height: 128px;
+        min-height: 132px;
         max-height: 42dvh;
         background: color-mix(in srgb, var(--panel) 88%, var(--accent));
         color: var(--text);
       }
 
       .status-pre {
-        min-height: 92px;
+        min-height: 86px;
         max-height: 28dvh;
       }
 
@@ -296,6 +356,7 @@
         max-height: 58dvh;
       }
 
+      .doc-list,
       .file-list {
         display: grid;
         gap: 8px;
@@ -347,7 +408,6 @@
         min-height: 46px;
         padding: 0 12px;
         cursor: pointer;
-        font-weight: 750;
       }
 
       details > div {
@@ -355,31 +415,32 @@
         padding: 12px;
       }
 
-      .commit-box {
-        display: grid;
-        gap: 8px;
-        margin-top: 12px;
+      @media (max-width: 700px) {
+        .tabs,
+        .meta-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
       }
 
-      @media (max-width: 560px) {
-        header,
-        .tabs {
-          grid-template-columns: 1fr;
+      @media (max-width: 520px) {
+        main {
+          padding-inline: 8px;
         }
 
-        .run-state {
-          text-align: left;
-        }
-
+        .project-top,
+        .section-head,
         .actions,
-        .git-buttons,
-        .section-head {
+        .git-buttons {
           align-items: stretch;
           flex-direction: column;
         }
 
-        .git-buttons button,
-        .actions button {
+        .tabs,
+        .meta-grid {
+          grid-template-columns: 1fr;
+        }
+
+        button {
           width: 100%;
         }
       }
@@ -387,89 +448,108 @@
   </head>
   <body>
     <main>
-      <header>
-        <div>
-          <h1>Jarvis Dev v0.2</h1>
-          <p class="target">Target: /mnt/nas/projects/codex-lab</p>
-        </div>
-        <div class="panel run-state" aria-live="polite">
-          <span>状態</span>
+      <section class="project">
+        <div class="project-top">
+          <div>
+            <h1 id="project-name">Jarvis Developer</h1>
+            <p class="muted">Jarvis Dev v0.3</p>
+          </div>
           <strong id="state-value" class="state-value">待機中</strong>
         </div>
-      </header>
-
-      <section class="panel">
-        <form id="run-form">
-          <label for="prompt">Prompt</label>
-          <textarea
-            id="prompt"
-            name="prompt"
-            placeholder="docs の更新内容を入力..."
-            required
-          ></textarea>
-          <div class="actions">
-            <button id="run-button" type="submit">実行</button>
-            <span id="status" class="status">待機中</span>
+        <div class="meta-grid">
+          <div class="meta">
+            <span>Local Path</span>
+            <strong id="project-path">/mnt/nas/projects/codex-lab</strong>
           </div>
-        </form>
+          <div class="meta">
+            <span>Branch</span>
+            <strong id="project-branch">main</strong>
+          </div>
+          <div class="meta">
+            <span>Git状態</span>
+            <strong id="project-git">確認中</strong>
+          </div>
+        </div>
       </section>
 
-      <nav class="tabs" aria-label="結果表示">
-        <button class="tab active" type="button" data-tab="answer-panel">最終回答</button>
-        <button class="tab" type="button" data-tab="files-panel">変更ファイル</button>
-        <button class="tab" type="button" data-tab="diff-panel">差分</button>
-        <button class="tab" type="button" data-tab="git-panel">Git操作</button>
+      <nav class="tabs" aria-label="Jarvis Developer">
+        <button class="tab active" type="button" data-tab="chat-panel">チャット</button>
+        <button class="tab" type="button" data-tab="develop-panel">開発</button>
+        <button class="tab" type="button" data-tab="review-panel">レビュー</button>
+        <button class="tab" type="button" data-tab="update-panel">更新</button>
+        <button class="tab" type="button" data-tab="logs-panel">詳細ログ</button>
       </nav>
 
-      <section id="answer-panel" class="tab-panel active">
+      <section id="chat-panel" class="tab-panel active">
         <div class="panel">
           <div class="section-head">
-            <span>最終回答</span>
+            <h2>チャット</h2>
+            <span class="status">ローカル下書き</span>
+          </div>
+          <div id="chat-history" class="chat-history"></div>
+          <div class="form-grid">
+            <div>
+              <label for="chat-input">ユーザー入力</label>
+              <textarea id="chat-input" placeholder="設計相談や「設計書ください」を入力"></textarea>
+            </div>
+          </div>
+          <div class="actions">
+            <button id="send-chat-button" type="button">送信</button>
+            <button id="template-button" class="secondary" type="button">設計書テンプレを作る</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="develop-panel" class="tab-panel">
+        <div class="panel">
+          <div class="section-head">
+            <h2>設計書貼り付け</h2>
+            <span class="status">ここではCodex実行しません</span>
+          </div>
+          <textarea id="design-input" class="large" placeholder="チャットで作った設計書を貼り付け"></textarea>
+        </div>
+        <div class="panel">
+          <div class="section-head">
+            <h2>Codexへ送信する内容</h2>
+            <span id="run-status" class="status">未送信</span>
+          </div>
+          <textarea id="codex-prompt" class="large"></textarea>
+          <div class="actions">
+            <button id="regenerate-prompt-button" class="secondary" type="button">送信内容を生成</button>
+            <button id="send-codex-button" type="button">Codexへ送信</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="review-panel" class="tab-panel">
+        <div class="panel">
+          <div class="section-head">
+            <h2>最終回答</h2>
             <span id="tokens" class="pill">tokens used: -</span>
           </div>
           <pre id="final-answer" class="answer">最終回答はここに表示されます。</pre>
         </div>
-        <details>
-          <summary>
-            <span>詳細ログ</span>
-            <span id="return-code"></span>
-          </summary>
-          <div>
-            <pre id="log">ログはここに表示されます。</pre>
-          </div>
-        </details>
-      </section>
-
-      <section id="files-panel" class="tab-panel">
         <div class="panel">
           <div class="section-head">
-            <span>変更ファイル</span>
+            <h2>git status</h2>
             <span id="file-count" class="pill">0 files</span>
-          </div>
-          <div id="file-list" class="file-list">変更ファイルはありません。</div>
-        </div>
-        <div class="panel">
-          <div class="section-head">
-            <span>git status</span>
           </div>
           <pre id="git-status" class="status-pre">git status 待機中...</pre>
         </div>
-      </section>
-
-      <section id="diff-panel" class="tab-panel">
-        <div id="diff-list">差分はありません。</div>
-      </section>
-
-      <section id="git-panel" class="tab-panel">
         <div class="panel">
           <div class="section-head">
-            <span>Git操作</span>
-            <span id="git-message" class="status">Commit / Push はボタン押下時のみ実行</span>
+            <h2>変更ファイル</h2>
           </div>
-          <div class="commit-box">
-            <label for="commit-message">Commit message</label>
-            <input id="commit-message" type="text" value="Update Jarvis Dev v0.2" />
+          <div id="file-list" class="file-list">変更ファイルはありません。</div>
+        </div>
+        <div id="diff-list">差分はありません。</div>
+        <div class="panel">
+          <div class="section-head">
+            <h2>Git操作</h2>
+            <span id="git-message" class="status">Commit / Push は人間の操作時のみ実行</span>
           </div>
+          <label for="commit-message">Commit message</label>
+          <input id="commit-message" type="text" value="Update Jarvis Dev v0.3" />
           <div class="git-buttons">
             <button id="reject-button" class="danger" type="button">却下</button>
             <button id="commit-button" type="button">Commit</button>
@@ -477,18 +557,51 @@
           </div>
         </div>
       </section>
+
+      <section id="update-panel" class="tab-panel">
+        <div class="panel">
+          <div class="section-head">
+            <h2>jarvis-dev</h2>
+            <span id="service-message" class="status">systemdサービス</span>
+          </div>
+          <pre id="service-status" class="status-pre">status 待機中...</pre>
+          <div class="actions">
+            <button id="service-refresh-button" class="secondary" type="button">状態更新</button>
+            <button id="service-restart-button" class="danger" type="button">再起動</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="logs-panel" class="tab-panel">
+        <div class="panel">
+          <div class="section-head">
+            <h2>Codex生ログ</h2>
+            <span id="return-code" class="pill"></span>
+          </div>
+          <pre id="log">ログはここに表示されます。</pre>
+        </div>
+      </section>
     </main>
 
     <script>
-      const form = document.querySelector("#run-form");
-      const promptInput = document.querySelector("#prompt");
-      const runButton = document.querySelector("#run-button");
-      const statusText = document.querySelector("#status");
+      const projectName = document.querySelector("#project-name");
+      const projectPath = document.querySelector("#project-path");
+      const projectBranch = document.querySelector("#project-branch");
+      const projectGit = document.querySelector("#project-git");
       const stateValue = document.querySelector("#state-value");
-      const returnCode = document.querySelector("#return-code");
+      const chatHistory = document.querySelector("#chat-history");
+      const chatInput = document.querySelector("#chat-input");
+      const sendChatButton = document.querySelector("#send-chat-button");
+      const templateButton = document.querySelector("#template-button");
+      const designInput = document.querySelector("#design-input");
+      const codexPrompt = document.querySelector("#codex-prompt");
+      const regeneratePromptButton = document.querySelector("#regenerate-prompt-button");
+      const sendCodexButton = document.querySelector("#send-codex-button");
+      const runStatus = document.querySelector("#run-status");
       const tokens = document.querySelector("#tokens");
       const finalAnswer = document.querySelector("#final-answer");
       const log = document.querySelector("#log");
+      const returnCode = document.querySelector("#return-code");
       const fileCount = document.querySelector("#file-count");
       const fileList = document.querySelector("#file-list");
       const gitStatus = document.querySelector("#git-status");
@@ -498,7 +611,19 @@
       const rejectButton = document.querySelector("#reject-button");
       const commitButton = document.querySelector("#commit-button");
       const pushButton = document.querySelector("#push-button");
+      const serviceStatus = document.querySelector("#service-status");
+      const serviceMessage = document.querySelector("#service-message");
+      const serviceRefreshButton = document.querySelector("#service-refresh-button");
+      const serviceRestartButton = document.querySelector("#service-restart-button");
+
       let polling = null;
+      let messages = [];
+      let project = {
+        name: "Jarvis Developer",
+        local_path: "/mnt/nas/projects/codex-lab",
+        branch: "main",
+        git_state: "unknown",
+      };
 
       const stateLabels = {
         idle: "待機中",
@@ -513,29 +638,34 @@
         deleted: "削除",
       };
 
-      function setStatus(text, isError = false) {
-        statusText.textContent = text;
-        statusText.classList.toggle("error", isError);
-      }
-
-      function setGitMessage(text, isError = false) {
-        gitMessage.textContent = text;
-        gitMessage.classList.toggle("danger-text", isError);
-      }
-
-      function setTopState(state) {
-        stateValue.textContent = stateLabels[state] || "待機中";
-        stateValue.className = `state-value ${state || "idle"}`;
-      }
+      const designTemplate = `Feature名:
+目的:
+背景:
+要件:
+触ってよいファイル:
+触ってはいけないファイル:
+受け入れ条件:
+安全条件:
+未実装として残してよいこと:`;
 
       function escapeHtml(value) {
-        return value.replace(/[&<>"']/g, (char) => ({
+        return String(value).replace(/[&<>"']/g, (char) => ({
           "&": "&amp;",
           "<": "&lt;",
           ">": "&gt;",
           "\"": "&quot;",
           "'": "&#39;",
         })[char]);
+      }
+
+      function setStatus(element, text, isError = false) {
+        element.textContent = text;
+        element.classList.toggle("error", isError);
+      }
+
+      function setTopState(state) {
+        stateValue.textContent = stateLabels[state] || "待機中";
+        stateValue.className = `state-value ${state || "idle"}`;
       }
 
       async function api(path, options = {}) {
@@ -547,32 +677,78 @@
         return data;
       }
 
+      function generatePrompt() {
+        const design = designInput.value.trim();
+        return `Project名: ${project.name}
+Local Path: ${project.local_path}
+Branch: ${project.branch}
+
+設計内容:
+${design || "未入力"}
+
+必須ルール:
+- git commit / git push を実行しないこと
+- /mnt/nas/projects/project を触らないこと
+- 破壊的操作をしないこと
+- 変更は設計内容と許可ファイルの範囲に限定すること
+- 完了後は、変更ファイル一覧、追加API一覧、追加画面/タブ一覧、動作確認手順、未実装事項、git commit / git push は実行していないことだけを最終回答に含めること`;
+      }
+
+      function renderChat() {
+        chatHistory.innerHTML = messages.map((message) => `
+          <div class="message ${message.role}">
+            <strong>${message.role === "user" ? "ユーザー" : "Jarvis"}</strong>
+            <pre>${escapeHtml(message.text)}</pre>
+          </div>
+        `).join("");
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+      }
+
+      function addMessage(role, text) {
+        messages.push({ role, text });
+        renderChat();
+      }
+
+      function makeLocalReply(text) {
+        if (text.includes("設計書ください") || text.includes("設計書テンプレ")) {
+          return designTemplate;
+        }
+        return "了解しました。ここではCodexは実行せず、設計相談や要件整理の下書きを続けられます。設計書が必要な場合は「設計書ください」と入力してください。";
+      }
+
+      async function loadProject() {
+        project = await api("/api/project");
+        projectName.textContent = project.name;
+        projectPath.textContent = project.local_path;
+        projectBranch.textContent = project.branch;
+        projectGit.textContent = project.git_state;
+      }
+
       async function refreshLogs() {
         const data = await api("/api/logs");
-
         setTopState(data.status);
         finalAnswer.textContent =
           data.final_answer || (data.running ? "最終回答を待っています..." : "最終回答はまだありません。");
         tokens.textContent = `tokens used: ${data.tokens_used || "-"}`;
         log.textContent = data.lines.length ? data.lines.join("\n") : "ログ待機中...";
-        returnCode.textContent =
-          data.returncode === null ? "" : `exit ${data.returncode}`;
+        returnCode.textContent = data.returncode === null ? "" : `exit ${data.returncode}`;
         log.scrollTop = log.scrollHeight;
 
         if (!data.running) {
-          runButton.disabled = false;
+          sendCodexButton.disabled = false;
           clearInterval(polling);
           polling = null;
           await refreshChanges();
+          await loadProject();
           if (data.returncode === 0) {
-            setStatus("完了");
+            setStatus(runStatus, "完了");
           } else if (data.returncode === null) {
-            setStatus("待機中");
+            setStatus(runStatus, "未送信");
           } else {
-            setStatus("失敗", true);
+            setStatus(runStatus, "失敗", true);
           }
         } else {
-          setStatus("実行中");
+          setStatus(runStatus, "実行中");
         }
       }
 
@@ -619,33 +795,73 @@
         }));
       }
 
+      async function refreshService() {
+        const data = await api("/api/service/status");
+        serviceStatus.textContent = data.output || "status output is empty";
+        setStatus(serviceMessage, data.ok ? "起動状態を取得" : "取得失敗", !data.ok);
+      }
+
       document.querySelectorAll(".tab").forEach((tab) => {
         tab.addEventListener("click", async () => {
           document.querySelectorAll(".tab").forEach((item) => item.classList.remove("active"));
           document.querySelectorAll(".tab-panel").forEach((panel) => panel.classList.remove("active"));
           tab.classList.add("active");
           document.querySelector(`#${tab.dataset.tab}`).classList.add("active");
-          if (tab.dataset.tab !== "answer-panel") {
+
+          if (tab.dataset.tab === "develop-panel") {
+            if (designInput.value.trim()) {
+              codexPrompt.value = generatePrompt();
+            }
+          }
+          if (tab.dataset.tab === "review-panel") {
+            await refreshLogs();
             await refreshChanges();
+          }
+          if (tab.dataset.tab === "update-panel") {
+            await refreshService();
           }
         });
       });
 
-      form.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        const prompt = promptInput.value.trim();
+      sendChatButton.addEventListener("click", () => {
+        const text = chatInput.value.trim();
+        if (!text) return;
+        addMessage("user", text);
+        addMessage("assistant", makeLocalReply(text));
+        chatInput.value = "";
+      });
+
+      templateButton.addEventListener("click", () => {
+        addMessage("assistant", designTemplate);
+      });
+
+      designInput.addEventListener("input", () => {
+        codexPrompt.value = generatePrompt();
+        setStatus(runStatus, "送信内容を自動生成済み");
+      });
+
+      regeneratePromptButton.addEventListener("click", () => {
+        codexPrompt.value = generatePrompt();
+        setStatus(runStatus, "再生成済み");
+      });
+
+      sendCodexButton.addEventListener("click", async () => {
+        const prompt = codexPrompt.value.trim();
         if (!prompt) {
-          setStatus("プロンプトを入力してください", true);
+          setStatus(runStatus, "送信内容を入力してください", true);
+          return;
+        }
+        if (!confirm("表示中の内容をCodexへ送信します。続行しますか？")) {
           return;
         }
 
-        runButton.disabled = true;
+        sendCodexButton.disabled = true;
         returnCode.textContent = "";
         tokens.textContent = "tokens used: -";
         finalAnswer.textContent = "最終回答を待っています...";
         log.textContent = "起動中...";
         setTopState("running");
-        setStatus("起動中");
+        setStatus(runStatus, "起動中");
 
         try {
           await api("/api/run", {
@@ -653,29 +869,29 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ prompt }),
           });
-
           await refreshLogs();
           polling = setInterval(refreshLogs, 1000);
         } catch (error) {
-          runButton.disabled = false;
-          setStatus(error.message, true);
+          sendCodexButton.disabled = false;
+          setStatus(runStatus, error.message, true);
         }
       });
 
       rejectButton.addEventListener("click", async () => {
         try {
           const data = await api("/api/reject", { method: "POST" });
-          setGitMessage(data.output);
+          setStatus(gitMessage, data.output);
           await refreshChanges();
+          await loadProject();
         } catch (error) {
-          setGitMessage(error.message, true);
+          setStatus(gitMessage, error.message, true);
         }
       });
 
       commitButton.addEventListener("click", async () => {
         const message = commitMessage.value.trim();
         if (!message) {
-          setGitMessage("コミットメッセージを入力してください", true);
+          setStatus(gitMessage, "コミットメッセージを入力してください", true);
           return;
         }
         try {
@@ -684,10 +900,11 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ message }),
           });
-          setGitMessage(data.output || "Committed");
+          setStatus(gitMessage, data.output || "Committed");
           await refreshChanges();
+          await loadProject();
         } catch (error) {
-          setGitMessage(error.message, true);
+          setStatus(gitMessage, error.message, true);
         }
       });
 
@@ -702,15 +919,32 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ confirm: true, confirm_text: typed || "" }),
           });
-          setGitMessage(data.output || "Pushed");
+          setStatus(gitMessage, data.output || "Pushed");
           await refreshChanges();
+          await loadProject();
         } catch (error) {
-          setGitMessage(error.message, true);
+          setStatus(gitMessage, error.message, true);
         }
       });
 
-      refreshLogs().catch((error) => setStatus(error.message, true));
-      refreshChanges().catch((error) => setGitMessage(error.message, true));
+      serviceRefreshButton.addEventListener("click", refreshService);
+      serviceRestartButton.addEventListener("click", async () => {
+        if (!confirm("jarvis-dev を再起動します。続行しますか？")) {
+          return;
+        }
+        try {
+          const data = await api("/api/service/restart", { method: "POST" });
+          serviceStatus.textContent = data.output || "restart command completed";
+          setStatus(serviceMessage, data.ok ? "再起動しました" : "再起動失敗", !data.ok);
+        } catch (error) {
+          setStatus(serviceMessage, error.message, true);
+        }
+      });
+
+      addMessage("assistant", "普段の相談、要件整理、設計書作成に使えます。");
+
+      Promise.all([loadProject(), refreshLogs(), refreshChanges()])
+        .catch((error) => setStatus(runStatus, error.message, true));
     </script>
   </body>
 </html>

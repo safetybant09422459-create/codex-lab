@@ -1,9 +1,9 @@
 # codex-lab
 AI開発練習用
 
-## Jarvis Dev v0.2
+## Jarvis Dev v0.3
 
-スマホブラウザから、このリポジトリ上の Codex CLI を実行し、変更内容を人間が確認してから Git に反映するためのプロトタイプ。
+スマホブラウザから、このリポジトリ上の Jarvis Core / MCP / アプリ開発を進めるための AI 開発 PM ツールのプロトタイプ。
 
 対象ディレクトリは固定で `/mnt/nas/projects/codex-lab`。
 本番旅行アプリ `/mnt/nas/projects/project` は対象外。
@@ -26,28 +26,49 @@ http://<ラズパイのIPアドレス>:8000
 
 ### 使い方
 
-1. 入力欄に Codex へ渡すプロンプトを書く
-2. 「実行」を押す
-3. 画面上部の状態（実行中 / 完了 / 失敗）を確認する
-4. 「最終回答」タブで最終回答と tokens used を確認する
-5. 「変更ファイル」タブで最新の `git status --short` と変更ファイル一覧を確認する
-6. 「差分」タブでファイルごとの差分を確認する
-7. 「Git操作」タブで、必要な場合だけ Commit または Push を実行する
+基本の流れは チャット → 開発 → レビュー → 更新。
+
+1. 画面上部で Project 名、Local Path、Branch、Git 状態を確認する
+2. 「チャット」タブで雑談、設計相談、要件整理を行う
+3. 「設計書ください」または「設計書テンプレを作る」で設計書形式を作る
+4. 内容を確認・修正して「開発」タブへ貼り付ける
+5. 「開発」タブで Codex へ送信する内容を確認・編集する
+6. 「Codexへ送信」を押し、確認ダイアログで承認してから Codex を実行する
+7. 「レビュー」タブで最終回答、tokens used、`git status`、変更ファイル、差分を確認する
+8. 必要な場合だけ「レビュー」タブの Commit / Push を人間が明示操作する
+9. 「更新」タブで `jarvis-dev` の systemd 状態を確認し、必要な場合だけ確認後に再起動する
+10. Codex の生ログは「詳細ログ」タブで確認する
 
 このアプリは Git commit / push を自動実行しない。
 Codex CLI には安全指示として、作業対象を `/mnt/nas/projects/codex-lab` に限定し、`/mnt/nas/projects/project` を触らないように伝える。
 Codex CLI には `git commit` と `git push` を実行しないように伝える。
 
-### 変更確認
+### タブ
 
-「変更ファイル」タブでは以下を確認できる。
+- 「チャット」: ローカルチャット欄で雑談、設計相談、要件整理、設計書テンプレ生成
+- 「開発」: 設計書貼り付け欄から Codex 送信用プロンプトを生成し、送信前に編集・承認
+- 「レビュー」: 最終回答、tokens used、git status、変更ファイル、diff、Commit、Push
+- 「更新」: `systemctl status jarvis-dev` と確認付き `systemctl restart jarvis-dev`
+- 「詳細ログ」: Codex の生ログ
 
-- 新規ファイル
-- 変更ファイル
-- 削除ファイル
-- `git status --short` の出力
+### 設計書テンプレ
 
-「差分」タブでは、ファイルごとの差分を折りたたみ表示で確認できる。
+チャットで作る設計書の形式は以下。
+
+```text
+Feature名:
+目的:
+背景:
+要件:
+触ってよいファイル:
+触ってはいけないファイル:
+受け入れ条件:
+安全条件:
+未実装として残してよいこと:
+```
+
+憲法タブはメインタブから外している。
+`GET /api/constitution` は互換用に残しているが、画面初期表示では docs を読み込まない。
 
 ### Git操作
 
@@ -57,11 +78,15 @@ Git 操作は Jarvis Dev 側の API だけが実行する。
 - 「Commit」: コミットメッセージ入力欄の内容で `git add -A` と `git commit -m` を実行する
 - 「Push」: 確認ダイアログ後、さらに `PUSH` と入力した場合だけ `git push` を実行する
 
-Commit のデフォルトメッセージは `Update Jarvis Dev v0.2`。
+Commit のデフォルトメッセージは `Update Jarvis Dev v0.3`。
 ユーザーは画面上で編集できる。
 
 ### API
 
+- `GET /api/project`
+- `GET /api/constitution` 互換用。画面初期表示では未使用
+- `GET /api/design` 互換用。画面初期表示では未使用
+- `POST /api/design` 互換用。画面初期表示では未使用
 - `POST /api/run`
 - `GET /api/logs`
 - `GET /api/changes`
@@ -69,6 +94,8 @@ Commit のデフォルトメッセージは `Update Jarvis Dev v0.2`。
 - `POST /api/reject`
 - `POST /api/commit`
 - `POST /api/push`
+- `GET /api/service/status`
+- `POST /api/service/restart`
 
 ### 設定
 

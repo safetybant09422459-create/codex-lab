@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import re
 import shlex
@@ -13,12 +14,13 @@ from pydantic import BaseModel, Field
 
 ROOT_DIR = Path("/mnt/nas/projects/codex-lab")
 FRONTEND_DIR = ROOT_DIR / "frontend"
+DESIGN_FILE = ROOT_DIR / ".jarvis-dev" / "design.json"
 CODEX_BIN = os.environ.get("CODEX_BIN", "codex")
 CODEX_ARGS = shlex.split(os.environ.get("CODEX_ARGS", "exec"))
 MAX_LOG_LINES = int(os.environ.get("JARVIS_DEV_MAX_LOG_LINES", "2000"))
 
 GUARD_PROMPT = """\
-You are running from Jarvis Dev v0.2.
+You are running from Jarvis Dev v0.3.
 
 Safety rules:
 - Work only in /mnt/nas/projects/codex-lab.
@@ -37,6 +39,44 @@ class RunRequest(BaseModel):
 
 class RunResponse(BaseModel):
     status: Literal["started"]
+
+
+class ProjectResponse(BaseModel):
+    name: str
+    local_path: str
+    branch: str
+    git_state: str
+
+
+class ConstitutionFile(BaseModel):
+    path: str
+    title: str
+    exists: bool
+    content: str
+
+
+class ConstitutionResponse(BaseModel):
+    files: list[ConstitutionFile]
+
+
+class DesignDocument(BaseModel):
+    feature_name: str = ""
+    purpose: str = ""
+    background: str = ""
+    requirements: str = ""
+    allowed_files: str = ""
+    forbidden_files: str = "/mnt/nas/projects/project"
+    acceptance_criteria: str = ""
+    safety_conditions: str = (
+        "git commit / git push を実行しない\n"
+        "/mnt/nas/projects/project を触らない\n"
+        "破壊的操作をしない"
+    )
+    deferrable_work: str = ""
+
+
+class DesignResponse(BaseModel):
+    design: DesignDocument
 
 
 class LogResponse(BaseModel):
@@ -79,7 +119,12 @@ class PushRequest(BaseModel):
     confirm_text: str = Field(max_length=80)
 
 
-app = FastAPI(title="Jarvis Dev v0.2")
+class ServiceResponse(BaseModel):
+    ok: bool
+    output: str
+
+
+app = FastAPI(title="Jarvis Dev v0.3")
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 _lock = asyncio.Lock()
@@ -153,6 +198,19 @@ def _extract_final_answer(lines: list[str]) -> str:
     return "\n".join(reversed(block)).strip()
 
 
+def _failure_summary(lines: list[str]) -> str:
+    cleaned = [_clean_line(line) for line in lines]
+    errors = [
+        line
+        for line in cleaned
+        if line.startswith("[error]") or "error" in line.lower() or "failed" in line.lower()
+    ]
+    if errors:
+        return "\n".join(errors[-12:]).strip()
+    useful = [line for line in cleaned if line.strip() and not TOKENS_RE.search(line)]
+    return "\n".join(useful[-20:]).strip()
+
+
 def _current_status() -> Literal["idle", "running", "succeeded", "failed"]:
     if _lock.locked():
         return "running"
@@ -208,6 +266,38 @@ async def _git_changes() -> ChangesResponse:
             )
         )
     return ChangesResponse(status_text=status_text, files=files, rejected=_rejected)
+
+
+def _read_design() -> DesignDocument:
+    if not DESIGN_FILE.exists():
+        return DesignDocument()
+    try:
+        data = json.loads(DESIGN_FILE.read_text(encoding="utf-8"))
+        return DesignDocument(**data)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return DesignDocument()
+
+
+def _write_design(design: DesignDocument) -> None:
+    DESIGN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    data = design.model_dump() if hasattr(design, "model_dump") else design.dict()
+    DESIGN_FILE.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+async def _systemctl(*args: str) -> ServiceResponse:
+    process = await asyncio.create_subprocess_exec(
+        "systemctl",
+        *args,
+        "jarvis-dev",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    stdout, _ = await process.communicate()
+    output = stdout.decode("utf-8", errors="replace").strip()
+    return ServiceResponse(ok=process.returncode == 0, output=output)
 
 
 def _assert_relative_repo_path(path: str) -> None:
@@ -290,14 +380,62 @@ async def run_codex(request: RunRequest) -> RunResponse:
     return RunResponse(status="started")
 
 
+@app.get("/api/project", response_model=ProjectResponse)
+async def get_project() -> ProjectResponse:
+    status_text = await _git("status", "--short", check=False)
+    git_state = "clean" if not status_text.strip() else "changed"
+    return ProjectResponse(
+        name="Jarvis Developer",
+        local_path=str(ROOT_DIR),
+        branch="main",
+        git_state=git_state,
+    )
+
+
+@app.get("/api/constitution", response_model=ConstitutionResponse)
+async def get_constitution() -> ConstitutionResponse:
+    targets = [
+        ("docs/vision.md", "vision"),
+        ("docs/principles.md", "principles"),
+        ("docs/runtime.md", "runtime"),
+    ]
+    files: list[ConstitutionFile] = []
+    for relative_path, title in targets:
+        path = ROOT_DIR / relative_path
+        exists = path.exists()
+        files.append(
+            ConstitutionFile(
+                path=relative_path,
+                title=title,
+                exists=exists,
+                content=path.read_text(encoding="utf-8") if exists else "未作成",
+            )
+        )
+    return ConstitutionResponse(files=files)
+
+
+@app.get("/api/design", response_model=DesignResponse)
+async def get_design() -> DesignResponse:
+    return DesignResponse(design=_read_design())
+
+
+@app.post("/api/design", response_model=DesignResponse)
+async def save_design(design: DesignDocument) -> DesignResponse:
+    _write_design(design)
+    return DesignResponse(design=design)
+
+
 @app.get("/api/logs", response_model=LogResponse)
 async def get_logs() -> LogResponse:
+    final_answer = _extract_final_answer(_logs)
+    if not final_answer and _returncode not in (None, 0):
+        final_answer = _failure_summary(_logs)
     return LogResponse(
         running=_lock.locked(),
         returncode=_returncode,
         status=_current_status(),
         lines=_logs,
-        final_answer=_extract_final_answer(_logs),
+        final_answer=final_answer,
         tokens_used=_extract_tokens_used(_logs),
     )
 
@@ -350,3 +488,13 @@ async def push_changes(request: PushRequest) -> GitActionResponse:
 
     output = await _git("push")
     return GitActionResponse(ok=True, output=output)
+
+
+@app.get("/api/service/status", response_model=ServiceResponse)
+async def service_status() -> ServiceResponse:
+    return await _systemctl("status", "--no-pager")
+
+
+@app.post("/api/service/restart", response_model=ServiceResponse)
+async def service_restart() -> ServiceResponse:
+    return await _systemctl("restart")
