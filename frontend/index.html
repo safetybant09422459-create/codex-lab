@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Jarvis Dev v0.1</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f6f7f4;
+        --panel: #ffffff;
+        --text: #1d2328;
+        --muted: #66707a;
+        --border: #d9ded6;
+        --accent: #0b6b5b;
+        --accent-pressed: #07574a;
+        --danger: #a63a2d;
+        --success: #23724f;
+        --warning: #8a5a12;
+        --log-bg: #111817;
+        --log-text: #d8eee8;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #121513;
+          --panel: #1c211e;
+          --text: #eef3ee;
+          --muted: #a7b0aa;
+          --border: #354039;
+          --accent: #32b59d;
+          --accent-pressed: #27917e;
+          --danger: #f08273;
+          --success: #74d39e;
+          --warning: #e1b15d;
+          --log-bg: #080c0b;
+          --log-text: #cfe9e1;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      main {
+        width: min(100%, 760px);
+        margin: 0 auto;
+        padding: 18px 14px 24px;
+      }
+
+      header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 16px;
+      }
+
+      h1 {
+        margin: 0 0 4px;
+        font-size: 1.45rem;
+        line-height: 1.2;
+      }
+
+      .target {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.92rem;
+        overflow-wrap: anywhere;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px;
+      }
+
+      .run-state {
+        display: grid;
+        gap: 5px;
+        min-width: 112px;
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--panel);
+        text-align: right;
+      }
+
+      .run-state span:first-child {
+        color: var(--muted);
+        font-size: 0.75rem;
+        font-weight: 700;
+      }
+
+      .state-value {
+        color: var(--muted);
+        font-size: 1rem;
+        font-weight: 800;
+      }
+
+      .state-value.running {
+        color: var(--warning);
+      }
+
+      .state-value.succeeded {
+        color: var(--success);
+      }
+
+      .state-value.failed {
+        color: var(--danger);
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--muted);
+        font-size: 0.92rem;
+        font-weight: 650;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 168px;
+        resize: vertical;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px;
+        background: transparent;
+        color: var(--text);
+        font: inherit;
+        line-height: 1.45;
+      }
+
+      textarea:focus {
+        border-color: var(--accent);
+        outline: 2px solid color-mix(in srgb, var(--accent) 24%, transparent);
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      button {
+        min-height: 44px;
+        border: 0;
+        border-radius: 8px;
+        padding: 0 18px;
+        background: var(--accent);
+        color: #fff;
+        font: inherit;
+        font-weight: 750;
+      }
+
+      button:active {
+        background: var(--accent-pressed);
+      }
+
+      button:disabled {
+        opacity: 0.55;
+      }
+
+      .status {
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .status.error {
+        color: var(--danger);
+      }
+
+      .result-grid {
+        display: grid;
+        gap: 14px;
+        margin-top: 14px;
+      }
+
+      .result-head,
+      .log-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin: 0 0 8px;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .result-head span:first-child,
+      .log-head span:first-child {
+        color: var(--text);
+        font-weight: 750;
+      }
+
+      .tokens {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0 10px;
+        color: var(--text);
+        font-size: 0.86rem;
+        font-weight: 750;
+      }
+
+      .answer {
+        min-height: 128px;
+        max-height: 42dvh;
+        background: color-mix(in srgb, var(--panel) 88%, var(--accent));
+        color: var(--text);
+      }
+
+      details {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0;
+      }
+
+      summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 46px;
+        padding: 0 12px;
+        color: var(--text);
+        cursor: pointer;
+        font-weight: 750;
+      }
+
+      summary::marker {
+        color: var(--muted);
+      }
+
+      details .log-body {
+        border-top: 1px solid var(--border);
+        padding: 12px;
+      }
+
+      pre {
+        min-height: 260px;
+        max-height: 52dvh;
+        margin: 0;
+        overflow: auto;
+        border-radius: 8px;
+        padding: 12px;
+        background: var(--log-bg);
+        color: var(--log-text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.82rem;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      @media (max-width: 520px) {
+        header {
+          display: grid;
+        }
+
+        .run-state {
+          width: 100%;
+          text-align: left;
+        }
+
+        .actions,
+        .result-head {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .tokens {
+          justify-content: center;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Jarvis Dev v0.1</h1>
+          <p class="target">Target: /mnt/nas/projects/codex-lab</p>
+        </div>
+        <div class="run-state" aria-live="polite">
+          <span>状態</span>
+          <strong id="state-value" class="state-value">待機中</strong>
+        </div>
+      </header>
+
+      <section class="panel">
+        <form id="run-form">
+          <label for="prompt">Prompt</label>
+          <textarea
+            id="prompt"
+            name="prompt"
+            placeholder="docs の更新内容を入力..."
+            required
+          ></textarea>
+          <div class="actions">
+            <button id="run-button" type="submit">実行</button>
+            <span id="status" class="status">待機中</span>
+          </div>
+        </form>
+      </section>
+
+      <div class="result-grid" aria-live="polite">
+        <section class="panel">
+          <div class="result-head">
+            <span>最終回答</span>
+            <span id="tokens" class="tokens">tokens used: -</span>
+          </div>
+          <pre id="final-answer" class="answer">最終回答はここに表示されます。</pre>
+        </section>
+
+        <details id="log-details">
+          <summary>
+            <span>詳細ログ</span>
+            <span id="return-code"></span>
+          </summary>
+          <div class="log-body">
+            <div class="log-head">
+              <span>Codex 全ログ</span>
+            </div>
+            <pre id="log">ログはここに表示されます。</pre>
+          </div>
+        </details>
+      </div>
+    </main>
+
+    <script>
+      const form = document.querySelector("#run-form");
+      const promptInput = document.querySelector("#prompt");
+      const runButton = document.querySelector("#run-button");
+      const statusText = document.querySelector("#status");
+      const stateValue = document.querySelector("#state-value");
+      const returnCode = document.querySelector("#return-code");
+      const tokens = document.querySelector("#tokens");
+      const finalAnswer = document.querySelector("#final-answer");
+      const log = document.querySelector("#log");
+      let polling = null;
+
+      const stateLabels = {
+        idle: "待機中",
+        running: "実行中",
+        succeeded: "完了",
+        failed: "失敗",
+      };
+
+      function setStatus(text, isError = false) {
+        statusText.textContent = text;
+        statusText.classList.toggle("error", isError);
+      }
+
+      function setTopState(state) {
+        stateValue.textContent = stateLabels[state] || "待機中";
+        stateValue.className = `state-value ${state || "idle"}`;
+      }
+
+      async function refreshLogs() {
+        const res = await fetch("/api/logs");
+        const data = await res.json();
+
+        setTopState(data.status);
+        finalAnswer.textContent =
+          data.final_answer || (data.running ? "最終回答を待っています..." : "最終回答はまだありません。");
+        tokens.textContent = `tokens used: ${data.tokens_used || "-"}`;
+        log.textContent = data.lines.length ? data.lines.join("\n") : "ログ待機中...";
+        returnCode.textContent =
+          data.returncode === null ? "" : `exit ${data.returncode}`;
+        log.scrollTop = log.scrollHeight;
+
+        if (!data.running) {
+          runButton.disabled = false;
+          clearInterval(polling);
+          polling = null;
+          if (data.returncode === 0) {
+            setStatus("完了");
+          } else if (data.returncode === null) {
+            setStatus("待機中");
+          } else {
+            setStatus("失敗", true);
+          }
+        } else {
+          setStatus("実行中");
+        }
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const prompt = promptInput.value.trim();
+        if (!prompt) {
+          setStatus("プロンプトを入力してください", true);
+          return;
+        }
+
+        runButton.disabled = true;
+        returnCode.textContent = "";
+        tokens.textContent = "tokens used: -";
+        finalAnswer.textContent = "最終回答を待っています...";
+        log.textContent = "起動中...";
+        setTopState("running");
+        setStatus("起動中");
+
+        try {
+          const res = await fetch("/api/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt }),
+          });
+
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.detail || `HTTP ${res.status}`);
+          }
+
+          await refreshLogs();
+          polling = setInterval(refreshLogs, 1000);
+        } catch (error) {
+          runButton.disabled = false;
+          setStatus(error.message, true);
+        }
+      });
+
+      refreshLogs();
+    </script>
+  </body>
+</html>
