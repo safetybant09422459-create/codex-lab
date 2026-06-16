@@ -18,7 +18,7 @@ CODEX_ARGS = shlex.split(os.environ.get("CODEX_ARGS", "exec"))
 MAX_LOG_LINES = int(os.environ.get("JARVIS_DEV_MAX_LOG_LINES", "2000"))
 
 GUARD_PROMPT = """\
-You are running from Jarvis Dev v0.1.
+You are running from Jarvis Dev v0.2.
 
 Safety rules:
 - Work only in /mnt/nas/projects/codex-lab.
@@ -48,13 +48,45 @@ class LogResponse(BaseModel):
     tokens_used: str | None
 
 
-app = FastAPI(title="Jarvis Dev v0.1")
+class ChangedFile(BaseModel):
+    path: str
+    status: Literal["new", "modified", "deleted"]
+    raw: str
+
+
+class ChangesResponse(BaseModel):
+    status_text: str
+    files: list[ChangedFile]
+    rejected: bool
+
+
+class DiffResponse(BaseModel):
+    path: str
+    diff: str
+
+
+class CommitRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+
+
+class GitActionResponse(BaseModel):
+    ok: bool
+    output: str
+
+
+class PushRequest(BaseModel):
+    confirm: bool
+    confirm_text: str = Field(max_length=80)
+
+
+app = FastAPI(title="Jarvis Dev v0.2")
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 _lock = asyncio.Lock()
 _process: asyncio.subprocess.Process | None = None
 _logs: list[str] = []
 _returncode: int | None = None
+_rejected = False
 
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 FINAL_MARKER_RE = re.compile(
@@ -131,6 +163,72 @@ def _current_status() -> Literal["idle", "running", "succeeded", "failed"]:
     return "failed"
 
 
+async def _git(*args: str, check: bool = True) -> str:
+    process = await asyncio.create_subprocess_exec(
+        "git",
+        *args,
+        cwd=ROOT_DIR,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    stdout, _ = await process.communicate()
+    output = stdout.decode("utf-8", errors="replace")
+    if check and process.returncode != 0:
+        raise HTTPException(status_code=400, detail=output.strip() or "git command failed")
+    return output
+
+
+def _status_kind(code: str) -> Literal["new", "modified", "deleted"]:
+    if code == "??" or "A" in code:
+        return "new"
+    if "D" in code:
+        return "deleted"
+    return "modified"
+
+
+def _status_path(raw_path: str) -> str:
+    if " -> " in raw_path:
+        return raw_path.rsplit(" -> ", 1)[1]
+    return raw_path
+
+
+async def _git_changes() -> ChangesResponse:
+    status_text = await _git("status", "--short")
+    files: list[ChangedFile] = []
+    for line in status_text.splitlines():
+        if len(line) < 4:
+            continue
+        code = line[:2]
+        raw_path = line[3:].strip()
+        files.append(
+            ChangedFile(
+                path=_status_path(raw_path),
+                status=_status_kind(code),
+                raw=line,
+            )
+        )
+    return ChangesResponse(status_text=status_text, files=files, rejected=_rejected)
+
+
+def _assert_relative_repo_path(path: str) -> None:
+    candidate = (ROOT_DIR / path).resolve()
+    if ROOT_DIR not in candidate.parents and candidate != ROOT_DIR:
+        raise HTTPException(status_code=400, detail="Path is outside target repository.")
+
+
+async def _file_diff(path: str) -> str:
+    _assert_relative_repo_path(path)
+    changes = await _git_changes()
+    changed = {item.path: item.status for item in changes.files}
+    if path not in changed:
+        raise HTTPException(status_code=404, detail="File is not changed.")
+
+    if changed[path] == "new":
+        output = await _git("diff", "--no-index", "--", "/dev/null", path, check=False)
+        return output or f"New file has no diff output: {path}\n"
+    return await _git("diff", "--", path, check=False)
+
+
 async def _run_codex(prompt: str) -> None:
     global _process, _returncode
 
@@ -179,13 +277,14 @@ async def index() -> FileResponse:
 
 @app.post("/api/run", response_model=RunResponse)
 async def run_codex(request: RunRequest) -> RunResponse:
-    global _returncode
+    global _rejected, _returncode
 
     if _lock.locked():
         raise HTTPException(status_code=409, detail="Codex is already running.")
 
     await _lock.acquire()
     _logs.clear()
+    _rejected = False
     _returncode = None
     asyncio.create_task(_run_codex(request.prompt))
     return RunResponse(status="started")
@@ -201,3 +300,53 @@ async def get_logs() -> LogResponse:
         final_answer=_extract_final_answer(_logs),
         tokens_used=_extract_tokens_used(_logs),
     )
+
+
+@app.get("/api/changes", response_model=ChangesResponse)
+async def get_changes() -> ChangesResponse:
+    return await _git_changes()
+
+
+@app.get("/api/diff", response_model=DiffResponse)
+async def get_diff(path: str) -> DiffResponse:
+    return DiffResponse(path=path, diff=await _file_diff(path))
+
+
+@app.post("/api/reject", response_model=GitActionResponse)
+async def reject_changes() -> GitActionResponse:
+    global _rejected
+
+    _rejected = True
+    return GitActionResponse(
+        ok=True,
+        output="Rejected in Jarvis Dev. No files were reverted and no Git command was run.",
+    )
+
+
+@app.post("/api/commit", response_model=GitActionResponse)
+async def commit_changes(request: CommitRequest) -> GitActionResponse:
+    if _lock.locked():
+        raise HTTPException(status_code=409, detail="Codex is still running.")
+
+    changes = await _git_changes()
+    if not changes.files:
+        raise HTTPException(status_code=400, detail="No changes to commit.")
+
+    message = request.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Commit message is required.")
+
+    await _git("add", "-A")
+    output = await _git("commit", "-m", message)
+    return GitActionResponse(ok=True, output=output)
+
+
+@app.post("/api/push", response_model=GitActionResponse)
+async def push_changes(request: PushRequest) -> GitActionResponse:
+    if _lock.locked():
+        raise HTTPException(status_code=409, detail="Codex is still running.")
+    if not request.confirm or request.confirm_text != "PUSH":
+        raise HTTPException(status_code=400, detail="Push requires two confirmations.")
+
+    output = await _git("push")
+    return GitActionResponse(ok=True, output=output)

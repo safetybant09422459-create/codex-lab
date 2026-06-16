@@ -3,22 +3,22 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Jarvis Dev v0.1</title>
+    <title>Jarvis Dev v0.2</title>
     <style>
       :root {
         color-scheme: light dark;
-        --bg: #f6f7f4;
+        --bg: #f7f7f2;
         --panel: #ffffff;
         --text: #1d2328;
-        --muted: #66707a;
+        --muted: #67727c;
         --border: #d9ded6;
         --accent: #0b6b5b;
         --accent-pressed: #07574a;
         --danger: #a63a2d;
         --success: #23724f;
         --warning: #8a5a12;
-        --log-bg: #111817;
-        --log-text: #d8eee8;
+        --code-bg: #111817;
+        --code-text: #d8eee8;
       }
 
       @media (prefers-color-scheme: dark) {
@@ -33,8 +33,8 @@
           --danger: #f08273;
           --success: #74d39e;
           --warning: #e1b15d;
-          --log-bg: #080c0b;
-          --log-text: #cfe9e1;
+          --code-bg: #080c0b;
+          --code-text: #cfe9e1;
         }
       }
 
@@ -56,47 +56,48 @@
       }
 
       main {
-        width: min(100%, 760px);
+        width: min(100%, 820px);
         margin: 0 auto;
-        padding: 18px 14px 24px;
+        padding: 16px 12px 24px;
       }
 
       header {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 14px;
-        margin-bottom: 16px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 12px;
+        align-items: start;
+        margin-bottom: 14px;
       }
 
       h1 {
         margin: 0 0 4px;
-        font-size: 1.45rem;
+        font-size: 1.42rem;
         line-height: 1.2;
       }
 
       .target {
         margin: 0;
         color: var(--muted);
-        font-size: 0.92rem;
+        font-size: 0.9rem;
         overflow-wrap: anywhere;
       }
 
-      .panel {
+      .panel,
+      details {
         background: var(--panel);
         border: 1px solid var(--border);
         border-radius: 8px;
+      }
+
+      .panel {
         padding: 12px;
       }
 
       .run-state {
         display: grid;
         gap: 5px;
-        min-width: 112px;
+        min-width: 110px;
         padding: 8px 10px;
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        background: var(--panel);
         text-align: right;
       }
 
@@ -132,25 +133,31 @@
         font-weight: 650;
       }
 
-      textarea {
+      textarea,
+      input {
         width: 100%;
-        min-height: 168px;
-        resize: vertical;
         border: 1px solid var(--border);
         border-radius: 8px;
         padding: 12px;
         background: transparent;
         color: var(--text);
         font: inherit;
+      }
+
+      textarea {
+        min-height: 150px;
+        resize: vertical;
         line-height: 1.45;
       }
 
-      textarea:focus {
+      textarea:focus,
+      input:focus {
         border-color: var(--accent);
         outline: 2px solid color-mix(in srgb, var(--accent) 24%, transparent);
       }
 
-      .actions {
+      .actions,
+      .git-buttons {
         display: flex;
         align-items: center;
         gap: 10px;
@@ -161,7 +168,7 @@
         min-height: 44px;
         border: 0;
         border-radius: 8px;
-        padding: 0 18px;
+        padding: 0 16px;
         background: var(--accent);
         color: #fff;
         font: inherit;
@@ -176,48 +183,100 @@
         opacity: 0.55;
       }
 
+      .secondary {
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text);
+      }
+
+      .danger {
+        background: var(--danger);
+      }
+
       .status {
         color: var(--muted);
         font-size: 0.92rem;
       }
 
-      .status.error {
+      .status.error,
+      .danger-text {
         color: var(--danger);
       }
 
-      .result-grid {
+      .tabs {
         display: grid;
-        gap: 14px;
-        margin-top: 14px;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        margin: 14px 0 10px;
       }
 
-      .result-head,
-      .log-head {
+      .tab {
+        min-height: 42px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--text);
+        padding: 0 8px;
+        font-size: 0.9rem;
+      }
+
+      .tab.active {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: #fff;
+      }
+
+      .tab-panel {
+        display: none;
+      }
+
+      .tab-panel.active {
+        display: grid;
+        gap: 12px;
+      }
+
+      .section-head,
+      summary {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
-        margin: 0 0 8px;
+        gap: 10px;
+      }
+
+      .section-head {
+        margin-bottom: 8px;
         color: var(--muted);
         font-size: 0.92rem;
       }
 
-      .result-head span:first-child,
-      .log-head span:first-child {
+      .section-head span:first-child {
         color: var(--text);
         font-weight: 750;
       }
 
-      .tokens {
+      .pill {
         display: inline-flex;
         align-items: center;
-        min-height: 30px;
+        min-height: 28px;
         border: 1px solid var(--border);
         border-radius: 8px;
-        padding: 0 10px;
+        padding: 0 9px;
         color: var(--text);
-        font-size: 0.86rem;
+        font-size: 0.84rem;
         font-weight: 750;
+      }
+
+      pre {
+        margin: 0;
+        overflow: auto;
+        border-radius: 8px;
+        padding: 12px;
+        background: var(--code-bg);
+        color: var(--code-text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.81rem;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
       }
 
       .answer {
@@ -227,68 +286,101 @@
         color: var(--text);
       }
 
-      details {
-        background: var(--panel);
+      .status-pre {
+        min-height: 92px;
+        max-height: 28dvh;
+      }
+
+      .diff-pre {
+        min-height: 180px;
+        max-height: 58dvh;
+      }
+
+      .file-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .file-row {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 8px;
+        align-items: start;
+        padding: 10px;
         border: 1px solid var(--border);
         border-radius: 8px;
+      }
+
+      .file-path {
+        overflow-wrap: anywhere;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.86rem;
+      }
+
+      .badge {
+        min-width: 52px;
+        border-radius: 8px;
+        padding: 3px 7px;
+        text-align: center;
+        color: #fff;
+        font-size: 0.76rem;
+        font-weight: 800;
+      }
+
+      .badge.new {
+        background: var(--success);
+      }
+
+      .badge.modified {
+        background: var(--warning);
+      }
+
+      .badge.deleted {
+        background: var(--danger);
+      }
+
+      details {
         padding: 0;
       }
 
       summary {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
         min-height: 46px;
         padding: 0 12px;
-        color: var(--text);
         cursor: pointer;
         font-weight: 750;
       }
 
-      summary::marker {
-        color: var(--muted);
-      }
-
-      details .log-body {
+      details > div {
         border-top: 1px solid var(--border);
         padding: 12px;
       }
 
-      pre {
-        min-height: 260px;
-        max-height: 52dvh;
-        margin: 0;
-        overflow: auto;
-        border-radius: 8px;
-        padding: 12px;
-        background: var(--log-bg);
-        color: var(--log-text);
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        font-size: 0.82rem;
-        line-height: 1.45;
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
+      .commit-box {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
       }
 
-      @media (max-width: 520px) {
-        header {
-          display: grid;
+      @media (max-width: 560px) {
+        header,
+        .tabs {
+          grid-template-columns: 1fr;
         }
 
         .run-state {
-          width: 100%;
           text-align: left;
         }
 
         .actions,
-        .result-head {
+        .git-buttons,
+        .section-head {
           align-items: stretch;
           flex-direction: column;
         }
 
-        .tokens {
-          justify-content: center;
+        .git-buttons button,
+        .actions button {
+          width: 100%;
         }
       }
     </style>
@@ -297,10 +389,10 @@
     <main>
       <header>
         <div>
-          <h1>Jarvis Dev v0.1</h1>
+          <h1>Jarvis Dev v0.2</h1>
           <p class="target">Target: /mnt/nas/projects/codex-lab</p>
         </div>
-        <div class="run-state" aria-live="polite">
+        <div class="panel run-state" aria-live="polite">
           <span>状態</span>
           <strong id="state-value" class="state-value">待機中</strong>
         </div>
@@ -322,28 +414,69 @@
         </form>
       </section>
 
-      <div class="result-grid" aria-live="polite">
-        <section class="panel">
-          <div class="result-head">
+      <nav class="tabs" aria-label="結果表示">
+        <button class="tab active" type="button" data-tab="answer-panel">最終回答</button>
+        <button class="tab" type="button" data-tab="files-panel">変更ファイル</button>
+        <button class="tab" type="button" data-tab="diff-panel">差分</button>
+        <button class="tab" type="button" data-tab="git-panel">Git操作</button>
+      </nav>
+
+      <section id="answer-panel" class="tab-panel active">
+        <div class="panel">
+          <div class="section-head">
             <span>最終回答</span>
-            <span id="tokens" class="tokens">tokens used: -</span>
+            <span id="tokens" class="pill">tokens used: -</span>
           </div>
           <pre id="final-answer" class="answer">最終回答はここに表示されます。</pre>
-        </section>
-
-        <details id="log-details">
+        </div>
+        <details>
           <summary>
             <span>詳細ログ</span>
             <span id="return-code"></span>
           </summary>
-          <div class="log-body">
-            <div class="log-head">
-              <span>Codex 全ログ</span>
-            </div>
+          <div>
             <pre id="log">ログはここに表示されます。</pre>
           </div>
         </details>
-      </div>
+      </section>
+
+      <section id="files-panel" class="tab-panel">
+        <div class="panel">
+          <div class="section-head">
+            <span>変更ファイル</span>
+            <span id="file-count" class="pill">0 files</span>
+          </div>
+          <div id="file-list" class="file-list">変更ファイルはありません。</div>
+        </div>
+        <div class="panel">
+          <div class="section-head">
+            <span>git status</span>
+          </div>
+          <pre id="git-status" class="status-pre">git status 待機中...</pre>
+        </div>
+      </section>
+
+      <section id="diff-panel" class="tab-panel">
+        <div id="diff-list">差分はありません。</div>
+      </section>
+
+      <section id="git-panel" class="tab-panel">
+        <div class="panel">
+          <div class="section-head">
+            <span>Git操作</span>
+            <span id="git-message" class="status">Commit / Push はボタン押下時のみ実行</span>
+          </div>
+          <div class="commit-box">
+            <label for="commit-message">Commit message</label>
+            <input id="commit-message" type="text" value="Update Jarvis Dev v0.2" />
+          </div>
+          <div class="git-buttons">
+            <button id="reject-button" class="danger" type="button">却下</button>
+            <button id="commit-button" type="button">Commit</button>
+            <button id="push-button" class="secondary" type="button">Push</button>
+          </div>
+        </div>
+      </section>
     </main>
 
     <script>
@@ -356,6 +489,15 @@
       const tokens = document.querySelector("#tokens");
       const finalAnswer = document.querySelector("#final-answer");
       const log = document.querySelector("#log");
+      const fileCount = document.querySelector("#file-count");
+      const fileList = document.querySelector("#file-list");
+      const gitStatus = document.querySelector("#git-status");
+      const diffList = document.querySelector("#diff-list");
+      const gitMessage = document.querySelector("#git-message");
+      const commitMessage = document.querySelector("#commit-message");
+      const rejectButton = document.querySelector("#reject-button");
+      const commitButton = document.querySelector("#commit-button");
+      const pushButton = document.querySelector("#push-button");
       let polling = null;
 
       const stateLabels = {
@@ -365,9 +507,20 @@
         failed: "失敗",
       };
 
+      const statusLabels = {
+        new: "新規",
+        modified: "変更",
+        deleted: "削除",
+      };
+
       function setStatus(text, isError = false) {
         statusText.textContent = text;
         statusText.classList.toggle("error", isError);
+      }
+
+      function setGitMessage(text, isError = false) {
+        gitMessage.textContent = text;
+        gitMessage.classList.toggle("danger-text", isError);
       }
 
       function setTopState(state) {
@@ -375,9 +528,27 @@
         stateValue.className = `state-value ${state || "idle"}`;
       }
 
+      function escapeHtml(value) {
+        return value.replace(/[&<>"']/g, (char) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          "\"": "&quot;",
+          "'": "&#39;",
+        })[char]);
+      }
+
+      async function api(path, options = {}) {
+        const res = await fetch(path, options);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.detail || `HTTP ${res.status}`);
+        }
+        return data;
+      }
+
       async function refreshLogs() {
-        const res = await fetch("/api/logs");
-        const data = await res.json();
+        const data = await api("/api/logs");
 
         setTopState(data.status);
         finalAnswer.textContent =
@@ -392,6 +563,7 @@
           runButton.disabled = false;
           clearInterval(polling);
           polling = null;
+          await refreshChanges();
           if (data.returncode === 0) {
             setStatus("完了");
           } else if (data.returncode === null) {
@@ -403,6 +575,61 @@
           setStatus("実行中");
         }
       }
+
+      async function refreshChanges() {
+        const data = await api("/api/changes");
+        fileCount.textContent = `${data.files.length} files`;
+        gitStatus.textContent = data.status_text || "変更なし";
+
+        if (!data.files.length) {
+          fileList.textContent = "変更ファイルはありません。";
+          diffList.textContent = "差分はありません。";
+          return;
+        }
+
+        fileList.innerHTML = data.files.map((file) => `
+          <div class="file-row">
+            <span class="badge ${file.status}">${statusLabels[file.status]}</span>
+            <span class="file-path">${escapeHtml(file.path)}</span>
+          </div>
+        `).join("");
+
+        diffList.innerHTML = data.files.map((file) => `
+          <details>
+            <summary>
+              <span>${escapeHtml(file.path)}</span>
+              <span class="badge ${file.status}">${statusLabels[file.status]}</span>
+            </summary>
+            <div>
+              <pre class="diff-pre" data-diff-path="${escapeHtml(file.path)}">差分を読み込み中...</pre>
+            </div>
+          </details>
+        `).join("");
+
+        await Promise.all(data.files.map(async (file) => {
+          const pre = Array.from(diffList.querySelectorAll("[data-diff-path]"))
+            .find((item) => item.dataset.diffPath === file.path);
+          if (!pre) return;
+          try {
+            const diff = await api(`/api/diff?path=${encodeURIComponent(file.path)}`);
+            pre.textContent = diff.diff || "差分なし";
+          } catch (error) {
+            pre.textContent = error.message;
+          }
+        }));
+      }
+
+      document.querySelectorAll(".tab").forEach((tab) => {
+        tab.addEventListener("click", async () => {
+          document.querySelectorAll(".tab").forEach((item) => item.classList.remove("active"));
+          document.querySelectorAll(".tab-panel").forEach((panel) => panel.classList.remove("active"));
+          tab.classList.add("active");
+          document.querySelector(`#${tab.dataset.tab}`).classList.add("active");
+          if (tab.dataset.tab !== "answer-panel") {
+            await refreshChanges();
+          }
+        });
+      });
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -421,16 +648,11 @@
         setStatus("起動中");
 
         try {
-          const res = await fetch("/api/run", {
+          await api("/api/run", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ prompt }),
           });
-
-          if (!res.ok) {
-            const body = await res.json().catch(() => ({}));
-            throw new Error(body.detail || `HTTP ${res.status}`);
-          }
 
           await refreshLogs();
           polling = setInterval(refreshLogs, 1000);
@@ -440,7 +662,55 @@
         }
       });
 
-      refreshLogs();
+      rejectButton.addEventListener("click", async () => {
+        try {
+          const data = await api("/api/reject", { method: "POST" });
+          setGitMessage(data.output);
+          await refreshChanges();
+        } catch (error) {
+          setGitMessage(error.message, true);
+        }
+      });
+
+      commitButton.addEventListener("click", async () => {
+        const message = commitMessage.value.trim();
+        if (!message) {
+          setGitMessage("コミットメッセージを入力してください", true);
+          return;
+        }
+        try {
+          const data = await api("/api/commit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message }),
+          });
+          setGitMessage(data.output || "Committed");
+          await refreshChanges();
+        } catch (error) {
+          setGitMessage(error.message, true);
+        }
+      });
+
+      pushButton.addEventListener("click", async () => {
+        if (!confirm("git push を実行します。続行しますか？")) {
+          return;
+        }
+        const typed = prompt("二重確認: PUSH と入力してください");
+        try {
+          const data = await api("/api/push", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ confirm: true, confirm_text: typed || "" }),
+          });
+          setGitMessage(data.output || "Pushed");
+          await refreshChanges();
+        } catch (error) {
+          setGitMessage(error.message, true);
+        }
+      });
+
+      refreshLogs().catch((error) => setStatus(error.message, true));
+      refreshChanges().catch((error) => setGitMessage(error.message, true));
     </script>
   </body>
 </html>
