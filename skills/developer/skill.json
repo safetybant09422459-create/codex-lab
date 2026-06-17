@@ -1,0 +1,7 @@
+{
+  "id": "developer",
+  "name": "Developer",
+  "description": "Developer workflow support",
+  "status": "idea",
+  "type": "module"
+}

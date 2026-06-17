@@ -1,9 +1,11 @@
+import json
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import codex_api
-from .config import FRONTEND_DIR, ROOT_DIR
+from .config import FRONTEND_DIR, ROOT_DIR, SKILLS_DIR
 from .git_api import file_diff, git, git_changes
 from .models import (
     ChangesResponse,
@@ -16,6 +18,7 @@ from .models import (
     RunRequest,
     RunResponse,
     ServiceResponse,
+    SkillResponse,
 )
 from .service_api import systemctl
 
@@ -62,6 +65,21 @@ async def get_project() -> ProjectResponse:
         branch="main",
         git_state=git_state,
     )
+
+
+@app.get("/api/skills", response_model=list[SkillResponse])
+async def get_skills() -> list[SkillResponse]:
+    skills: list[SkillResponse] = []
+    for skill_file in sorted(SKILLS_DIR.glob("*/skill.json")):
+        try:
+            data = json.loads(skill_file.read_text(encoding="utf-8"))
+            skills.append(SkillResponse(**data))
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Invalid skill definition: {skill_file.relative_to(ROOT_DIR)}",
+            ) from exc
+    return skills
 
 
 @app.get("/api/logs", response_model=LogResponse)

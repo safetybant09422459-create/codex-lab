@@ -315,9 +315,33 @@ pre {
 }
 
 .doc-list,
-.file-list {
+.file-list,
+.skill-list {
   display: grid;
   gap: 8px;
+}
+
+.skill-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.skill-row p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.skill-meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .file-row {
@@ -388,9 +412,18 @@ details > div {
   .project-top,
   .section-head,
   .actions,
-  .git-buttons {
+  .git-buttons,
+  .skill-row {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .skill-row {
+    grid-template-columns: 1fr;
+  }
+
+  .skill-meta {
+    justify-content: flex-start;
   }
 
   .tabs,

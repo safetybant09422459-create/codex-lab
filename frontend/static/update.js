@@ -1,5 +1,22 @@
 import { api } from "./api.js";
-import { elements, setStatus } from "./state.js";
+import { elements, escapeHtml, setStatus } from "./state.js";
+
+export async function refreshSkills() {
+  const skills = await api("/api/skills");
+  elements.skillsList.innerHTML = skills.map((skill) => `
+    <div class="skill-row">
+      <div>
+        <strong>${escapeHtml(skill.name)}</strong>
+        <p>${escapeHtml(skill.description)}</p>
+      </div>
+      <div class="skill-meta">
+        <span class="pill">${escapeHtml(skill.status)}</span>
+        <span class="pill">${escapeHtml(skill.type)}</span>
+      </div>
+    </div>
+  `).join("") || "Skillは登録されていません。";
+  setStatus(elements.skillsMessage, `${skills.length} skills`);
+}
 
 export async function refreshService() {
   const data = await api("/api/service/status");

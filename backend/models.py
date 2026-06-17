@@ -60,3 +60,11 @@ class PushRequest(BaseModel):
 class ServiceResponse(BaseModel):
     ok: bool
     output: str
+
+
+class SkillResponse(BaseModel):
+    id: str
+    name: str
+    description: str
+    status: Literal["idea", "planned", "active", "deprecated"]
+    type: Literal["module", "tool", "mcp"]

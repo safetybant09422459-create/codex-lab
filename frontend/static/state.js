@@ -21,6 +21,8 @@ export const elements = {
   commitMessage: document.querySelector("#commit-message"),
   commitButton: document.querySelector("#commit-button"),
   pushButton: document.querySelector("#push-button"),
+  skillsList: document.querySelector("#skills-list"),
+  skillsMessage: document.querySelector("#skills-message"),
   serviceStatus: document.querySelector("#service-status"),
   serviceMessage: document.querySelector("#service-message"),
   serviceRefreshButton: document.querySelector("#service-refresh-button"),
