@@ -1,0 +1,58 @@
+{
+  "id": "weather",
+  "name": "Weather",
+  "description": "Weather forecast and conditions",
+  "status": "idea",
+  "type": "tool",
+  "version": "0.1.0",
+  "mode": "read",
+  "risk_level": "low",
+  "confirmation_required": false,
+  "audit_required": false,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "location": {
+        "type": "string",
+        "description": "Location name, such as home, Osaka, Okayama"
+      },
+      "date": {
+        "type": "string",
+        "description": "ISO date or relative date such as today"
+      },
+      "days": {
+        "type": "integer",
+        "description": "Forecast length in days"
+      }
+    },
+    "required": ["location"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "location": {
+        "type": "string",
+        "description": "Resolved forecast location"
+      },
+      "forecast": {
+        "type": "array",
+        "description": "Forecast entries"
+      },
+      "source": {
+        "type": "string",
+        "description": "Weather data source"
+      },
+      "generated_at": {
+        "type": "string",
+        "description": "ISO timestamp when the forecast was generated"
+      }
+    },
+    "required": ["location", "forecast", "source", "generated_at"]
+  },
+  "invocation_examples": [
+    "今日の天気は？",
+    "大阪の1週間の天気",
+    "福岡旅行の日の天気",
+    "保育園の遠足の日、雨降る？"
+  ]
+}

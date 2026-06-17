@@ -3,5 +3,47 @@
   "name": "Travel",
   "description": "Travel planning and management",
   "status": "idea",
-  "type": "module"
+  "type": "module",
+  "version": "0.1.0",
+  "mode": "mixed",
+  "risk_level": "medium",
+  "confirmation_required": true,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "destination": {
+        "type": "string",
+        "description": "Travel destination"
+      },
+      "date_range": {
+        "type": "string",
+        "description": "Trip date or date range"
+      },
+      "request": {
+        "type": "string",
+        "description": "Planning or management request"
+      }
+    },
+    "required": ["request"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "plan": {
+        "type": "string",
+        "description": "Travel plan or recommendation"
+      },
+      "items": {
+        "type": "array",
+        "description": "Places, tasks, or options"
+      }
+    },
+    "required": ["plan"]
+  },
+  "invocation_examples": [
+    "岡山旅行の候補を出して",
+    "大阪で子どもと行ける場所を探して",
+    "旅行の持ち物を整理して"
+  ]
 }

@@ -12,6 +12,8 @@ export async function refreshSkills() {
       <div class="skill-meta">
         <span class="pill">${escapeHtml(skill.status)}</span>
         <span class="pill">${escapeHtml(skill.type)}</span>
+        <span class="pill">${escapeHtml(skill.mode)}</span>
+        <span class="pill">${escapeHtml(skill.risk_level)}</span>
       </div>
     </div>
   `).join("") || "Skillは登録されていません。";

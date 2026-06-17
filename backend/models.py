@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -68,3 +68,11 @@ class SkillResponse(BaseModel):
     description: str
     status: Literal["idea", "planned", "active", "deprecated"]
     type: Literal["module", "tool", "mcp"]
+    version: str
+    mode: Literal["read", "write", "mixed"]
+    risk_level: Literal["low", "medium", "high"]
+    confirmation_required: bool
+    audit_required: bool
+    input_schema: dict[str, Any]
+    output_schema: dict[str, Any]
+    invocation_examples: list[str]

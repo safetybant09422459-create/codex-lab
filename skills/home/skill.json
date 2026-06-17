@@ -3,5 +3,43 @@
   "name": "Home",
   "description": "Home management candidates",
   "status": "idea",
-  "type": "module"
+  "type": "module",
+  "version": "0.1.0",
+  "mode": "mixed",
+  "risk_level": "high",
+  "confirmation_required": true,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "area": {
+        "type": "string",
+        "description": "Home area or device group"
+      },
+      "request": {
+        "type": "string",
+        "description": "Home management request"
+      }
+    },
+    "required": ["request"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "status": {
+        "type": "string",
+        "description": "Home state or action status"
+      },
+      "actions": {
+        "type": "array",
+        "description": "Suggested or performed actions"
+      }
+    },
+    "required": ["status"]
+  },
+  "invocation_examples": [
+    "リビングの状態を確認して",
+    "家のタスクを整理して",
+    "消し忘れがないか見て"
+  ]
 }

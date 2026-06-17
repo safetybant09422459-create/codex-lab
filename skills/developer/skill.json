@@ -2,6 +2,48 @@
   "id": "developer",
   "name": "Developer",
   "description": "Developer workflow support",
-  "status": "idea",
-  "type": "module"
+  "status": "active",
+  "type": "module",
+  "version": "0.1.0",
+  "mode": "mixed",
+  "risk_level": "high",
+  "confirmation_required": true,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "request": {
+        "type": "string",
+        "description": "Development request or design task"
+      },
+      "allowed_files": {
+        "type": "array",
+        "description": "Optional list of paths allowed for the task"
+      }
+    },
+    "required": ["request"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "changed_files": {
+        "type": "array",
+        "description": "Files changed by the task"
+      },
+      "summary": {
+        "type": "string",
+        "description": "Short result summary"
+      },
+      "verification": {
+        "type": "array",
+        "description": "Checks performed"
+      }
+    },
+    "required": ["summary"]
+  },
+  "invocation_examples": [
+    "Jarvis Devの画面を少し改善して",
+    "READMEの説明を更新して",
+    "APIの返却項目を追加して"
+  ]
 }

@@ -193,6 +193,27 @@ Toolは以下の情報を持つ。
 
 ---
 
+## Skill Schema
+
+Skillは、将来Jarvis Coreから呼び出すTool / MCP Tool候補として定義する。
+
+UI専用機能として閉じず、音声、チャット、Web UI、カメラ、MCPのどこからでも呼び出せる単位にする。
+
+各Skillは以下を明確に持つ。
+
+* input_schema: Jarvis CoreやTool呼び出し時の入力
+* output_schema: 呼び出し結果として返す出力
+* mode: read / write / mixed の区別
+* risk_level: low / medium / high のリスク分類
+* confirmation_required: 実行前に人間確認が必要か
+* audit_required: Audit Logに記録すべきか
+
+readは情報取得のみ、writeはデータ変更や現実世界への作用を持つ処理、mixedは読み取りと更新の両方を含む。
+
+risk_levelは、家族、データ、現実世界への影響度で判断する。家電操作、鍵、外部送信、削除など重大な影響があるSkillはhighとして扱う。
+
+---
+
 ## Notifications
 
 Jarvisからユーザーに知らせる仕組み。

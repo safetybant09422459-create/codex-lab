@@ -3,5 +3,47 @@
   "name": "Photo",
   "description": "Photo organization and workflows",
   "status": "idea",
-  "type": "module"
+  "type": "module",
+  "version": "0.1.0",
+  "mode": "mixed",
+  "risk_level": "medium",
+  "confirmation_required": true,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "album": {
+        "type": "string",
+        "description": "Album, event, or photo collection"
+      },
+      "date": {
+        "type": "string",
+        "description": "Photo date or date range"
+      },
+      "request": {
+        "type": "string",
+        "description": "Photo search or organization request"
+      }
+    },
+    "required": ["request"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "matches": {
+        "type": "array",
+        "description": "Matching photos or albums"
+      },
+      "summary": {
+        "type": "string",
+        "description": "Photo workflow summary"
+      }
+    },
+    "required": ["summary"]
+  },
+  "invocation_examples": [
+    "旅行写真をまとめて",
+    "保育園の写真を探して",
+    "家族アルバム候補を作って"
+  ]
 }

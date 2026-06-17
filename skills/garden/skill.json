@@ -3,5 +3,47 @@
   "name": "Garden",
   "description": "Garden management",
   "status": "idea",
-  "type": "module"
+  "type": "module",
+  "version": "0.1.0",
+  "mode": "mixed",
+  "risk_level": "medium",
+  "confirmation_required": false,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "plant": {
+        "type": "string",
+        "description": "Plant or garden area"
+      },
+      "date": {
+        "type": "string",
+        "description": "ISO date or relative date"
+      },
+      "request": {
+        "type": "string",
+        "description": "Garden care request"
+      }
+    },
+    "required": ["request"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "advice": {
+        "type": "string",
+        "description": "Garden care advice"
+      },
+      "tasks": {
+        "type": "array",
+        "description": "Suggested garden tasks"
+      }
+    },
+    "required": ["advice"]
+  },
+  "invocation_examples": [
+    "庭の水やり予定を確認して",
+    "トマトの世話を教えて",
+    "今週の庭作業を整理して"
+  ]
 }

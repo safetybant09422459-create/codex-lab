@@ -3,5 +3,47 @@
   "name": "Calendar",
   "description": "Calendar and schedule candidates",
   "status": "idea",
-  "type": "module"
+  "type": "module",
+  "version": "0.1.0",
+  "mode": "mixed",
+  "risk_level": "medium",
+  "confirmation_required": true,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "date": {
+        "type": "string",
+        "description": "ISO date or relative date"
+      },
+      "calendar": {
+        "type": "string",
+        "description": "Calendar name or scope"
+      },
+      "request": {
+        "type": "string",
+        "description": "Schedule request"
+      }
+    },
+    "required": ["request"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "events": {
+        "type": "array",
+        "description": "Matching schedule events"
+      },
+      "summary": {
+        "type": "string",
+        "description": "Schedule summary"
+      }
+    },
+    "required": ["summary"]
+  },
+  "invocation_examples": [
+    "今日の予定を教えて",
+    "来週の空いている日を探して",
+    "保育園の予定を確認して"
+  ]
 }
