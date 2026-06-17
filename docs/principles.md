@@ -28,6 +28,36 @@ UIから利用できるだけでなく、
 
 ## Principle 3
 
+UI / API / MCP First
+
+新機能は可能な限り、UI専用機能として作らない。
+
+以下の3層で考える。
+
+* Web UI
+* API / Tool
+* MCP Tool候補
+
+新機能を作る時は、将来Jarvis Coreから呼び出せるToolになるか確認する。
+
+確認項目：
+
+* 入力は明確か
+* 出力は明確か
+* 読み取り操作か、更新操作か
+* 副作用があるか
+* 権限確認が必要か
+* 家族利用・プライバシー面の問題はないか
+* 音声やチャットから自然に呼び出せる名前か
+
+重要なロジックはUIに閉じ込めない。
+
+画面ボタンだけでなく、APIやToolからも呼び出せる構造を意識する。
+
+---
+
+## Principle 4
+
 Web UI Required
 
 チャットだけではなく、
@@ -42,7 +72,7 @@ Web UI Required
 
 ---
 
-## Principle 4
+## Principle 5
 
 Human Friendly
 
@@ -52,7 +82,7 @@ Human Friendly
 
 ---
 
-## Principle 5
+## Principle 6
 
 AI Provider Independent
 
@@ -62,7 +92,7 @@ OpenAI専用にしない。
 
 ---
 
-## Principle 6
+## Principle 7
 
 Privacy First
 
@@ -77,7 +107,7 @@ Privacy First
 
 ---
 
-## Principle 7
+## Principle 8
 
 Module Independence
 
@@ -89,7 +119,7 @@ Calendarだけでも動く。
 
 ---
 
-## Principle 8
+## Principle 9
 
 Explainability
 
@@ -103,7 +133,7 @@ Jarvisは理由を説明できること。
 
 ---
 
-## Principle 9
+## Principle 10
 
 Trust Before Automation
 
@@ -121,7 +151,7 @@ Trust Before Automation
 
 ---
 
-## Principle 10
+## Principle 11
 
 Future AI Friendly
 
@@ -133,7 +163,7 @@ Future AI Friendly
 
 ---
 
-## Principle 11
+## Principle 12
 
 Growth Through Experience
 
@@ -150,7 +180,7 @@ Growth Through Experience
 
 ---
 
-## Principle 12
+## Principle 13
 
 Ideas Are Assets
 
@@ -164,7 +194,7 @@ Ideas Are Assets
 
 ---
 
-## Principle 13
+## Principle 14
 
 Build The House First
 
@@ -176,7 +206,7 @@ AIが住む家である。
 
 ---
 
-## Principle 14
+## Principle 15
 
 Enjoy The Journey
 

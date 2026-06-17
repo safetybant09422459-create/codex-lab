@@ -22,6 +22,20 @@ from .service_api import systemctl
 app = FastAPI(title="Jarvis Dev v0.3")
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
+JARVIS_PRINCIPLE_CHECK = """\
+
+Jarvis Principle Check:
+この変更について、最後に以下を短く評価してください。
+
+1. Web UIから利用できるか
+2. API / Toolとして利用できるか
+3. 将来MCP Tool化できるか
+4. Jarvis Coreから呼び出せるか
+5. UI依存のロジックになっていないか
+6. 読み取り系か更新系か
+7. 副作用・権限・プライバシー上の注意はあるか
+"""
+
 
 @app.get("/")
 async def index() -> FileResponse:
@@ -31,7 +45,8 @@ async def index() -> FileResponse:
 @app.post("/api/run", response_model=RunResponse)
 async def run_codex(request: RunRequest) -> RunResponse:
     try:
-        await codex_api.start_codex(request.prompt)
+        prompt = f"{request.prompt.rstrip()}{JARVIS_PRINCIPLE_CHECK}"
+        await codex_api.start_codex(prompt)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return RunResponse(status="started")

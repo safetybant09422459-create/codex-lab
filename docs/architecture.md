@@ -22,6 +22,26 @@ Jarvis
 └ Frontend
 ```
 
+将来構造：
+
+```text
+Jarvis Core
+↓
+Tool Registry
+↓
+各Module / MCP Tool
+```
+
+Module / MCP Tool候補：
+
+* Travel Tool / MCP
+* Calendar Tool / MCP
+* Home Tool / MCP
+* Photo Tool / MCP
+* Developer Tool / MCP
+
+Jarvis Developer は、Jarvis Core本体ではなく、Developer Tool / MCP候補として扱う。
+
 ---
 
 ## 設計原則
