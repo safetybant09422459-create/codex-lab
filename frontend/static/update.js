@@ -1,6 +1,9 @@
 import { api } from "./api.js";
 import { elements, escapeHtml, setStatus } from "./state.js";
 
+let servicePolling = null;
+let restartMessageUntil = 0;
+
 export async function refreshSkills() {
   const skills = await api("/api/skills");
   elements.skillsList.innerHTML = skills.map((skill) => `
@@ -21,9 +24,35 @@ export async function refreshSkills() {
 }
 
 export async function refreshService() {
-  const data = await api("/api/service/status");
-  elements.serviceStatus.textContent = data.output || "status output is empty";
-  setStatus(elements.serviceMessage, data.ok ? "起動状態を取得" : "取得失敗", !data.ok);
+  try {
+    const data = await api("/api/service/status");
+    elements.serviceStatus.textContent = formatServiceOutput(data, "status output is empty");
+    if (Date.now() >= restartMessageUntil) {
+      setStatus(elements.serviceMessage, data.ok ? "running" : "ok=false 取得失敗", !data.ok);
+    }
+  } catch (error) {
+    setStatus(elements.serviceMessage, error.message, true);
+  }
+}
+
+function formatServiceOutput(data, fallback) {
+  const lines = [];
+  if (data.command) {
+    lines.push(`command:\n${data.command}`);
+  }
+  if (data.returncode !== undefined && data.returncode !== null) {
+    lines.push(`return code:\n${data.returncode}`);
+  }
+  if (data.output) {
+    lines.push(`output:\n${data.output}`);
+  }
+  if (data.stderr) {
+    lines.push(`stderr:\n${data.stderr}`);
+  }
+  if (!data.ok) {
+    lines.unshift("ok=false");
+  }
+  return lines.join("\n\n") || fallback;
 }
 
 export function bindServiceActions() {
@@ -34,10 +63,21 @@ export function bindServiceActions() {
     }
     try {
       const data = await api("/api/service/restart", { method: "POST" });
-      elements.serviceStatus.textContent = data.output || "restart command completed";
-      setStatus(elements.serviceMessage, data.ok ? "再起動しました" : "再起動失敗", !data.ok);
+      elements.serviceStatus.textContent = formatServiceOutput(data, "restart command completed");
+      restartMessageUntil = data.ok ? Date.now() + 2500 : 0;
+      setStatus(elements.serviceMessage, data.ok ? "再起動要求を送信しました" : "ok=false 再起動要求失敗", !data.ok);
     } catch (error) {
       setStatus(elements.serviceMessage, error.message, true);
     }
   });
+
+  startServicePolling();
+}
+
+export function startServicePolling() {
+  if (servicePolling) {
+    return;
+  }
+  refreshService();
+  servicePolling = setInterval(refreshService, 3000);
 }

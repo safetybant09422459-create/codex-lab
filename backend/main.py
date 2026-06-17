@@ -20,7 +20,7 @@ from .models import (
     ServiceResponse,
     SkillResponse,
 )
-from .service_api import systemctl
+from .service_api import schedule_restart, systemctl
 
 app = FastAPI(title="Jarvis Dev v0.3")
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
@@ -144,4 +144,4 @@ async def service_status() -> ServiceResponse:
 
 @app.post("/api/service/restart", response_model=ServiceResponse)
 async def service_restart() -> ServiceResponse:
-    return await systemctl("restart")
+    return await schedule_restart()

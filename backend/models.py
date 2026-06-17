@@ -60,6 +60,9 @@ class PushRequest(BaseModel):
 class ServiceResponse(BaseModel):
     ok: bool
     output: str
+    stderr: str = ""
+    command: str = ""
+    returncode: int | None = None
 
 
 class SkillResponse(BaseModel):

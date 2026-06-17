@@ -1,6 +1,6 @@
 import { bindTabs } from "./tabs.js";
 import { bindGitActions, loadProject, refreshChanges } from "./review.js";
-import { bindServiceActions, refreshSkills } from "./update.js";
+import { bindServiceActions, refreshService, refreshSkills } from "./update.js";
 import { api } from "./api.js";
 import { refreshLogs } from "./logs.js";
 import { elements, generatePrompt, runtime, setStatus, setTopState } from "./state.js";
@@ -54,5 +54,5 @@ bindDevelopActions();
 bindGitActions();
 bindServiceActions();
 
-Promise.all([loadProject(), refreshLogs(), refreshChanges(), refreshSkills()])
+Promise.all([loadProject(), refreshLogs(), refreshChanges(), refreshSkills(), refreshService()])
   .catch((error) => setStatus(elements.runStatus, error.message, true));
