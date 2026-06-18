@@ -4,6 +4,7 @@ from typing import Any
 
 from .audit import AuditLogger
 from .config import ROOT_DIR, TOOLS_DIR
+from .executors import ExecutorRegistry
 
 
 class RuntimeError(Exception):
@@ -42,10 +43,14 @@ class RuntimeTool:
 
 class RuntimeService:
     def __init__(
-        self, tools_dir=TOOLS_DIR, audit_logger: AuditLogger | None = None
+        self,
+        tools_dir=TOOLS_DIR,
+        audit_logger: AuditLogger | None = None,
+        executor_registry: ExecutorRegistry | None = None,
     ) -> None:
         self.tools_dir = tools_dir
         self.audit_logger = audit_logger or AuditLogger()
+        self.executor_registry = executor_registry or ExecutorRegistry()
 
     def get_tool(self, tool_id: str) -> dict[str, Any]:
         return self._load_tool(tool_id).summary()
@@ -104,6 +109,21 @@ class RuntimeService:
                 "errors": validation["errors"],
             }
 
+        executor = self.executor_registry.get_executor(tool.id, tool.skill_id)
+        try:
+            result = executor.execute(tool, params)
+        except Exception as exc:
+            self._append_execute_stub_audit(
+                tool_id=tool.id,
+                skill_id=tool.skill_id,
+                risk_level=tool.risk_level,
+                confirmation_required=tool.confirmation_required,
+                audit_required=tool.audit_required,
+                status="failed",
+                error=str(exc),
+            )
+            raise
+
         self._append_execute_stub_audit(
             tool_id=tool.id,
             skill_id=tool.skill_id,
@@ -116,7 +136,7 @@ class RuntimeService:
             "success": True,
             "tool_id": tool_id,
             "execution_mode": "stub",
-            "result": {"message": "stub execution"},
+            "result": result,
         }
 
     def _append_execute_stub_audit(
