@@ -9,6 +9,8 @@ class BaseExecutor(ABC):
 
 
 class StubExecutor(BaseExecutor):
+    execution_mode = "stub"
+
     def execute(self, tool: Any, params: dict[str, Any]) -> dict[str, Any]:
         return {
             "message": "stub execution",
@@ -21,6 +23,7 @@ class ExecutorRegistry:
         self.default_executor = default_executor or StubExecutor()
         self._tool_executors: dict[str, BaseExecutor] = {}
         self._skill_executors: dict[str, BaseExecutor] = {}
+        self.register_skill("weather", self._build_weather_executor())
 
     def register_tool(self, tool_id: str, executor: BaseExecutor) -> None:
         self._tool_executors[tool_id] = executor
@@ -36,3 +39,8 @@ class ExecutorRegistry:
         if skill_id is not None and skill_id in self._skill_executors:
             return self._skill_executors[skill_id]
         return self.default_executor
+
+    def _build_weather_executor(self) -> BaseExecutor:
+        from .weather_executor import WeatherExecutor
+
+        return WeatherExecutor()

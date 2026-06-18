@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Check Runtime API behavior through the FastAPI ASGI app.
 
-This script intentionally uses Runtime stub execution only. It does not call
-the service restart API and does not perform Real Tool Execution.
+This script uses the Runtime execution path only. Weather is executed through
+the deterministic local WeatherExecutor, and high-risk developer tools remain
+stubbed behind permission and confirmation checks.
 """
 
 import asyncio
@@ -100,13 +101,24 @@ async def run_checks() -> None:
         forecast = await post_execute(
             {
                 "tool_id": "get_forecast",
-                "params": {},
+                "params": {"location": "Okayama", "days": 3},
                 "role": "guest",
                 "confirmed": False,
             },
         )
         assert_true(forecast["success"] is True, "get_forecast guest should succeed")
-        assert_true(forecast["execution_mode"] == "stub", "get_forecast must be stub")
+        assert_true(
+            forecast["execution_mode"] == "local_weather_stub",
+            "get_forecast must use WeatherExecutor",
+        )
+        assert_true(
+            forecast["result"]["source"] == "local_weather_stub",
+            "get_forecast result source must be local_weather_stub",
+        )
+        assert_true(
+            len(forecast["result"]["forecast"]) == 3,
+            "get_forecast should honor days in local stub",
+        )
 
         guest_restart = await post_execute(
             {
@@ -178,6 +190,16 @@ async def run_checks() -> None:
         assert_true(
             "runtime.execute_stub" in audit_event_types,
             "audit log should include execute_stub",
+        )
+        weather_audits = [
+            item
+            for item in audit_items
+            if item.get("tool_id") == "get_forecast"
+            and item.get("execution_mode") == "local_weather_stub"
+        ]
+        assert_true(
+            bool(weather_audits),
+            "audit log should include local_weather_stub execution",
         )
 
     print("Runtime API check passed")

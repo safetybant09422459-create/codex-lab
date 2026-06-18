@@ -191,6 +191,7 @@ class RuntimeService:
             }
 
         executor = self.executor_registry.get_executor(tool.id, tool.skill_id)
+        execution_mode = getattr(executor, "execution_mode", "stub")
         try:
             result = executor.execute(tool, params)
         except Exception as exc:
@@ -204,6 +205,7 @@ class RuntimeService:
                 status="failed",
                 role=permission.role,
                 permission_allowed=permission.allowed,
+                execution_mode=execution_mode,
                 error=str(exc),
             )
             raise
@@ -218,11 +220,12 @@ class RuntimeService:
             status="success",
             role=permission.role,
             permission_allowed=permission.allowed,
+            execution_mode=execution_mode,
         )
         return {
             "success": True,
             "tool_id": tool_id,
-            "execution_mode": "stub",
+            "execution_mode": execution_mode,
             "result": result,
             "blocked": False,
             "permission_denied": False,
@@ -246,13 +249,14 @@ class RuntimeService:
         status: str,
         role: str,
         permission_allowed: bool | None,
+        execution_mode: str = "stub",
         error: str | None = None,
     ) -> None:
         event: dict[str, Any] = {
             "event_type": "runtime.execute_stub",
             "tool_id": tool_id,
             "skill_id": skill_id,
-            "execution_mode": "stub",
+            "execution_mode": execution_mode,
             "status": status,
             "risk_level": risk_level,
             "confirmation_required": confirmation_required,
