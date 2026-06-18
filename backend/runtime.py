@@ -2,6 +2,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from .audit import AuditLogger
 from .config import ROOT_DIR, TOOLS_DIR
 
 
@@ -40,8 +41,11 @@ class RuntimeTool:
 
 
 class RuntimeService:
-    def __init__(self, tools_dir=TOOLS_DIR) -> None:
+    def __init__(
+        self, tools_dir=TOOLS_DIR, audit_logger: AuditLogger | None = None
+    ) -> None:
         self.tools_dir = tools_dir
+        self.audit_logger = audit_logger or AuditLogger()
 
     def get_tool(self, tool_id: str) -> dict[str, Any]:
         return self._load_tool(tool_id).summary()
@@ -66,8 +70,32 @@ class RuntimeService:
         }
 
     def execute_stub(self, tool_id: str, params: dict[str, Any]) -> dict[str, Any]:
-        validation = self.validate(tool_id, params)
+        try:
+            tool = self._load_tool(tool_id)
+        except RuntimeError as exc:
+            self._append_execute_stub_audit(
+                tool_id=tool_id,
+                skill_id=None,
+                risk_level=None,
+                confirmation_required=None,
+                audit_required=None,
+                status="failed",
+                error=str(exc),
+            )
+            raise
+
+        errors = self._validate_required_fields(tool.input_schema, params)
+        validation = {"valid": not errors, "errors": errors}
         if not validation["valid"]:
+            self._append_execute_stub_audit(
+                tool_id=tool.id,
+                skill_id=tool.skill_id,
+                risk_level=tool.risk_level,
+                confirmation_required=tool.confirmation_required,
+                audit_required=tool.audit_required,
+                status="failed",
+                error="; ".join(validation["errors"]),
+            )
             return {
                 "success": False,
                 "tool_id": tool_id,
@@ -76,12 +104,45 @@ class RuntimeService:
                 "errors": validation["errors"],
             }
 
+        self._append_execute_stub_audit(
+            tool_id=tool.id,
+            skill_id=tool.skill_id,
+            risk_level=tool.risk_level,
+            confirmation_required=tool.confirmation_required,
+            audit_required=tool.audit_required,
+            status="success",
+        )
         return {
             "success": True,
             "tool_id": tool_id,
             "execution_mode": "stub",
             "result": {"message": "stub execution"},
         }
+
+    def _append_execute_stub_audit(
+        self,
+        *,
+        tool_id: str,
+        skill_id: str | None,
+        risk_level: str | None,
+        confirmation_required: bool | None,
+        audit_required: bool | None,
+        status: str,
+        error: str | None = None,
+    ) -> None:
+        event: dict[str, Any] = {
+            "event_type": "runtime.execute_stub",
+            "tool_id": tool_id,
+            "skill_id": skill_id,
+            "execution_mode": "stub",
+            "status": status,
+            "risk_level": risk_level,
+            "confirmation_required": confirmation_required,
+            "audit_required": audit_required,
+        }
+        if error:
+            event["error"] = error
+        self.audit_logger.append(event)
 
     def _load_tool(self, tool_id: str) -> RuntimeTool:
         for tool_file in sorted(self.tools_dir.glob("*/*.json")):

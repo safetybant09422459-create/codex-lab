@@ -21,7 +21,6 @@ Implemented (v0.1):
 
 Not Yet Implemented:
 
-* Audit Log
 * Permission
 * Confirmation
 * Executor Registry
@@ -39,6 +38,7 @@ Not Yet Implemented:
 * `POST /api/runtime/validate`
 * `POST /api/runtime/dry-run`
 * `POST /api/runtime/execute`
+* `GET /api/audit`
 
 リクエスト形式:
 
@@ -67,6 +67,8 @@ Not Yet Implemented:
 `POST /api/runtime/dry-run` は検証結果に加えて、実行した場合に使われるTool情報、リスク、確認要否、監査要否を返す。
 
 `POST /api/runtime/execute` はRuntime v0.1ではstub実行であり、Real Tool Executionではない。
+
+`GET /api/audit` はAudit Log v0.1の最近の記録を返す。クエリ `limit` は任意で、デフォルトは50件。返却順は新しい記録が先である。
 
 ---
 
@@ -156,22 +158,42 @@ Confirmationは未実装である。
 
 ## Audit Log
 
-Audit Logは未実装である。
+Audit Log v0.1は、Runtime経由のstub実行記録を `logs/audit.log` にJSONL形式で1行ずつ追記する。
+
+現在のAudit Log v0.1:
+
+* JSONL保存
+* `execute_stub` のみ記録
+* UIなし
+* DBなし
+* 権限管理なし
+
+1行の主な項目:
+
+* `timestamp`
+* `event_type`
+* `tool_id`
+* `skill_id`
+* `execution_mode`
+* `status`
+* `risk_level`
+* `confirmation_required`
+* `audit_required`
+* `error`
+
+失敗時は可能な範囲で `status: "failed"` と `error` を記録する。
 
 将来的には、Runtimeが実行したことだけでなく、実行しなかった理由も記録する。
 
-記録候補:
+将来拡張予定:
 
-* requested by
-* tool name
-* input
-* permission result
-* risk level
-* confirmation result
-* execution result
-* error
-* timestamp
-* reason
+* `validate` / `dry_run` / real execution も記録
+* user / session / request_id の記録
+* SQLite化
+* UIでの閲覧
+* 検索/フィルタ
+* Confirmation結果との接続
+* Permission判定との接続
 
 ---
 

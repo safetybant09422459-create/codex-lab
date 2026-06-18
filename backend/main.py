@@ -8,6 +8,7 @@ from . import codex_api
 from .config import FRONTEND_DIR, ROOT_DIR, SKILLS_DIR, TOOLS_DIR
 from .git_api import file_diff, git, git_changes
 from .models import (
+    AuditResponse,
     ChangesResponse,
     CommitRequest,
     DiffResponse,
@@ -152,6 +153,12 @@ async def runtime_execute(request: RuntimeRequest) -> RuntimeExecuteResponse:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidToolDefinitionError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/audit", response_model=AuditResponse)
+async def get_audit(limit: int = 50) -> AuditResponse:
+    bounded_limit = min(max(limit, 1), 500)
+    return AuditResponse(items=runtime_service.audit_logger.list_recent(bounded_limit))
 
 
 @app.get("/api/logs", response_model=LogResponse)

@@ -129,3 +129,7 @@ class RuntimeExecuteResponse(BaseModel):
     execution_mode: Literal["stub"]
     result: dict[str, Any] | None
     errors: list[str] = Field(default_factory=list)
+
+
+class AuditResponse(BaseModel):
+    items: list[dict[str, Any]]

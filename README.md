@@ -102,6 +102,7 @@ Runtime API:
 - `POST /api/runtime/validate`
 - `POST /api/runtime/dry-run`
 - `POST /api/runtime/execute`
+- `GET /api/audit`
 
 `POST /api/runtime/execute` は Runtime v0.1 では stub execution を返す。実Tool実行は未実装。
 
