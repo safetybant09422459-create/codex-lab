@@ -1,0 +1,11 @@
+{
+  "id": "get_trips",
+  "skill_id": "travel",
+  "name": "Get Trips",
+  "description": "List known trips or travel plans.",
+  "status": "idea",
+  "mode": "read",
+  "risk_level": "low",
+  "input_schema": {},
+  "output_schema": {}
+}

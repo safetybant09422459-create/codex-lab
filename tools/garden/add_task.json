@@ -1,0 +1,11 @@
+{
+  "id": "add_task",
+  "skill_id": "garden",
+  "name": "Add Task",
+  "description": "Add a garden care task.",
+  "status": "idea",
+  "mode": "write",
+  "risk_level": "medium",
+  "input_schema": {},
+  "output_schema": {}
+}

@@ -1,4 +1,3 @@
-import { elements, generatePrompt } from "./state.js";
 import { refreshLogs } from "./logs.js";
 import { refreshChanges } from "./review.js";
 import { refreshService } from "./update.js";
@@ -11,11 +10,6 @@ export function bindTabs() {
       tab.classList.add("active");
       document.querySelector(`#${tab.dataset.tab}`).classList.add("active");
 
-      if (tab.dataset.tab === "develop-panel") {
-        if (elements.designInput.value.trim()) {
-          elements.codexPrompt.value = generatePrompt();
-        }
-      }
       if (tab.dataset.tab === "review-panel") {
         await refreshLogs();
         await refreshChanges();

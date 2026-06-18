@@ -79,3 +79,53 @@ class SkillResponse(BaseModel):
     input_schema: dict[str, Any]
     output_schema: dict[str, Any]
     invocation_examples: list[str]
+
+
+class ToolResponse(BaseModel):
+    id: str
+    skill_id: str
+    name: str
+    description: str
+    status: Literal["idea", "planned", "active", "deprecated"]
+    mode: Literal["read", "write", "mixed"]
+    risk_level: Literal["low", "medium", "high"]
+    input_schema: dict[str, Any]
+    output_schema: dict[str, Any]
+
+
+class RuntimeToolResponse(BaseModel):
+    id: str
+    skill_id: str
+    mode: Literal["read", "write", "mixed"]
+    risk_level: Literal["low", "medium", "high"]
+    confirmation_required: bool
+    audit_required: bool
+
+
+class RuntimeRequest(BaseModel):
+    tool_id: str = Field(min_length=1, max_length=120)
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class RuntimeValidateResponse(BaseModel):
+    valid: bool
+    errors: list[str]
+
+
+class RuntimeDryRunResponse(BaseModel):
+    success: bool
+    tool_id: str
+    skill_id: str
+    risk_level: Literal["low", "medium", "high"]
+    confirmation_required: bool
+    audit_required: bool
+    would_execute: bool
+    errors: list[str] = Field(default_factory=list)
+
+
+class RuntimeExecuteResponse(BaseModel):
+    success: bool
+    tool_id: str
+    execution_mode: Literal["stub"]
+    result: dict[str, Any] | None
+    errors: list[str] = Field(default_factory=list)

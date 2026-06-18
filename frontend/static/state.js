@@ -4,9 +4,7 @@ export const elements = {
   projectBranch: document.querySelector("#project-branch"),
   projectGit: document.querySelector("#project-git"),
   stateValue: document.querySelector("#state-value"),
-  designInput: document.querySelector("#design-input"),
   codexPrompt: document.querySelector("#codex-prompt"),
-  regeneratePromptButton: document.querySelector("#regenerate-prompt-button"),
   sendCodexButton: document.querySelector("#send-codex-button"),
   runStatus: document.querySelector("#run-status"),
   tokens: document.querySelector("#tokens"),
@@ -23,6 +21,8 @@ export const elements = {
   pushButton: document.querySelector("#push-button"),
   skillsList: document.querySelector("#skills-list"),
   skillsMessage: document.querySelector("#skills-message"),
+  toolsList: document.querySelector("#tools-list"),
+  toolsMessage: document.querySelector("#tools-message"),
   serviceStatus: document.querySelector("#service-status"),
   serviceMessage: document.querySelector("#service-message"),
   serviceRefreshButton: document.querySelector("#service-refresh-button"),
@@ -70,21 +70,4 @@ export function setStatus(element, text, isError = false) {
 export function setTopState(state) {
   elements.stateValue.textContent = stateLabels[state] || "待機中";
   elements.stateValue.className = `state-value ${state || "idle"}`;
-}
-
-export function generatePrompt() {
-  const design = elements.designInput.value.trim();
-  return `Project名: ${runtime.project.name}
-Local Path: ${runtime.project.local_path}
-Branch: ${runtime.project.branch}
-
-設計内容:
-${design || "未入力"}
-
-必須ルール:
-- git commit / git push を実行しないこと
-- /mnt/nas/projects/project を触らないこと
-- 破壊的操作をしないこと
-- 変更は設計内容と許可ファイルの範囲に限定すること
-- 完了後は、変更ファイル一覧、変更した画面、動作確認手順、未実装事項、git commit / git push は実行していないことだけを最終回答に含めること`;
 }

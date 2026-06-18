@@ -1,0 +1,11 @@
+{
+  "id": "get_events",
+  "skill_id": "calendar",
+  "name": "Get Events",
+  "description": "List calendar events.",
+  "status": "idea",
+  "mode": "read",
+  "risk_level": "medium",
+  "input_schema": {},
+  "output_schema": {}
+}

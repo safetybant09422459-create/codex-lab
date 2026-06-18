@@ -1,0 +1,11 @@
+{
+  "id": "run_codex",
+  "skill_id": "developer",
+  "name": "Run Codex",
+  "description": "Start a Codex development run from a prepared prompt.",
+  "status": "idea",
+  "mode": "write",
+  "risk_level": "high",
+  "input_schema": {},
+  "output_schema": {}
+}

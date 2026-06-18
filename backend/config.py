@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT_DIR = Path("/mnt/nas/projects/codex-lab")
 FRONTEND_DIR = ROOT_DIR / "frontend"
 SKILLS_DIR = ROOT_DIR / "skills"
+TOOLS_DIR = ROOT_DIR / "tools"
 CODEX_BIN = os.environ.get("CODEX_BIN", "codex")
 CODEX_ARGS = shlex.split(os.environ.get("CODEX_ARGS", "exec"))
 MAX_LOG_LINES = int(os.environ.get("JARVIS_DEV_MAX_LOG_LINES", "2000"))

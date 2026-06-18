@@ -1,0 +1,11 @@
+{
+  "id": "get_spots",
+  "skill_id": "travel",
+  "name": "Get Spots",
+  "description": "List candidate travel spots.",
+  "status": "idea",
+  "mode": "read",
+  "risk_level": "low",
+  "input_schema": {},
+  "output_schema": {}
+}

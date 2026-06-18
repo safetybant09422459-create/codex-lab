@@ -1,0 +1,11 @@
+{
+  "id": "get_rain_probability",
+  "skill_id": "weather",
+  "name": "Get Rain Probability",
+  "description": "Get rain probability for a location and date.",
+  "status": "idea",
+  "mode": "read",
+  "risk_level": "low",
+  "input_schema": {},
+  "output_schema": {}
+}

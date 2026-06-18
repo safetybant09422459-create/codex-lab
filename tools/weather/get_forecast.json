@@ -1,0 +1,11 @@
+{
+  "id": "get_forecast",
+  "skill_id": "weather",
+  "name": "Get Forecast",
+  "description": "Get weather forecast for a location.",
+  "status": "idea",
+  "mode": "read",
+  "risk_level": "low",
+  "input_schema": {},
+  "output_schema": {}
+}

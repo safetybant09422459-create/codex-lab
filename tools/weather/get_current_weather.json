@@ -1,0 +1,11 @@
+{
+  "id": "get_current_weather",
+  "skill_id": "weather",
+  "name": "Get Current Weather",
+  "description": "Get current weather conditions for a location.",
+  "status": "idea",
+  "mode": "read",
+  "risk_level": "low",
+  "input_schema": {},
+  "output_schema": {}
+}

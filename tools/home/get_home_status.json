@@ -1,0 +1,11 @@
+{
+  "id": "get_home_status",
+  "skill_id": "home",
+  "name": "Get Home Status",
+  "description": "Get summarized home status.",
+  "status": "idea",
+  "mode": "read",
+  "risk_level": "medium",
+  "input_schema": {},
+  "output_schema": {}
+}

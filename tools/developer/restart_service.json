@@ -1,0 +1,11 @@
+{
+  "id": "restart_service",
+  "skill_id": "developer",
+  "name": "Restart Service",
+  "description": "Request a restart of the Jarvis Dev service.",
+  "status": "idea",
+  "mode": "write",
+  "risk_level": "high",
+  "input_schema": {},
+  "output_schema": {}
+}

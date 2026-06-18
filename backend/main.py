@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import codex_api
-from .config import FRONTEND_DIR, ROOT_DIR, SKILLS_DIR
+from .config import FRONTEND_DIR, ROOT_DIR, SKILLS_DIR, TOOLS_DIR
 from .git_api import file_diff, git, git_changes
 from .models import (
     ChangesResponse,
@@ -15,15 +15,23 @@ from .models import (
     LogResponse,
     ProjectResponse,
     PushRequest,
+    RuntimeDryRunResponse,
+    RuntimeExecuteResponse,
+    RuntimeRequest,
+    RuntimeToolResponse,
+    RuntimeValidateResponse,
     RunRequest,
     RunResponse,
     ServiceResponse,
     SkillResponse,
+    ToolResponse,
 )
+from .runtime import InvalidToolDefinitionError, RuntimeService, ToolNotFoundError
 from .service_api import schedule_restart, systemctl
 
 app = FastAPI(title="Jarvis Dev v0.3")
-app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR / "static"), name="static")
+runtime_service = RuntimeService()
 
 JARVIS_PRINCIPLE_CHECK = """\
 
@@ -80,6 +88,70 @@ async def get_skills() -> list[SkillResponse]:
                 detail=f"Invalid skill definition: {skill_file.relative_to(ROOT_DIR)}",
             ) from exc
     return skills
+
+
+@app.get("/api/tools", response_model=list[ToolResponse])
+async def get_tools(skill: str | None = None) -> list[ToolResponse]:
+    tools: list[ToolResponse] = []
+    tool_files = sorted(TOOLS_DIR.glob("*/*.json"))
+    for tool_file in tool_files:
+        try:
+            data = json.loads(tool_file.read_text(encoding="utf-8"))
+            tool = ToolResponse(**data)
+            if skill is None or tool.skill_id == skill:
+                tools.append(tool)
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Invalid tool definition: {tool_file.relative_to(ROOT_DIR)}",
+            ) from exc
+    return tools
+
+
+@app.get("/api/runtime/tool/{tool_id}", response_model=RuntimeToolResponse)
+async def runtime_get_tool(tool_id: str) -> RuntimeToolResponse:
+    try:
+        return RuntimeToolResponse(**runtime_service.get_tool(tool_id))
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/runtime/validate", response_model=RuntimeValidateResponse)
+async def runtime_validate(request: RuntimeRequest) -> RuntimeValidateResponse:
+    try:
+        return RuntimeValidateResponse(
+            **runtime_service.validate(request.tool_id, request.params)
+        )
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/runtime/dry-run", response_model=RuntimeDryRunResponse)
+async def runtime_dry_run(request: RuntimeRequest) -> RuntimeDryRunResponse:
+    try:
+        return RuntimeDryRunResponse(
+            **runtime_service.dry_run(request.tool_id, request.params)
+        )
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/runtime/execute", response_model=RuntimeExecuteResponse)
+async def runtime_execute(request: RuntimeRequest) -> RuntimeExecuteResponse:
+    try:
+        return RuntimeExecuteResponse(
+            **runtime_service.execute_stub(request.tool_id, request.params)
+        )
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.get("/api/logs", response_model=LogResponse)

@@ -1,0 +1,11 @@
+{
+  "id": "get_tasks",
+  "skill_id": "garden",
+  "name": "Get Tasks",
+  "description": "List garden care tasks.",
+  "status": "idea",
+  "mode": "read",
+  "risk_level": "low",
+  "input_schema": {},
+  "output_schema": {}
+}

@@ -23,6 +23,20 @@ export async function refreshSkills() {
   setStatus(elements.skillsMessage, `${skills.length} skills`);
 }
 
+export async function refreshTools() {
+  const tools = await api("/api/tools");
+  elements.toolsList.innerHTML = tools.map((tool) => `
+    <div class="tool-row">
+      <strong>${escapeHtml(tool.name)}</strong>
+      <span>${escapeHtml(tool.skill_id)}</span>
+      <span class="pill">${escapeHtml(tool.mode)}</span>
+      <span class="pill">${escapeHtml(tool.risk_level)}</span>
+      <span class="pill">${escapeHtml(tool.status)}</span>
+    </div>
+  `).join("") || "Toolは登録されていません。";
+  setStatus(elements.toolsMessage, `${tools.length} tools`);
+}
+
 export async function refreshService() {
   try {
     const data = await api("/api/service/status");

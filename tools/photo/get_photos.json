@@ -1,0 +1,11 @@
+{
+  "id": "get_photos",
+  "skill_id": "photo",
+  "name": "Get Photos",
+  "description": "List or search photo candidates.",
+  "status": "idea",
+  "mode": "read",
+  "risk_level": "medium",
+  "input_schema": {},
+  "output_schema": {}
+}

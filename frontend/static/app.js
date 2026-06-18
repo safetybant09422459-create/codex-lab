@@ -1,21 +1,11 @@
 import { bindTabs } from "./tabs.js";
 import { bindGitActions, loadProject, refreshChanges } from "./review.js";
-import { bindServiceActions, refreshService, refreshSkills } from "./update.js";
+import { bindServiceActions, refreshService, refreshSkills, refreshTools } from "./update.js";
 import { api } from "./api.js";
 import { refreshLogs } from "./logs.js";
-import { elements, generatePrompt, runtime, setStatus, setTopState } from "./state.js";
+import { elements, runtime, setStatus, setTopState } from "./state.js";
 
 function bindDevelopActions() {
-  elements.designInput.addEventListener("input", () => {
-    elements.codexPrompt.value = generatePrompt();
-    setStatus(elements.runStatus, "送信内容を自動生成済み");
-  });
-
-  elements.regeneratePromptButton.addEventListener("click", () => {
-    elements.codexPrompt.value = generatePrompt();
-    setStatus(elements.runStatus, "再生成済み");
-  });
-
   elements.sendCodexButton.addEventListener("click", async () => {
     const prompt = elements.codexPrompt.value.trim();
     if (!prompt) {
@@ -54,5 +44,34 @@ bindDevelopActions();
 bindGitActions();
 bindServiceActions();
 
-Promise.all([loadProject(), refreshLogs(), refreshChanges(), refreshSkills(), refreshService()])
-  .catch((error) => setStatus(elements.runStatus, error.message, true));
+const initialLoads = [
+  ["project", loadProject],
+  ["logs", refreshLogs],
+  ["changes", refreshChanges],
+  ["skills", refreshSkills],
+  ["tools", refreshTools],
+  ["service", refreshService],
+];
+
+Promise.allSettled(initialLoads.map(([, load]) => load())).then((results) => {
+  const failures = results
+    .map((result, index) => ({ result, name: initialLoads[index][0] }))
+    .filter(({ result }) => result.status === "rejected");
+
+  if (!failures.length) {
+    return;
+  }
+
+  console.error(
+    "Initial load failed",
+    failures.map(({ name, result }) => ({
+      name,
+      error: result.reason,
+    })),
+  );
+  setStatus(
+    elements.runStatus,
+    `初期読み込み失敗: ${failures.map(({ name }) => name).join(", ")}`,
+    true,
+  );
+});

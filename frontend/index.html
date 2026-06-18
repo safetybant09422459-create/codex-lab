@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Jarvis Dev v0.3</title>
-    <link rel="stylesheet" href="/static/static/style.css" />
+    <link rel="stylesheet" href="/static/style.css" />
 
   </head>
   <body>
@@ -43,19 +43,11 @@
       <section id="develop-panel" class="tab-panel active">
         <div class="panel">
           <div class="section-head">
-            <h2>設計書貼り付け</h2>
-            <span class="status">ここではCodex実行しません</span>
-          </div>
-          <textarea id="design-input" class="large" placeholder="ChatGPT等で作った設計書を貼り付け"></textarea>
-        </div>
-        <div class="panel">
-          <div class="section-head">
-            <h2>Codexへ送信する内容</h2>
+            <h2>Codex Prompt</h2>
             <span id="run-status" class="status">未送信</span>
           </div>
-          <textarea id="codex-prompt" class="large"></textarea>
+          <textarea id="codex-prompt" class="large" placeholder="ChatGPTで作成した設計書や指示書を貼り付け"></textarea>
           <div class="actions">
-            <button id="regenerate-prompt-button" class="secondary" type="button">送信内容を生成</button>
             <button id="send-codex-button" type="button">Codexへ送信</button>
           </div>
         </div>
@@ -107,6 +99,13 @@
         </div>
         <div class="panel">
           <div class="section-head">
+            <h2>Tool Registry</h2>
+            <span id="tools-message" class="status">Skill内の実行候補</span>
+          </div>
+          <div id="tools-list" class="tool-list">Tool Registry 読み込み待機中...</div>
+        </div>
+        <div class="panel">
+          <div class="section-head">
             <h2>jarvis-dev</h2>
             <span id="service-message" class="status">systemdサービス</span>
           </div>
@@ -129,7 +128,7 @@
       </section>
     </main>
 
-    <script type="module" src="/static/static/app.js"></script>
+    <script type="module" src="/static/app.js"></script>
 
   </body>
 </html>

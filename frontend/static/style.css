@@ -316,7 +316,8 @@ pre {
 
 .doc-list,
 .file-list,
-.skill-list {
+.skill-list,
+.tool-list {
   display: grid;
   gap: 8px;
 }
@@ -335,6 +336,22 @@ pre {
   margin-top: 3px;
   color: var(--muted);
   font-size: 0.86rem;
+}
+
+.tool-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(90px, 0.7fr) repeat(3, auto);
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.tool-row > span:not(.pill) {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 750;
 }
 
 .skill-meta {
@@ -413,12 +430,14 @@ details > div {
   .section-head,
   .actions,
   .git-buttons,
-  .skill-row {
+  .skill-row,
+  .tool-row {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .skill-row {
+  .skill-row,
+  .tool-row {
     grid-template-columns: 1fr;
   }
 

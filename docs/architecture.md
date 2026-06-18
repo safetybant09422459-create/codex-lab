@@ -27,9 +27,11 @@ Jarvis
 ```text
 Jarvis Core
 ↓
+Skill Registry
+↓
 Tool Registry
 ↓
-各Module / MCP Tool
+MCP Tool
 ```
 
 Module / MCP Tool候補：
@@ -181,15 +183,43 @@ shared: 全員に表示
 
 Jarvisが使えるTool一覧を管理する。
 
+Skillは能力領域の分類であり、Toolは将来実行される具体的な単位である。
+
+```text
+Skill
+↓
+Tool
+↓
+MCP
+```
+
+役割：
+
+* Skill: Weather、Travel、Garden、Developerなどの能力カテゴリを表す
+* Tool: get_forecast、add_task、run_codexなどの呼び出し可能な操作単位を表す
+* MCP Tool: Toolの実行先または外部連携として提供される実装を表す
+
 Toolは以下の情報を持つ。
 
 * name
 * description
 * input schema
-* required permission
 * risk level
-* module name
-* enabled / disabled
+* skill_id
+* mode
+* status
+
+Toolは将来、以下の入口から呼び出される前提で設計する。
+
+* MCP Tool
+* OpenAI Tool Calling
+* Voice Command
+* Web UI
+* Jarvis Core
+
+そのためTool定義はUI依存のロジックを持たない。Web UIはTool Registryを表示または操作する入口のひとつであり、Toolの本体や権限判断はCore / Tool層で扱う。
+
+初期段階ではTool Registryは登録と一覧表示のみを扱う。Tool実行、MCP実装、OpenAI API接続、音声認識、外部API接続は別フェーズで扱う。
 
 ---
 
