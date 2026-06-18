@@ -44,6 +44,15 @@ Not Yet Implemented:
 * `POST /api/runtime/execute`
 * `GET /api/audit`
 
+Runtime/API検証コマンドは、プロジェクトルートの通常の `python` ではなく、仮想環境の `./.venv/bin/python` を前提にする。
+
+```bash
+cd /mnt/nas/projects/codex-lab
+./.venv/bin/python scripts/check_runtime_api.py
+```
+
+この検証はFastAPIのASGI appでRuntime API相当の経路を呼び出す。Real Tool Executionは行わず、`restart_service` もRuntimeのstub実行として確認する。
+
 リクエスト形式:
 
 ```json

@@ -18,6 +18,15 @@ pip install fastapi uvicorn
 uvicorn backend.main:app --host 0.0.0.0 --port 8001
 ```
 
+### 検証用Python
+
+このリポジトリで FastAPI / TestClient / Runtime API を検証するときは、プロジェクトルートの通常の `python` ではなく、必ず仮想環境の `./.venv/bin/python` を使う。
+
+```bash
+cd /mnt/nas/projects/codex-lab
+./.venv/bin/python scripts/check_runtime_api.py
+```
+
 スマホのブラウザで以下を開く。
 
 ```text
