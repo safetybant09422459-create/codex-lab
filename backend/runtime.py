@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .audit import AuditLogger
+from .confirmation import ConfirmationEngine
 from .config import ROOT_DIR, TOOLS_DIR
 from .executors import ExecutorRegistry
 
@@ -46,10 +47,12 @@ class RuntimeService:
         self,
         tools_dir=TOOLS_DIR,
         audit_logger: AuditLogger | None = None,
+        confirmation_engine: ConfirmationEngine | None = None,
         executor_registry: ExecutorRegistry | None = None,
     ) -> None:
         self.tools_dir = tools_dir
         self.audit_logger = audit_logger or AuditLogger()
+        self.confirmation_engine = confirmation_engine or ConfirmationEngine()
         self.executor_registry = executor_registry or ExecutorRegistry()
 
     def get_tool(self, tool_id: str) -> dict[str, Any]:
@@ -74,7 +77,9 @@ class RuntimeService:
             "errors": validation["errors"],
         }
 
-    def execute_stub(self, tool_id: str, params: dict[str, Any]) -> dict[str, Any]:
+    def execute_stub(
+        self, tool_id: str, params: dict[str, Any], confirmed: bool = False
+    ) -> dict[str, Any]:
         try:
             tool = self._load_tool(tool_id)
         except RuntimeError as exc:
@@ -83,11 +88,35 @@ class RuntimeService:
                 skill_id=None,
                 risk_level=None,
                 confirmation_required=None,
+                confirmed=confirmed,
                 audit_required=None,
                 status="failed",
                 error=str(exc),
             )
             raise
+
+        confirmation = self.confirmation_engine.decide(tool, confirmed)
+        if not confirmation.allowed:
+            self._append_confirmation_blocked_audit(
+                tool_id=tool.id,
+                skill_id=tool.skill_id,
+                risk_level=tool.risk_level,
+                confirmation_required=confirmation.required,
+                confirmed=confirmed,
+                audit_required=tool.audit_required,
+                reason=confirmation.reason,
+            )
+            return {
+                "success": False,
+                "tool_id": tool_id,
+                "execution_mode": None,
+                "result": None,
+                "blocked": True,
+                "confirmation_required": confirmation.required,
+                "confirmed": confirmed,
+                "reason": confirmation.reason,
+                "errors": [],
+            }
 
         errors = self._validate_required_fields(tool.input_schema, params)
         validation = {"valid": not errors, "errors": errors}
@@ -97,6 +126,7 @@ class RuntimeService:
                 skill_id=tool.skill_id,
                 risk_level=tool.risk_level,
                 confirmation_required=tool.confirmation_required,
+                confirmed=confirmed,
                 audit_required=tool.audit_required,
                 status="failed",
                 error="; ".join(validation["errors"]),
@@ -106,6 +136,10 @@ class RuntimeService:
                 "tool_id": tool_id,
                 "execution_mode": "stub",
                 "result": None,
+                "blocked": False,
+                "confirmation_required": confirmation.required,
+                "confirmed": confirmed,
+                "reason": None,
                 "errors": validation["errors"],
             }
 
@@ -118,6 +152,7 @@ class RuntimeService:
                 skill_id=tool.skill_id,
                 risk_level=tool.risk_level,
                 confirmation_required=tool.confirmation_required,
+                confirmed=confirmed,
                 audit_required=tool.audit_required,
                 status="failed",
                 error=str(exc),
@@ -129,6 +164,7 @@ class RuntimeService:
             skill_id=tool.skill_id,
             risk_level=tool.risk_level,
             confirmation_required=tool.confirmation_required,
+            confirmed=confirmed,
             audit_required=tool.audit_required,
             status="success",
         )
@@ -137,6 +173,10 @@ class RuntimeService:
             "tool_id": tool_id,
             "execution_mode": "stub",
             "result": result,
+            "blocked": False,
+            "confirmation_required": confirmation.required,
+            "confirmed": confirmed,
+            "reason": None,
         }
 
     def _append_execute_stub_audit(
@@ -146,6 +186,7 @@ class RuntimeService:
         skill_id: str | None,
         risk_level: str | None,
         confirmation_required: bool | None,
+        confirmed: bool,
         audit_required: bool | None,
         status: str,
         error: str | None = None,
@@ -158,11 +199,38 @@ class RuntimeService:
             "status": status,
             "risk_level": risk_level,
             "confirmation_required": confirmation_required,
+            "confirmed": confirmed,
             "audit_required": audit_required,
         }
         if error:
             event["error"] = error
         self.audit_logger.append(event)
+
+    def _append_confirmation_blocked_audit(
+        self,
+        *,
+        tool_id: str,
+        skill_id: str,
+        risk_level: str,
+        confirmation_required: bool,
+        confirmed: bool,
+        audit_required: bool,
+        reason: str,
+    ) -> None:
+        self.audit_logger.append(
+            {
+                "event_type": "runtime.confirmation_blocked",
+                "tool_id": tool_id,
+                "skill_id": skill_id,
+                "execution_mode": "stub",
+                "status": "blocked",
+                "risk_level": risk_level,
+                "confirmation_required": confirmation_required,
+                "confirmed": confirmed,
+                "audit_required": audit_required,
+                "reason": reason,
+            }
+        )
 
     def _load_tool(self, tool_id: str) -> RuntimeTool:
         for tool_file in sorted(self.tools_dir.glob("*/*.json")):
@@ -214,7 +282,7 @@ class RuntimeService:
     def _confirmation_required(self, data: dict[str, Any]) -> bool:
         if "confirmation_required" in data:
             return bool(data["confirmation_required"])
-        return data.get("risk_level") == "high" or data.get("mode") in {"write", "mixed"}
+        return data.get("risk_level") == "high"
 
     def _audit_required(self, data: dict[str, Any]) -> bool:
         if "audit_required" in data:

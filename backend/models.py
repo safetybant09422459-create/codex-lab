@@ -105,6 +105,7 @@ class RuntimeToolResponse(BaseModel):
 class RuntimeRequest(BaseModel):
     tool_id: str = Field(min_length=1, max_length=120)
     params: dict[str, Any] = Field(default_factory=dict)
+    confirmed: bool = False
 
 
 class RuntimeValidateResponse(BaseModel):
@@ -126,8 +127,12 @@ class RuntimeDryRunResponse(BaseModel):
 class RuntimeExecuteResponse(BaseModel):
     success: bool
     tool_id: str
-    execution_mode: Literal["stub"]
+    execution_mode: Literal["stub"] | None = None
     result: dict[str, Any] | None
+    blocked: bool = False
+    confirmation_required: bool | None = None
+    confirmed: bool = False
+    reason: str | None = None
     errors: list[str] = Field(default_factory=list)
 
 

@@ -39,12 +39,14 @@ Implemented:
 - Skill Registry
 - Tool Registry
 - Runtime v0.1
+- Audit Log v0.1
+- Executor Registry v0.1
+- Confirmation Engine v0.1
 
 Not Yet Implemented:
 
-- Audit Log
 - Permission Engine
-- Confirmation Engine
+- Confirmation UI
 - Real Tool Execution
 
 ### 使い方
@@ -105,6 +107,8 @@ Runtime API:
 - `GET /api/audit`
 
 `POST /api/runtime/execute` は Runtime v0.1 では stub execution を返す。実Tool実行は未実装。
+
+Confirmation Engine v0.1 はUIなしで、`confirmed` フラグだけを見る。`risk_level: high` または `confirmation_required: true` のToolは、`confirmed: true` がない限りブロックされ、Audit Logに `runtime.confirmation_blocked` として記録される。
 
 ### 設定
 

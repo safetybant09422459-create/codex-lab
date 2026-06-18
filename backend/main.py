@@ -147,7 +147,9 @@ async def runtime_dry_run(request: RuntimeRequest) -> RuntimeDryRunResponse:
 async def runtime_execute(request: RuntimeRequest) -> RuntimeExecuteResponse:
     try:
         return RuntimeExecuteResponse(
-            **runtime_service.execute_stub(request.tool_id, request.params)
+            **runtime_service.execute_stub(
+                request.tool_id, request.params, request.confirmed
+            )
         )
     except ToolNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
