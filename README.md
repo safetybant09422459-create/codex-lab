@@ -42,10 +42,10 @@ Implemented:
 - Audit Log v0.1
 - Executor Registry v0.1
 - Confirmation Engine v0.1
+- Permission Engine v0.1
 
 Not Yet Implemented:
 
-- Permission Engine
 - Confirmation UI
 - Real Tool Execution
 
@@ -107,6 +107,8 @@ Runtime API:
 - `GET /api/audit`
 
 `POST /api/runtime/execute` は Runtime v0.1 では stub execution を返す。実Tool実行は未実装。
+
+Permission Engine v0.1 はUIなし・認証なしで、request body の `role` だけを見る。未指定の場合は `guest` として扱う。role は `admin` / `family` / `guest` の3つで、`admin` は全Tool、`family` は read かつ low risk のTool、`guest` は read かつ low risk のToolだけを許可する。ただし `guest` は developer skill を実行できない。
 
 Confirmation Engine v0.1 はUIなしで、`confirmed` フラグだけを見る。`risk_level: high` または `confirmation_required: true` のToolは、`confirmed: true` がない限りブロックされ、Audit Logに `runtime.confirmation_blocked` として記録される。
 

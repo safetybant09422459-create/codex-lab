@@ -148,7 +148,7 @@ async def runtime_execute(request: RuntimeRequest) -> RuntimeExecuteResponse:
     try:
         return RuntimeExecuteResponse(
             **runtime_service.execute_stub(
-                request.tool_id, request.params, request.confirmed
+                request.tool_id, request.params, request.confirmed, request.role
             )
         )
     except ToolNotFoundError as exc:

@@ -6,6 +6,7 @@ from .audit import AuditLogger
 from .confirmation import ConfirmationEngine
 from .config import ROOT_DIR, TOOLS_DIR
 from .executors import ExecutorRegistry
+from .permission import PermissionEngine
 
 
 class RuntimeError(Exception):
@@ -49,11 +50,13 @@ class RuntimeService:
         audit_logger: AuditLogger | None = None,
         confirmation_engine: ConfirmationEngine | None = None,
         executor_registry: ExecutorRegistry | None = None,
+        permission_engine: PermissionEngine | None = None,
     ) -> None:
         self.tools_dir = tools_dir
         self.audit_logger = audit_logger or AuditLogger()
         self.confirmation_engine = confirmation_engine or ConfirmationEngine()
         self.executor_registry = executor_registry or ExecutorRegistry()
+        self.permission_engine = permission_engine or PermissionEngine()
 
     def get_tool(self, tool_id: str) -> dict[str, Any]:
         return self._load_tool(tool_id).summary()
@@ -78,8 +81,13 @@ class RuntimeService:
         }
 
     def execute_stub(
-        self, tool_id: str, params: dict[str, Any], confirmed: bool = False
+        self,
+        tool_id: str,
+        params: dict[str, Any],
+        confirmed: bool = False,
+        role: str | None = None,
     ) -> dict[str, Any]:
+        effective_role = role or "guest"
         try:
             tool = self._load_tool(tool_id)
         except RuntimeError as exc:
@@ -91,32 +99,11 @@ class RuntimeService:
                 confirmed=confirmed,
                 audit_required=None,
                 status="failed",
+                role=effective_role,
+                permission_allowed=None,
                 error=str(exc),
             )
             raise
-
-        confirmation = self.confirmation_engine.decide(tool, confirmed)
-        if not confirmation.allowed:
-            self._append_confirmation_blocked_audit(
-                tool_id=tool.id,
-                skill_id=tool.skill_id,
-                risk_level=tool.risk_level,
-                confirmation_required=confirmation.required,
-                confirmed=confirmed,
-                audit_required=tool.audit_required,
-                reason=confirmation.reason,
-            )
-            return {
-                "success": False,
-                "tool_id": tool_id,
-                "execution_mode": None,
-                "result": None,
-                "blocked": True,
-                "confirmation_required": confirmation.required,
-                "confirmed": confirmed,
-                "reason": confirmation.reason,
-                "errors": [],
-            }
 
         errors = self._validate_required_fields(tool.input_schema, params)
         validation = {"valid": not errors, "errors": errors}
@@ -129,6 +116,8 @@ class RuntimeService:
                 confirmed=confirmed,
                 audit_required=tool.audit_required,
                 status="failed",
+                role=effective_role,
+                permission_allowed=None,
                 error="; ".join(validation["errors"]),
             )
             return {
@@ -137,10 +126,68 @@ class RuntimeService:
                 "execution_mode": "stub",
                 "result": None,
                 "blocked": False,
-                "confirmation_required": confirmation.required,
+                "confirmation_required": tool.confirmation_required,
                 "confirmed": confirmed,
+                "role": effective_role,
+                "permission_allowed": None,
+                "permission_denied": False,
                 "reason": None,
                 "errors": validation["errors"],
+            }
+
+        permission = self.permission_engine.decide(tool, effective_role)
+        if not permission.allowed:
+            self._append_permission_denied_audit(
+                tool_id=tool.id,
+                skill_id=tool.skill_id,
+                risk_level=tool.risk_level,
+                confirmation_required=tool.confirmation_required,
+                confirmed=confirmed,
+                audit_required=tool.audit_required,
+                role=permission.role,
+                reason=permission.reason,
+            )
+            return {
+                "success": False,
+                "tool_id": tool_id,
+                "execution_mode": None,
+                "result": None,
+                "blocked": True,
+                "permission_denied": True,
+                "role": permission.role,
+                "permission_allowed": False,
+                "confirmation_required": None,
+                "confirmed": confirmed,
+                "reason": permission.reason,
+                "errors": [],
+            }
+
+        confirmation = self.confirmation_engine.decide(tool, confirmed)
+        if not confirmation.allowed:
+            self._append_confirmation_blocked_audit(
+                tool_id=tool.id,
+                skill_id=tool.skill_id,
+                risk_level=tool.risk_level,
+                confirmation_required=confirmation.required,
+                confirmed=confirmed,
+                audit_required=tool.audit_required,
+                role=permission.role,
+                permission_allowed=permission.allowed,
+                reason=confirmation.reason,
+            )
+            return {
+                "success": False,
+                "tool_id": tool_id,
+                "execution_mode": None,
+                "result": None,
+                "blocked": True,
+                "permission_denied": False,
+                "role": permission.role,
+                "permission_allowed": True,
+                "confirmation_required": confirmation.required,
+                "confirmed": confirmed,
+                "reason": confirmation.reason,
+                "errors": [],
             }
 
         executor = self.executor_registry.get_executor(tool.id, tool.skill_id)
@@ -155,6 +202,8 @@ class RuntimeService:
                 confirmed=confirmed,
                 audit_required=tool.audit_required,
                 status="failed",
+                role=permission.role,
+                permission_allowed=permission.allowed,
                 error=str(exc),
             )
             raise
@@ -167,6 +216,8 @@ class RuntimeService:
             confirmed=confirmed,
             audit_required=tool.audit_required,
             status="success",
+            role=permission.role,
+            permission_allowed=permission.allowed,
         )
         return {
             "success": True,
@@ -174,9 +225,13 @@ class RuntimeService:
             "execution_mode": "stub",
             "result": result,
             "blocked": False,
+            "permission_denied": False,
+            "role": permission.role,
+            "permission_allowed": True,
             "confirmation_required": confirmation.required,
             "confirmed": confirmed,
             "reason": None,
+            "errors": [],
         }
 
     def _append_execute_stub_audit(
@@ -189,6 +244,8 @@ class RuntimeService:
         confirmed: bool,
         audit_required: bool | None,
         status: str,
+        role: str,
+        permission_allowed: bool | None,
         error: str | None = None,
     ) -> None:
         event: dict[str, Any] = {
@@ -201,6 +258,8 @@ class RuntimeService:
             "confirmation_required": confirmation_required,
             "confirmed": confirmed,
             "audit_required": audit_required,
+            "role": role,
+            "permission_allowed": permission_allowed,
         }
         if error:
             event["error"] = error
@@ -215,6 +274,8 @@ class RuntimeService:
         confirmation_required: bool,
         confirmed: bool,
         audit_required: bool,
+        role: str,
+        permission_allowed: bool,
         reason: str,
     ) -> None:
         self.audit_logger.append(
@@ -228,6 +289,37 @@ class RuntimeService:
                 "confirmation_required": confirmation_required,
                 "confirmed": confirmed,
                 "audit_required": audit_required,
+                "role": role,
+                "permission_allowed": permission_allowed,
+                "reason": reason,
+            }
+        )
+
+    def _append_permission_denied_audit(
+        self,
+        *,
+        tool_id: str,
+        skill_id: str,
+        risk_level: str,
+        confirmation_required: bool,
+        confirmed: bool,
+        audit_required: bool,
+        role: str,
+        reason: str,
+    ) -> None:
+        self.audit_logger.append(
+            {
+                "event_type": "runtime.permission_denied",
+                "tool_id": tool_id,
+                "skill_id": skill_id,
+                "execution_mode": None,
+                "status": "blocked",
+                "risk_level": risk_level,
+                "confirmation_required": confirmation_required,
+                "confirmed": confirmed,
+                "audit_required": audit_required,
+                "role": role,
+                "permission_allowed": False,
                 "reason": reason,
             }
         )

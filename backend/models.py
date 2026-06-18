@@ -106,6 +106,7 @@ class RuntimeRequest(BaseModel):
     tool_id: str = Field(min_length=1, max_length=120)
     params: dict[str, Any] = Field(default_factory=dict)
     confirmed: bool = False
+    role: Literal["admin", "family", "guest"] = "guest"
 
 
 class RuntimeValidateResponse(BaseModel):
@@ -130,6 +131,9 @@ class RuntimeExecuteResponse(BaseModel):
     execution_mode: Literal["stub"] | None = None
     result: dict[str, Any] | None
     blocked: bool = False
+    permission_denied: bool = False
+    role: Literal["admin", "family", "guest"] = "guest"
+    permission_allowed: bool | None = None
     confirmation_required: bool | None = None
     confirmed: bool = False
     reason: str | None = None
