@@ -16,23 +16,28 @@ Jarvis
 ├ Memory
 ├ Users
 ├ Permissions
+├ Runtime
 ├ Tool Registry
 ├ Notifications
 ├ Modules
 └ Frontend
 ```
 
-将来構造：
+現在の実装構造：
 
 ```text
 Jarvis Core
 ↓
-Skill Registry
+Runtime
 ↓
 Tool Registry
 ↓
-MCP Tool
+Skill Registry
 ```
+
+Runtime は Implemented (v0.1) として、Tool Registry に登録されたTool定義の取得、必須入力の検証、dry-run、stub execution を扱う。
+
+将来構造では、Runtime の下に Permission Engine、Confirmation Engine、Audit Log、Executor Registry、Real Tool Execution を追加し、必要に応じて MCP Tool へ接続する。
 
 Module / MCP Tool候補：
 
@@ -190,14 +195,17 @@ Skill
 ↓
 Tool
 ↓
-MCP
+Runtime
+↓
+MCP / Executor
 ```
 
 役割：
 
 * Skill: Weather、Travel、Garden、Developerなどの能力カテゴリを表す
 * Tool: get_forecast、add_task、run_codexなどの呼び出し可能な操作単位を表す
-* MCP Tool: Toolの実行先または外部連携として提供される実装を表す
+* Runtime: Tool定義の取得、入力検証、dry-run、stub executionを扱う実行境界
+* MCP Tool / Executor: Toolの実行先または外部連携として提供される将来実装を表す
 
 Toolは以下の情報を持つ。
 
@@ -219,7 +227,16 @@ Toolは将来、以下の入口から呼び出される前提で設計する。
 
 そのためTool定義はUI依存のロジックを持たない。Web UIはTool Registryを表示または操作する入口のひとつであり、Toolの本体や権限判断はCore / Tool層で扱う。
 
-初期段階ではTool Registryは登録と一覧表示のみを扱う。Tool実行、MCP実装、OpenAI API接続、音声認識、外部API接続は別フェーズで扱う。
+現在はSkill Registry、Tool Registry、Runtime v0.1が実装済みである。
+
+Runtime v0.1は以下を扱う。
+
+* `get_tool`
+* `validate`
+* `dry_run`
+* `execute_stub`
+
+Audit Log、Permission Engine、Confirmation Engine、Executor Registry、Real Tool Execution、MCP実装、OpenAI API接続、音声認識、外部API接続は別フェーズで扱う。
 
 ---
 

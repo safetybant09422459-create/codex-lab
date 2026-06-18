@@ -15,14 +15,37 @@ cd /mnt/nas/projects/codex-lab
 python3 -m venv .venv
 source .venv/bin/activate
 pip install fastapi uvicorn
-uvicorn backend.main:app --host 0.0.0.0 --port 8000
+uvicorn backend.main:app --host 0.0.0.0 --port 8001
 ```
 
 スマホのブラウザで以下を開く。
 
 ```text
-http://<ラズパイのIPアドレス>:8000
+http://<ラズパイのIPアドレス>:8001
 ```
+
+実運用では systemd service `jarvis-dev` として port `8001` で起動する。
+
+アクセス例:
+
+```text
+http://<ラズパイのIPアドレス>:8001
+```
+
+### 現在の実装状態
+
+Implemented:
+
+- Skill Registry
+- Tool Registry
+- Runtime v0.1
+
+Not Yet Implemented:
+
+- Audit Log
+- Permission Engine
+- Confirmation Engine
+- Real Tool Execution
 
 ### 使い方
 
@@ -62,6 +85,8 @@ Commit のデフォルトメッセージは `Update Jarvis Dev v0.3`。
 ### API
 
 - `GET /api/project`
+- `GET /api/skills`
+- `GET /api/tools`
 - `POST /api/run`
 - `GET /api/logs`
 - `GET /api/changes`
@@ -71,19 +96,28 @@ Commit のデフォルトメッセージは `Update Jarvis Dev v0.3`。
 - `GET /api/service/status`
 - `POST /api/service/restart`
 
+Runtime API:
+
+- `GET /api/runtime/tool/{tool_id}`
+- `POST /api/runtime/validate`
+- `POST /api/runtime/dry-run`
+- `POST /api/runtime/execute`
+
+`POST /api/runtime/execute` は Runtime v0.1 では stub execution を返す。実Tool実行は未実装。
+
 ### 設定
 
 Codex CLI が `codex` 以外のパスにある場合は `CODEX_BIN` を指定する。
 
 ```bash
-CODEX_BIN=/path/to/codex uvicorn backend.main:app --host 0.0.0.0 --port 8000
+CODEX_BIN=/path/to/codex uvicorn backend.main:app --host 0.0.0.0 --port 8001
 ```
 
 Codex CLI の引数を変えたい場合は `CODEX_ARGS` を指定する。
 デフォルトは `exec`。
 
 ```bash
-CODEX_ARGS="exec" uvicorn backend.main:app --host 0.0.0.0 --port 8000
+CODEX_ARGS="exec" uvicorn backend.main:app --host 0.0.0.0 --port 8001
 ```
 
 ## 運用前チェック
@@ -95,6 +129,7 @@ CODEX_ARGS="exec" uvicorn backend.main:app --host 0.0.0.0 --port 8000
 - 実行環境: Raspberry Pi 4
 - Python: 仮想環境 `.venv` を使用
 - systemd サービス名: `jarvis-dev`
+- 待受ポート: `8001`
 - GitHub リポジトリURL: `git@github.com:safetybant09422459-create/codex-lab.git`
 
 ### 新規セットアップ手順
@@ -120,13 +155,13 @@ pip install fastapi uvicorn
 ```bash
 cd /mnt/nas/projects/codex-lab
 source .venv/bin/activate
-uvicorn backend.main:app --host 0.0.0.0 --port 8000
+uvicorn backend.main:app --host 0.0.0.0 --port 8001
 ```
 
 スマホまたはPCのブラウザで以下を開く。
 
 ```text
-http://<ラズパイのIPアドレス>:8000
+http://<ラズパイのIPアドレス>:8001
 ```
 
 systemd サービスを作成する。
@@ -148,7 +183,7 @@ User=pi
 WorkingDirectory=/mnt/nas/projects/codex-lab
 Environment="PATH=/mnt/nas/projects/codex-lab/.venv/bin:/usr/local/bin:/usr/bin:/bin:/home/pi/.local/bin:/home/pi/.npm-global/bin"
 Environment="CODEX_ARGS=exec"
-ExecStart=/mnt/nas/projects/codex-lab/.venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
+ExecStart=/mnt/nas/projects/codex-lab/.venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8001
 Restart=on-failure
 RestartSec=5
 
@@ -228,7 +263,7 @@ git push
 ```bash
 sudo systemctl status jarvis-dev
 journalctl -u jarvis-dev -n 100
-ss -ltnp | grep 8000
+ss -ltnp | grep 8001
 ps aux | grep uvicorn
 ```
 
@@ -237,7 +272,7 @@ ps aux | grep uvicorn
 ```bash
 cd /mnt/nas/projects/codex-lab
 source .venv/bin/activate
-uvicorn backend.main:app --host 0.0.0.0 --port 8000
+uvicorn backend.main:app --host 0.0.0.0 --port 8001
 ```
 
 #### Codex CLIが見つからない
