@@ -115,6 +115,46 @@
             <button id="service-restart-button" class="danger" type="button">再起動</button>
           </div>
         </div>
+        <div class="panel">
+          <div class="section-head">
+            <h2>Runtime Execute</h2>
+            <span id="runtime-execute-message" class="status">Runtime tools 読み込み待機中...</span>
+          </div>
+          <div class="runtime-form">
+            <div class="runtime-field">
+              <label for="runtime-tool-select">Tool:</label>
+              <select id="runtime-tool-select"></select>
+            </div>
+            <div class="runtime-field">
+              <label for="runtime-role-select">Role:</label>
+              <select id="runtime-role-select">
+                <option value="guest" selected>guest</option>
+                <option value="family">family</option>
+                <option value="admin">admin</option>
+              </select>
+            </div>
+            <label class="runtime-check" for="runtime-confirmed">
+              <input id="runtime-confirmed" type="checkbox" />
+              <span>confirmed</span>
+            </label>
+            <div class="runtime-field runtime-wide">
+              <label for="runtime-params-json">Params JSON:</label>
+              <textarea id="runtime-params-json">{
+  "location": "Okayama"
+}</textarea>
+            </div>
+          </div>
+          <div class="actions">
+            <button id="runtime-execute-button" type="button">Execute</button>
+          </div>
+          <label for="runtime-result">Result:</label>
+          <pre id="runtime-result" class="status-pre">Runtime Execute 結果待機中...</pre>
+          <div class="runtime-audit-head">
+            <label for="runtime-audit">Audit:</label>
+            <button id="runtime-audit-refresh-button" class="secondary" type="button">Refresh Audit</button>
+          </div>
+          <pre id="runtime-audit" class="status-pre">Audit 読み込み待機中...</pre>
+        </div>
       </section>
 
       <section id="logs-panel" class="tab-panel">

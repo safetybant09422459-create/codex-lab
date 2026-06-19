@@ -3,6 +3,7 @@ import { bindGitActions, loadProject, refreshChanges } from "./review.js";
 import { bindServiceActions, refreshService, refreshSkills, refreshTools } from "./update.js";
 import { api } from "./api.js";
 import { refreshLogs } from "./logs.js";
+import { initRuntimeExecute } from "./runtime-execute.js";
 import { elements, runtime, setStatus, setTopState } from "./state.js";
 
 function bindDevelopActions() {
@@ -43,6 +44,7 @@ bindTabs();
 bindDevelopActions();
 bindGitActions();
 bindServiceActions();
+initRuntimeExecute();
 
 const initialLoads = [
   ["project", loadProject],
