@@ -28,6 +28,7 @@
         "description": "Outing type"
       },
       "prefectures": {
+        "type": "string",
         "description": "Prefecture or prefectures for the trip"
       },
       "memo": {
