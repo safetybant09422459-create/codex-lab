@@ -52,11 +52,23 @@ Implemented:
 - Executor Registry v0.1
 - Confirmation Engine v0.1
 - Permission Engine v0.1
+- Weather Executor v0.1 (`execution_mode: local_weather_stub`)
+- Travel Runtime Read v0.1 (`execution_mode: local_travel_read`)
 
 Not Yet Implemented:
 
 - Confirmation UI
-- Real Tool Execution
+- External API / DB-backed Real Tool Execution
+
+Travel Runtime Read v0.1 は実装済み。Runtime safety layer 経由で `backend/travel_executor.py` の `TravelExecutor` が呼ばれ、`backend/travel_repository.py` と `backend/travel_sources.py` のローカル読み取りデータを返す。
+
+実装済み Travel Tool:
+
+- `travel.get_trips` (`get_trips`)
+- `travel.get_trip` (`get_trip`)
+- `travel.get_trip_timeline` (`get_trip_timeline`)
+
+`travel.get_spots` (`get_spots`) はTool定義のみ存在し、v0.1の実行対象外。現在は `TravelExecutor` の分岐、`TravelRepository` のメソッド、`TravelSource` のデータを持たない。
 
 ### 使い方
 
@@ -115,7 +127,7 @@ Runtime API:
 - `POST /api/runtime/execute`
 - `GET /api/audit`
 
-`POST /api/runtime/execute` は Runtime v0.1 では stub execution を返す。実Tool実行は未実装。
+`POST /api/runtime/execute` は Runtime v0.1 の安全境界を通してToolを実行する。Weather は `local_weather_stub`、Travel read は `local_travel_read`、その他の未実装Toolは必要に応じて `stub` または planned として扱う。Travel read の成功実行もAudit Log対象で、現在の `event_type` は `runtime.execute_stub` のままだが、`execution_mode` には `local_travel_read` が記録される。
 
 Permission Engine v0.1 はUIなし・認証なしで、request body の `role` だけを見る。未指定の場合は `guest` として扱う。role は `admin` / `family` / `guest` の3つで、`admin` は全Tool、`family` は read かつ low risk のTool、`guest` は read かつ low risk のToolだけを許可する。ただし `guest` は developer skill を実行できない。
 
