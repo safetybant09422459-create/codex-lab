@@ -8,6 +8,8 @@ Photo Skillは、家族の写真を扱うSkillである。
 
 TravelはPhotoを利用することがあるが、PhotoはTravel専用ではない。
 
+Travel側のTripは宿泊旅行だけでなく日帰りのおでかけも含む。Photoはその文脈を所有せず、撮影日時、位置情報、Album、Thumbnail、権限など写真基盤として必要な情報を返す。
+
 ---
 
 ## 扱う対象
@@ -35,7 +37,8 @@ Photoの責務:
 * Immich APIとの通信をImmich Adapterとして扱う
 * ImmichのAsset ID、Album ID、メタデータを正規化する
 * 旅行写真と日常写真を同じ写真基盤で扱う
-* Travelからの「この旅行に関連する写真を取得したい」という要求に応答する
+* Travelからの「この旅行やおでかけに関連する写真を取得したい」という要求に応答する
+* TravelのMemory作成やCover Image置き換えに使う写真候補を返す
 * 写真に関するプライバシーと権限境界を管理する
 
 Photoは写真を中心にしたSkillであり、旅行、予定、家電、天気などの文脈を主責務にしない。
@@ -52,6 +55,8 @@ Photoが扱わないもの:
 * ChecklistやPackingの管理
 * BudgetやReviewの管理
 * Spot代表画像としてのGoogle Places画像管理
+* Trip代表画像としてのGoogle Places画像管理
+* Google Places由来の仮画像やローカルキャッシュ管理
 * Google Places API呼び出し
 * 旅行計画の意思決定
 * Calendar予定管理
@@ -71,7 +76,9 @@ Travelは、旅行に関連する写真を必要とする場合にPhotoへ問い
 
 * Trip期間中に撮影された写真を探す
 * Spot周辺で撮影された写真を探す
-* 旅行Reviewに使う写真候補を取得する
+* MoveやEventの時間帯に撮影された写真を探す
+* Travel Memoryに使う写真候補を取得する
+* Google仮画像を家族写真へ置き換える候補を取得する
 * Tripに紐づくAlbum候補を取得する
 * 家族に共有してよい写真だけを取得する
 
@@ -87,7 +94,9 @@ Photoは以下を返す。
 
 PhotoはTripやSpotの意味を所有しない。
 
-Travelが `trip_id` や `spot_id` を持ち、Photoはそれに対する写真候補を返す。
+Travelが `trip_id`、`spot_id`、`move_id`、`event_id`、`memory_id` を持ち、Photoはそれに対する写真候補を返す。
+
+Google Places由来の仮画像はPhoto Assetではない。Photoが扱うのは家族が撮影した写真、Immich Asset、Album、Thumbnailであり、TravelがCover Imageとして採用した場合も写真の正はPhoto側に残る。
 
 ---
 
@@ -125,6 +134,7 @@ Photo SkillのTool候補:
 * `photo.find_assets_near_location`
 * `photo.find_assets_for_trip`
 * `photo.find_assets_for_spot`
+* `photo.find_assets_for_time_range`
 * `photo.create_album`
 * `photo.add_assets_to_album`
 * `photo.suggest_album_for_trip`
