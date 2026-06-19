@@ -24,6 +24,7 @@ class ExecutorRegistry:
         self._tool_executors: dict[str, BaseExecutor] = {}
         self._skill_executors: dict[str, BaseExecutor] = {}
         self.register_skill("weather", self._build_weather_executor())
+        self.register_skill("travel", self._build_travel_executor())
 
     def register_tool(self, tool_id: str, executor: BaseExecutor) -> None:
         self._tool_executors[tool_id] = executor
@@ -44,3 +45,8 @@ class ExecutorRegistry:
         from .weather_executor import WeatherExecutor
 
         return WeatherExecutor()
+
+    def _build_travel_executor(self) -> BaseExecutor:
+        from .travel_executor import TravelExecutor
+
+        return TravelExecutor()

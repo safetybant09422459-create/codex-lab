@@ -128,7 +128,9 @@ class RuntimeDryRunResponse(BaseModel):
 class RuntimeExecuteResponse(BaseModel):
     success: bool
     tool_id: str
-    execution_mode: Literal["stub", "local_weather_stub"] | None = None
+    execution_mode: (
+        Literal["stub", "local_weather_stub", "local_travel_read"] | None
+    ) = None
     result: dict[str, Any] | None
     blocked: bool = False
     permission_denied: bool = False

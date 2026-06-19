@@ -1,0 +1,22 @@
+{
+  "id": "get_trip",
+  "skill_id": "travel",
+  "name": "Get Trip",
+  "description": "Get one known trip by id.",
+  "status": "idea",
+  "mode": "read",
+  "risk_level": "low",
+  "confirmation_required": false,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "trip_id": {
+        "type": "string",
+        "description": "Trip id"
+      }
+    },
+    "required": ["trip_id"]
+  },
+  "output_schema": {}
+}

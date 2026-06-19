@@ -120,6 +120,81 @@ async def run_checks() -> None:
             "get_forecast should honor days in local stub",
         )
 
+        trips = await post_execute(
+            {
+                "tool_id": "get_trips",
+                "params": {},
+                "role": "guest",
+                "confirmed": False,
+            },
+        )
+        assert_true(trips["success"] is True, "get_trips guest should succeed")
+        assert_true(
+            trips["execution_mode"] == "local_travel_read",
+            "get_trips must use TravelExecutor",
+        )
+        assert_true(
+            trips["permission_allowed"] is True,
+            "get_trips guest read low should be allowed",
+        )
+        assert_true(
+            trips["confirmation_required"] is False,
+            "get_trips should not require confirmation",
+        )
+        assert_true(
+            trips["result"]["trips"][0]["id"] == "trip_suma_2026",
+            "get_trips should return the in-memory Suma trip",
+        )
+
+        trip = await post_execute(
+            {
+                "tool_id": "get_trip",
+                "params": {"trip_id": "trip_suma_2026"},
+                "role": "guest",
+                "confirmed": False,
+            },
+        )
+        assert_true(trip["success"] is True, "get_trip guest should succeed")
+        assert_true(
+            trip["execution_mode"] == "local_travel_read",
+            "get_trip must use TravelExecutor",
+        )
+        assert_true(
+            trip["result"]["trip"]["title"] == "須磨シーワールド",
+            "get_trip should return the requested trip",
+        )
+
+        timeline = await post_execute(
+            {
+                "tool_id": "get_trip_timeline",
+                "params": {"trip_id": "trip_suma_2026"},
+                "role": "guest",
+                "confirmed": False,
+            },
+        )
+        assert_true(
+            timeline["success"] is True,
+            "get_trip_timeline guest should succeed",
+        )
+        assert_true(
+            timeline["execution_mode"] == "local_travel_read",
+            "get_trip_timeline must use TravelExecutor",
+        )
+        timeline_item = timeline["result"]["items"][0]
+        for field in (
+            "display_title",
+            "place_name",
+            "item_type",
+            "cover_image",
+            "memo",
+            "participants",
+            "linked_photos",
+        ):
+            assert_true(
+                field in timeline_item,
+                f"get_trip_timeline item should include {field}",
+            )
+
         guest_restart = await post_execute(
             {
                 "tool_id": "restart_service",
@@ -173,7 +248,7 @@ async def run_checks() -> None:
             "admin restart should return stub success",
         )
 
-        status_code, audit_response = await request_json("GET", "/api/audit?limit=10")
+        status_code, audit_response = await request_json("GET", "/api/audit?limit=20")
         assert_true(status_code == 200, json.dumps(audit_response, ensure_ascii=False))
         audit_items = audit_response["items"]
         assert_true(len(audit_items) >= 4, "audit log should contain runtime events")
@@ -200,6 +275,17 @@ async def run_checks() -> None:
         assert_true(
             bool(weather_audits),
             "audit log should include local_weather_stub execution",
+        )
+        travel_audits = [
+            item
+            for item in audit_items
+            if item.get("skill_id") == "travel"
+            and item.get("execution_mode") == "local_travel_read"
+            and item.get("status") == "success"
+        ]
+        assert_true(
+            len(travel_audits) >= 3,
+            "audit log should include TravelExecutor executions",
         )
 
     print("Runtime API check passed")

@@ -6,6 +6,8 @@
   "status": "idea",
   "mode": "read",
   "risk_level": "low",
+  "confirmation_required": false,
+  "audit_required": true,
   "input_schema": {},
   "output_schema": {}
 }
