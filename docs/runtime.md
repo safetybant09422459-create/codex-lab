@@ -133,6 +133,37 @@ Tool定義が存在しない場合は404を返す。
 
 Tool定義が壊れている場合は500を返す。
 
+### Tool JSON schemaの注意
+
+Tool JSON の `input_schema.properties` では、各propertyに `type` が必要である。
+
+今回の Runtime tools error では、`create_trip.json` の `prefectures` property に `type` が無く、Tool Registry読み込み時に `Invalid tool definition` になった。
+
+影響:
+
+* 1つのTool定義ミスで `/api/tools` が失敗する
+* `/api/tools` に依存するWeb UIのTool一覧表示も壊れる
+
+新Tool追加時の確認:
+
+* `python -m json.tool` でJSON構文を確認する
+* Runtime/APIで `/api/tools` が返ることも確認する
+
+```bash
+curl -s http://127.0.0.1:8001/api/tools | head -c 500
+```
+
+Jarvis Dev の systemd service 名は `jarvis-dev` である。
+
+```bash
+sudo systemctl restart jarvis-dev
+```
+
+注意:
+
+* port `8000` は旧おでかけアプリ
+* port `8001` が Jarvis Dev
+
 ---
 
 ## Executor Registry
