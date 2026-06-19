@@ -1,0 +1,66 @@
+{
+  "id": "create_timeline_item",
+  "skill_id": "travel",
+  "name": "Create Timeline Item",
+  "description": "Create a travel timeline item in the local Travel DB.",
+  "status": "implemented",
+  "mode": "write",
+  "risk_level": "medium",
+  "confirmation_required": true,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "trip_id": {
+        "type": "string",
+        "description": "Trip id"
+      },
+      "item_type": {
+        "type": "string",
+        "description": "Timeline item type"
+      },
+      "display_title": {
+        "type": "string",
+        "description": "Display title"
+      },
+      "place_name": {
+        "type": "string",
+        "description": "Place name"
+      },
+      "place_id": {
+        "type": "string",
+        "description": "Place id"
+      },
+      "category": {
+        "type": "string",
+        "description": "Category"
+      },
+      "start_at": {
+        "type": "string",
+        "description": "Start datetime"
+      },
+      "end_at": {
+        "type": "string",
+        "description": "End datetime"
+      },
+      "time_kind": {
+        "type": "string",
+        "description": "Time kind"
+      },
+      "memo": {
+        "type": "string",
+        "description": "Timeline memo"
+      },
+      "order_no": {
+        "type": "integer",
+        "description": "Display order"
+      },
+      "status": {
+        "type": "string",
+        "description": "Timeline item status"
+      }
+    },
+    "required": ["trip_id", "item_type", "display_title"]
+  },
+  "output_schema": {}
+}

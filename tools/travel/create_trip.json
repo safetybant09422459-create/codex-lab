@@ -1,0 +1,49 @@
+{
+  "id": "create_trip",
+  "skill_id": "travel",
+  "name": "Create Trip",
+  "description": "Create a travel trip in the local Travel DB.",
+  "status": "implemented",
+  "mode": "write",
+  "risk_level": "medium",
+  "confirmation_required": true,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string",
+        "description": "Trip title"
+      },
+      "start_date": {
+        "type": "string",
+        "description": "Trip start date"
+      },
+      "end_date": {
+        "type": "string",
+        "description": "Trip end date"
+      },
+      "outing_type": {
+        "type": "string",
+        "description": "Outing type"
+      },
+      "prefectures": {
+        "description": "Prefecture or prefectures for the trip"
+      },
+      "memo": {
+        "type": "string",
+        "description": "Trip memo"
+      },
+      "privacy_level": {
+        "type": "string",
+        "description": "Privacy level"
+      },
+      "created_by": {
+        "type": "string",
+        "description": "Creator"
+      }
+    },
+    "required": ["title"]
+  },
+  "output_schema": {}
+}

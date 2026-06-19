@@ -86,7 +86,7 @@ class ToolResponse(BaseModel):
     skill_id: str
     name: str
     description: str
-    status: Literal["idea", "planned", "active", "deprecated"]
+    status: Literal["idea", "planned", "active", "implemented", "deprecated"]
     mode: Literal["read", "write", "mixed"]
     risk_level: Literal["low", "medium", "high"]
     input_schema: dict[str, Any]
@@ -129,7 +129,13 @@ class RuntimeExecuteResponse(BaseModel):
     success: bool
     tool_id: str
     execution_mode: (
-        Literal["stub", "local_weather_stub", "local_travel_read"] | None
+        Literal[
+            "stub",
+            "local_weather_stub",
+            "local_travel_read",
+            "local_travel_write",
+        ]
+        | None
     ) = None
     result: dict[str, Any] | None
     blocked: bool = False

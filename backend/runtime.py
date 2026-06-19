@@ -191,7 +191,10 @@ class RuntimeService:
             }
 
         executor = self.executor_registry.get_executor(tool.id, tool.skill_id)
-        execution_mode = getattr(executor, "execution_mode", "stub")
+        if hasattr(executor, "get_execution_mode"):
+            execution_mode = executor.get_execution_mode(tool)
+        else:
+            execution_mode = getattr(executor, "execution_mode", "stub")
         try:
             result = executor.execute(tool, params)
         except Exception as exc:
