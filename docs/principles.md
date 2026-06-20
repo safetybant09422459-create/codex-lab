@@ -215,3 +215,44 @@ Enjoy The Journey
 効率だけでなく、
 
 ワクワクすることを大切にする。
+
+---
+
+## Principle 16
+
+Skill Standard Architecture
+
+Skillは標準レイヤー構造に揃える。
+
+```text
+Runtime
+↓
+Permission / Confirmation / Audit
+↓
+ExecutorRegistry
+↓
+SkillExecutor
+↓
+SkillRepository
+↓
+Storage または External Adapter
+↓
+DB / 外部API
+```
+
+RepositoryをSkillの中心にする。
+
+RuntimeはTool JSONロード、入力検証、権限、確認、監査、Executor呼び出しを担当し、Skill固有ロジックを持たない。
+
+ExecutorはTool入出力adapterとして、Toolごとの分岐とRepository呼び出しを担当する。
+
+StorageはDB詳細を隠蔽し、External Adapterは外部API詳細を隠蔽する。
+
+重要ルール:
+
+* RuntimeにSkill固有ロジックを書かない
+* UIにドメインロジックを書かない
+* ExecutorにDBや外部APIの詳細を書きすぎない
+* Skill間連携は相手SkillのTool / API / Repository抽象を経由する
+* TravelからImmichを直接呼ばない
+* Photo Skillは `PhotoExecutor -> PhotoRepository -> ImmichAdapter` で作る

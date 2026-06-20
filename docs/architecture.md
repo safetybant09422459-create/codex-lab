@@ -37,7 +37,27 @@ Skill Registry
 
 Runtime は Implemented (v0.1) として、Tool Registry に登録されたTool定義の取得、必須入力の検証、dry-run、stub execution を扱う。
 
-将来構造では、Runtime の下に Permission Engine、Confirmation Engine、Audit Log、Executor Registry、Real Tool Execution を追加し、必要に応じて MCP Tool へ接続する。
+現在は Permission Engine、Confirmation Engine、Audit Log、Executor Registry、Weather Executor、Travel Executor、Travel Runtime v0.1 も実装済みである。Travel Runtime v0.1は `SQLiteTravelStorage` による `storage/travel.db` のlocal DB-backed read/writeを含み、`travel.create_trip` と `travel.create_timeline_item` はguarded writeとして扱う。外部APIを使うReal Tool Execution、追加write tools、MCP Tool化は別フェーズで扱う。
+
+Skillの標準構造は以下とする。
+
+```text
+Runtime
+↓
+Permission / Confirmation / Audit
+↓
+ExecutorRegistry
+↓
+SkillExecutor
+↓
+SkillRepository
+↓
+Storage または External Adapter
+↓
+DB / 外部API
+```
+
+詳細は[Skill Standard Architecture](skill_standard_architecture.md)に置く。
 
 Module / MCP Tool候補：
 
@@ -235,8 +255,17 @@ Runtime v0.1は以下を扱う。
 * `validate`
 * `dry_run`
 * `execute_stub`
+* `ExecutorRegistry`
+* `PermissionEngine`
+* `ConfirmationEngine`
+* `Audit Log`
+* `WeatherExecutor`
+* `TravelExecutor`
+* Travel Runtime v0.1
+* `SQLiteTravelStorage` による `storage/travel.db` のlocal DB-backed read/write
+* guarded write: `travel.create_trip`, `travel.create_timeline_item`
 
-Audit Log、Permission Engine、Confirmation Engine、Executor Registry、Real Tool Execution、MCP実装、OpenAI API接続、音声認識、外部API接続は別フェーズで扱う。
+Real Tool Execution、追加Travel write tools、MCP実装、OpenAI API接続、音声認識、外部API接続は別フェーズで扱う。
 
 ---
 

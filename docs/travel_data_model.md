@@ -234,7 +234,7 @@ Trip全体で予定期間と実際のおでかけ期間を分ける。
 
 * read/write/mixed: `mixed`
 * risk level: `medium`
-* confirmation: 作成は不要でもよい。日程変更、キャンセル、削除は必要
+* confirmation: `travel.create_trip` はguarded writeとして確認必須。日程変更、キャンセル、削除も確認必須
 * audit: 必要
 
 ### 他Skillとの境界
@@ -243,10 +243,15 @@ TripはCalendarの予定ではない。
 
 Travelではおでかけ全体の意味、参加者、候補、行程、思い出を束ねる。Calendarには必要に応じて日程表示や通知用の予定を渡す。
 
-### 将来のTool候補
+### Tool候補
+
+実装済み:
 
 * `travel.create_trip`
 * `travel.get_trip`
+
+将来候補:
+
 * `travel.list_trips`
 * `travel.update_trip`
 * `travel.cancel_trip`
