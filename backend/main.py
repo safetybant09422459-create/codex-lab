@@ -1,7 +1,7 @@
 import json
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import codex_api
@@ -27,12 +27,15 @@ from .models import (
     SkillResponse,
     ToolResponse,
 )
+from .photo_immich_adapter import ImmichAPIError, ImmichConfigurationError
+from .photo_repository import PhotoRepository
 from .runtime import InvalidToolDefinitionError, RuntimeService, ToolNotFoundError
 from .service_api import schedule_restart, systemctl
 
 app = FastAPI(title="Jarvis Dev v0.3")
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR / "static"), name="static")
 runtime_service = RuntimeService()
+photo_repository = PhotoRepository()
 
 JARVIS_PRINCIPLE_CHECK = """\
 
@@ -155,6 +158,23 @@ async def runtime_execute(request: RuntimeRequest) -> RuntimeExecuteResponse:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidToolDefinitionError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/photo/assets/{asset_id}/thumbnail")
+async def photo_asset_thumbnail(asset_id: str) -> Response:
+    try:
+        content, content_type = photo_repository.get_thumbnail(asset_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ImmichConfigurationError as exc:
+        raise HTTPException(
+            status_code=503, detail="Immich connection is not configured"
+        ) from exc
+    except ImmichAPIError as exc:
+        raise HTTPException(
+            status_code=502, detail="Immich thumbnail request failed"
+        ) from exc
+    return Response(content=content, media_type=content_type)
 
 
 @app.get("/api/audit", response_model=AuditResponse)

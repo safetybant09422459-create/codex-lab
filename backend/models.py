@@ -134,6 +134,7 @@ class RuntimeExecuteResponse(BaseModel):
             "local_weather_stub",
             "local_travel_read",
             "local_travel_write",
+            "local_photo_read",
         ]
         | None
     ) = None

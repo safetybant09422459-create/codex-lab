@@ -6,3 +6,4 @@ logs/
 storage/*.db
 storage/*.sqlite
 storage/*.sqlite3
+.env

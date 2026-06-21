@@ -3,9 +3,61 @@
   "skill_id": "photo",
   "name": "Get Photos",
   "description": "List or search photo candidates.",
-  "status": "idea",
+  "status": "implemented",
   "mode": "read",
   "risk_level": "medium",
-  "input_schema": {},
-  "output_schema": {}
+  "confirmation_required": false,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "from": {
+        "type": "string",
+        "format": "date-time",
+        "description": "Inclusive ISO8601 datetime with timezone. 分単位、秒は00。Example: 2026-04-02T09:30:00+09:00"
+      },
+      "to": {
+        "type": "string",
+        "format": "date-time",
+        "description": "Exclusive ISO8601 datetime with timezone. 分単位、秒は00。Example: 2026-04-02T10:45:00+09:00"
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000,
+        "default": 50
+      }
+    },
+    "required": ["from", "to"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "photos": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "asset_id": {
+              "type": "string"
+            },
+            "taken_at": {
+              "type": ["string", "null"],
+              "format": "date-time"
+            },
+            "thumbnail_url": {
+              "type": "string",
+              "format": "uri-reference"
+            },
+            "source": {
+              "type": "string",
+              "const": "immich"
+            }
+          },
+          "required": ["asset_id", "taken_at", "thumbnail_url", "source"]
+        }
+      }
+    },
+    "required": ["photos"]
+  }
 }
