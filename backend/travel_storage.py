@@ -214,6 +214,63 @@ class SQLiteTravelStorage:
             )
         return item
 
+    def set_trip_cover_image(
+        self,
+        *,
+        trip_id: str,
+        asset_id: str,
+        selected_by: str = "admin",
+    ) -> dict[str, Any]:
+        now = self._now()
+        cover_image = {
+            "id": f"cover_{uuid.uuid4().hex}",
+            "owner_type": "trip",
+            "owner_id": trip_id,
+            "image_source": "photo_asset",
+            "image_ref": asset_id,
+            "source_provider": "immich",
+            "attribution": None,
+            "selected_by": selected_by,
+            "selected_at": now,
+            "status": "active",
+            "created_at": now,
+        }
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE travel_cover_images
+                SET status = 'inactive'
+                WHERE owner_type = 'trip'
+                  AND owner_id = ?
+                  AND status = 'active'
+                """,
+                (trip_id,),
+            )
+            conn.execute(
+                """
+                INSERT INTO travel_cover_images (
+                    id, owner_type, owner_id, image_source, image_ref,
+                    source_provider, attribution, selected_by, selected_at,
+                    status, created_at
+                )
+                VALUES (
+                    :id, :owner_type, :owner_id, :image_source, :image_ref,
+                    :source_provider, :attribution, :selected_by, :selected_at,
+                    :status, :created_at
+                )
+                """,
+                cover_image,
+            )
+            conn.execute(
+                """
+                UPDATE travel_trips
+                SET cover_image_id = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (cover_image["id"], now, trip_id),
+            )
+        return cover_image
+
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row

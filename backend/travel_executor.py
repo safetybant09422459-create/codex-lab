@@ -81,6 +81,16 @@ class TravelExecutor(BaseExecutor):
                 "source": "local_travel_write",
             }
 
+        if tool.id == "set_trip_cover_image":
+            return {
+                "tool_id": tool.id,
+                **self.repository.set_trip_cover_image(
+                    trip_id=params.get("trip_id"),
+                    asset_id=params.get("asset_id"),
+                    selected_by="admin",
+                ),
+            }
+
         raise ValueError(f"Unsupported travel tool: {tool.id}")
 
     @property
@@ -88,7 +98,7 @@ class TravelExecutor(BaseExecutor):
         return "local_travel_read"
 
     def get_execution_mode(self, tool: Any) -> str:
-        if tool.id in {"create_trip", "create_timeline_item"}:
+        if tool.id in {"create_trip", "create_timeline_item", "set_trip_cover_image"}:
             return "local_travel_write"
         return "local_travel_read"
 

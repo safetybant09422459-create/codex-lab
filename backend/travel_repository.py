@@ -22,11 +22,20 @@ class TravelSource(Protocol):
     def create_timeline_item(self, **kwargs: Any) -> dict[str, Any]:
         raise NotImplementedError
 
+    def set_trip_cover_image(self, **kwargs: Any) -> dict[str, Any]:
+        raise NotImplementedError
+
 
 class PhotoCandidateProvider(Protocol):
     def get_photos(
         self, from_at: str, to_at: str, limit: int, offset: int = 0
     ) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    def get_asset(self, asset_id: str) -> dict[str, Any]:
+        raise NotImplementedError
+
+    def thumbnail_url(self, asset_id: str) -> str:
         raise NotImplementedError
 
 
@@ -42,6 +51,20 @@ class PhotoRepositoryCandidateProvider:
 
             self.repository = PhotoRepository()
         return self.repository.get_photos(from_at, to_at, limit, offset)
+
+    def get_asset(self, asset_id: str) -> dict[str, Any]:
+        if self.repository is None:
+            from .photo_repository import PhotoRepository
+
+            self.repository = PhotoRepository()
+        return self.repository.get_asset(asset_id)
+
+    def thumbnail_url(self, asset_id: str) -> str:
+        if self.repository is None:
+            from .photo_repository import PhotoRepository
+
+            self.repository = PhotoRepository()
+        return self.repository.thumbnail_url(asset_id)
 
 
 class TravelRepository:
@@ -144,6 +167,40 @@ class TravelRepository:
             order_no=order_no,
             status=self._optional_text(status) or "planned",
         )
+
+    def set_trip_cover_image(
+        self,
+        *,
+        trip_id: str,
+        asset_id: str,
+        selected_by: str | None = None,
+    ) -> dict[str, Any]:
+        normalized_trip_id = self._required_text(trip_id, "trip_id")
+        normalized_asset_id = self._required_text(asset_id, "asset_id")
+        normalized_selected_by = self._optional_text(selected_by) or "admin"
+
+        if self.get_trip(normalized_trip_id) is None:
+            raise ValueError("trip not found")
+
+        asset = self.photo_provider.get_asset(normalized_asset_id)
+        confirmed_asset_id = self._required_text(
+            asset.get("asset_id", normalized_asset_id), "asset_id"
+        )
+        cover_image = self.source.set_trip_cover_image(
+            trip_id=normalized_trip_id,
+            asset_id=confirmed_asset_id,
+            selected_by=normalized_selected_by,
+        )
+        thumbnail_url = asset.get("thumbnail_url")
+        if not isinstance(thumbnail_url, str) or not thumbnail_url.strip():
+            thumbnail_url = self.photo_provider.thumbnail_url(confirmed_asset_id)
+        return {
+            "trip_id": normalized_trip_id,
+            "cover_image_id": cover_image["id"],
+            "asset_id": confirmed_asset_id,
+            "thumbnail_url": thumbnail_url,
+            "source": "local_travel_write",
+        }
 
     def _required_text(self, value: Any, field_name: str) -> str:
         if isinstance(value, str) and value.strip():
