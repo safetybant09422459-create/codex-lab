@@ -33,6 +33,18 @@ class TravelExecutor(BaseExecutor):
                 "source": "local_travel_read",
             }
 
+        if tool.id == "get_trip_photos":
+            trip_id = self._trip_id(params)
+            return {
+                "tool_id": tool.id,
+                **self.repository.get_trip_photos(
+                    trip_id,
+                    limit=params.get("limit", 50),
+                    offset=params.get("offset", 0),
+                ),
+                "source": "photo_skill",
+            }
+
         if tool.id == "create_trip":
             return {
                 "tool_id": tool.id,
