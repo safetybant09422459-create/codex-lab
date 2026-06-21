@@ -1,0 +1,64 @@
+{
+  "id": "get_asset",
+  "skill_id": "photo",
+  "name": "Get Photo Asset",
+  "description": "Get metadata and derived image URLs for one photo asset.",
+  "status": "implemented",
+  "mode": "read",
+  "risk_level": "medium",
+  "confirmation_required": false,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "asset_id": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "required": ["asset_id"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "asset_id": {
+        "type": "string"
+      },
+      "taken_at": {
+        "type": ["string", "null"],
+        "format": "date-time"
+      },
+      "thumbnail_url": {
+        "type": "string",
+        "format": "uri-reference"
+      },
+      "preview_url": {
+        "type": "string",
+        "format": "uri-reference"
+      },
+      "source": {
+        "type": "string",
+        "const": "immich"
+      },
+      "filename": {
+        "type": ["string", "null"]
+      },
+      "width": {
+        "type": ["integer", "null"]
+      },
+      "height": {
+        "type": ["integer", "null"]
+      }
+    },
+    "required": [
+      "asset_id",
+      "taken_at",
+      "thumbnail_url",
+      "preview_url",
+      "source",
+      "filename",
+      "width",
+      "height"
+    ]
+  }
+}

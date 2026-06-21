@@ -24,8 +24,13 @@
       "limit": {
         "type": "integer",
         "minimum": 1,
-        "maximum": 1000,
+        "maximum": 100,
         "default": 50
+      },
+      "offset": {
+        "type": "integer",
+        "minimum": 0,
+        "default": 0
       }
     },
     "required": ["from", "to"]
@@ -56,8 +61,23 @@
           },
           "required": ["asset_id", "taken_at", "thumbnail_url", "source"]
         }
+      },
+      "pagination": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "count": {
+            "type": "integer"
+          }
+        },
+        "required": ["limit", "offset", "count"]
       }
     },
-    "required": ["photos"]
+    "required": ["photos", "pagination"]
   }
 }

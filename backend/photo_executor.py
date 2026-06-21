@@ -12,24 +12,43 @@ class PhotoExecutor(BaseExecutor):
         self.repository = repository or PhotoRepository()
 
     def execute(self, tool: Any, params: dict[str, Any]) -> dict[str, Any]:
-        if tool.id != "get_photos":
-            raise ValueError(f"Unsupported photo tool: {tool.id}")
+        if tool.id == "get_asset":
+            return self._get_asset(tool.id, params)
+        if tool.id == "get_photos":
+            return self._get_photos(tool.id, params)
+        raise ValueError(f"Unsupported photo tool: {tool.id}")
 
+    def _get_photos(self, tool_id: str, params: dict[str, Any]) -> dict[str, Any]:
         from_at = self._iso_datetime(params.get("from"), "from")
         to_at = self._iso_datetime(params.get("to"), "to")
         if to_at <= from_at:
             raise ValueError("to must be after from")
 
         limit = self._limit(params.get("limit"))
+        offset = self._offset(params.get("offset"))
+        photos = self.repository.get_photos(
+            from_at=from_at.isoformat(),
+            to_at=to_at.isoformat(),
+            limit=limit,
+            offset=offset,
+        )
         return {
-            "tool_id": tool.id,
-            "photos": self.repository.get_photos(
-                from_at=from_at.isoformat(),
-                to_at=to_at.isoformat(),
-                limit=limit,
-            ),
+            "tool_id": tool_id,
+            "photos": photos,
+            "pagination": {
+                "limit": limit,
+                "offset": offset,
+                "count": len(photos),
+            },
             "source": "immich",
         }
+
+    def _get_asset(self, tool_id: str, params: dict[str, Any]) -> dict[str, Any]:
+        asset_id = params.get("asset_id")
+        if not isinstance(asset_id, str) or not asset_id.strip():
+            raise ValueError("asset_id is required")
+        asset = self.repository.get_asset(asset_id.strip())
+        return {"tool_id": tool_id, **asset}
 
     def _iso_datetime(self, value: Any, field_name: str) -> datetime:
         if not isinstance(value, str) or not value.strip():
@@ -56,4 +75,15 @@ class PhotoExecutor(BaseExecutor):
             return 50
         if not isinstance(value, int) or isinstance(value, bool):
             raise ValueError("limit must be an integer")
-        return min(max(value, 1), 1000)
+        if value < 1 or value > 100:
+            raise ValueError("limit must be between 1 and 100")
+        return value
+
+    def _offset(self, value: Any) -> int:
+        if value is None:
+            return 0
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise ValueError("offset must be an integer")
+        if value < 0:
+            raise ValueError("offset must be greater than or equal to 0")
+        return value

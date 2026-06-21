@@ -177,6 +177,23 @@ async def photo_asset_thumbnail(asset_id: str) -> Response:
     return Response(content=content, media_type=content_type)
 
 
+@app.get("/api/photo/assets/{asset_id}/preview")
+async def photo_asset_preview(asset_id: str) -> Response:
+    try:
+        content, content_type = photo_repository.get_preview(asset_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ImmichConfigurationError as exc:
+        raise HTTPException(
+            status_code=503, detail="Immich connection is not configured"
+        ) from exc
+    except ImmichAPIError as exc:
+        raise HTTPException(
+            status_code=502, detail="Immich preview request failed"
+        ) from exc
+    return Response(content=content, media_type=content_type)
+
+
 @app.get("/api/audit", response_model=AuditResponse)
 async def get_audit(limit: int = 50) -> AuditResponse:
     bounded_limit = min(max(limit, 1), 500)
