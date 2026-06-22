@@ -37,6 +37,7 @@
 
 body {
   margin: 0;
+  min-height: 100vh;
   min-height: 100dvh;
   background: var(--bg);
   color: var(--text);
@@ -248,6 +249,7 @@ textarea.large {
 input:focus,
 textarea:focus {
   border-color: var(--accent);
+  outline: 2px solid var(--accent);
   outline: 2px solid color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
@@ -326,8 +328,15 @@ textarea:focus {
 
 .photo-thumb-link {
   display: block;
+  height: 112px;
   aspect-ratio: 4 / 3;
   background: var(--code-bg);
+}
+
+@supports (aspect-ratio: 4 / 3) {
+  .photo-thumb-link {
+    height: auto;
+  }
 }
 
 .photo-thumb-link img {
@@ -335,6 +344,38 @@ textarea:focus {
   height: 100%;
   display: block;
   object-fit: cover;
+}
+
+.photo-debug {
+  display: block;
+  min-height: 44px;
+  margin: 8px 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff4c2;
+  color: #2f2510;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.photo-debug-line {
+  display: block;
+}
+
+.photo-debug-line.error {
+  color: var(--danger);
+}
+
+.photo-image-error {
+  padding: 8px;
+  color: var(--danger);
+  font-size: 0.78rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .photo-meta {
@@ -397,6 +438,7 @@ pre {
 .answer {
   min-height: 132px;
   max-height: 42dvh;
+  background: var(--panel);
   background: color-mix(in srgb, var(--panel) 88%, var(--accent));
   color: var(--text);
 }
