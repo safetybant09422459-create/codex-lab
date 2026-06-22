@@ -115,6 +115,20 @@ class SQLiteTravelStorage:
             ).fetchall()
         return [self._row_to_dict(row) for row in rows]
 
+    def get_timeline_item(self, timeline_item_id: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, trip_id, item_type, display_title, place_name, place_id,
+                       category, start_at, end_at, time_kind, cover_image_id, memo,
+                       order_no, status, created_at, updated_at
+                FROM travel_timeline_items
+                WHERE id = ?
+                """,
+                (timeline_item_id,),
+            ).fetchone()
+        return self._row_to_dict(row) if row is not None else None
+
     def create_trip(
         self,
         *,

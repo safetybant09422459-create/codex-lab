@@ -57,3 +57,10 @@ class InMemoryTravelSource:
 
     def get_trip_timeline(self, trip_id: str) -> list[dict[str, Any]]:
         return deepcopy(self._timeline_items_by_trip_id.get(trip_id, []))
+
+    def get_timeline_item(self, timeline_item_id: str) -> dict[str, Any] | None:
+        for items in self._timeline_items_by_trip_id.values():
+            for item in items:
+                if item["id"] == timeline_item_id:
+                    return deepcopy(item)
+        return None

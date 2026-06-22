@@ -16,6 +16,9 @@ class TravelSource(Protocol):
     def get_trip_timeline(self, trip_id: str) -> list[dict[str, Any]]:
         raise NotImplementedError
 
+    def get_timeline_item(self, timeline_item_id: str) -> dict[str, Any] | None:
+        raise NotImplementedError
+
     def create_trip(self, **kwargs: Any) -> dict[str, Any]:
         raise NotImplementedError
 
@@ -88,6 +91,9 @@ class TravelRepository:
     def get_trip_timeline(self, trip_id: str) -> list[dict[str, Any]]:
         return self.source.get_trip_timeline(trip_id)
 
+    def get_timeline_item(self, timeline_item_id: str) -> dict[str, Any] | None:
+        return self.source.get_timeline_item(timeline_item_id)
+
     def get_trip_photos(
         self, trip_id: str, limit: int = 50, offset: int = 0
     ) -> dict[str, Any]:
@@ -108,6 +114,37 @@ class TravelRepository:
         )
         return {
             "trip_id": normalized_trip_id,
+            "photos": photos,
+            "pagination": {
+                "limit": normalized_limit,
+                "offset": normalized_offset,
+                "count": len(photos),
+            },
+        }
+
+    def get_spot_photos(
+        self, timeline_item_id: str, limit: int = 50, offset: int = 0
+    ) -> dict[str, Any]:
+        normalized_timeline_item_id = self._required_text(
+            timeline_item_id, "timeline_item_id"
+        )
+        normalized_limit = self._limit(limit)
+        normalized_offset = self._offset(offset)
+
+        item = self.get_timeline_item(normalized_timeline_item_id)
+        if item is None:
+            raise ValueError("timeline item not found")
+
+        from_at, to_at = self._spot_photo_range(item)
+        photos = self.photo_provider.get_photos(
+            from_at=from_at.isoformat(),
+            to_at=to_at.isoformat(),
+            limit=normalized_limit,
+            offset=normalized_offset,
+        )
+        return {
+            "timeline_item_id": normalized_timeline_item_id,
+            "trip_id": self._required_text(item.get("trip_id"), "trip_id"),
             "photos": photos,
             "pagination": {
                 "limit": normalized_limit,
@@ -309,3 +346,35 @@ class TravelRepository:
         if parsed.tzinfo is None:
             raise ValueError("trip datetimes must include timezone")
         return parsed
+
+    def _spot_photo_range(self, item: dict[str, Any]) -> tuple[datetime, datetime]:
+        start_value = self._optional_text(item.get("start_at"))
+        if start_value is None:
+            raise ValueError("timeline item start_at is required")
+
+        start_at = self._minute_aligned_datetime(start_value, "start_at")
+        end_value = self._optional_text(item.get("end_at"))
+        if end_value is None:
+            end_at = start_at + timedelta(hours=2)
+        else:
+            end_at = self._minute_aligned_datetime(end_value, "end_at")
+
+        if end_at <= start_at:
+            raise ValueError("timeline item end_at must be after start_at")
+        return start_at, end_at
+
+    def _minute_aligned_datetime(self, value: str, field_name: str) -> datetime:
+        normalized = value
+        if normalized.endswith("Z"):
+            normalized = f"{normalized[:-1]}+00:00"
+
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError as exc:
+            raise ValueError(
+                f"timeline item {field_name} must be an ISO8601 datetime with timezone"
+            ) from exc
+
+        if parsed.tzinfo is None:
+            raise ValueError(f"timeline item {field_name} must include timezone")
+        return parsed.replace(second=0, microsecond=0)

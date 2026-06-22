@@ -45,6 +45,18 @@ class TravelExecutor(BaseExecutor):
                 "source": "photo_skill",
             }
 
+        if tool.id == "get_spot_photos":
+            timeline_item_id = self._timeline_item_id(params)
+            return {
+                "tool_id": tool.id,
+                **self.repository.get_spot_photos(
+                    timeline_item_id,
+                    limit=params.get("limit", 50),
+                    offset=params.get("offset", 0),
+                ),
+                "source": "photo_skill",
+            }
+
         if tool.id == "create_trip":
             return {
                 "tool_id": tool.id,
@@ -122,3 +134,9 @@ class TravelExecutor(BaseExecutor):
         if isinstance(trip_id, str) and trip_id.strip():
             return trip_id.strip()
         raise ValueError("trip_id is required")
+
+    def _timeline_item_id(self, params: dict[str, Any]) -> str:
+        timeline_item_id = params.get("timeline_item_id")
+        if isinstance(timeline_item_id, str) and timeline_item_id.strip():
+            return timeline_item_id.strip()
+        raise ValueError("timeline_item_id is required")

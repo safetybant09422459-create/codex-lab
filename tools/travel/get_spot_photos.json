@@ -1,0 +1,87 @@
+{
+  "id": "get_spot_photos",
+  "skill_id": "travel",
+  "name": "Get Spot Photos",
+  "description": "Get photo candidates for a timeline item by delegating to the Photo skill boundary.",
+  "status": "implemented",
+  "mode": "read",
+  "risk_level": "medium",
+  "confirmation_required": false,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "timeline_item_id": {
+        "type": "string",
+        "description": "Travel timeline item id"
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "default": 50
+      },
+      "offset": {
+        "type": "integer",
+        "minimum": 0,
+        "default": 0
+      }
+    },
+    "required": ["timeline_item_id"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "timeline_item_id": {
+        "type": "string"
+      },
+      "trip_id": {
+        "type": "string"
+      },
+      "photos": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "asset_id": {
+              "type": "string"
+            },
+            "taken_at": {
+              "type": ["string", "null"],
+              "format": "date-time"
+            },
+            "thumbnail_url": {
+              "type": "string",
+              "format": "uri-reference"
+            },
+            "source": {
+              "type": "string",
+              "const": "immich"
+            }
+          },
+          "required": ["asset_id", "taken_at", "thumbnail_url", "source"]
+        }
+      },
+      "pagination": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "count": {
+            "type": "integer"
+          }
+        },
+        "required": ["limit", "offset", "count"]
+      },
+      "source": {
+        "type": "string",
+        "const": "photo_skill"
+      }
+    },
+    "required": ["timeline_item_id", "trip_id", "photos", "pagination", "source"]
+  }
+}
