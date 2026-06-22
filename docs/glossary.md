@@ -8,6 +8,10 @@
 
 旅行、予定、家電、写真などの機能を利用する。
 
+UI上では、AIがその時に合った情報を統合して表示するトップ入口の名前としても扱う。
+
+`Home` とは呼ばない。
+
 ---
 
 ## Jarvis Core
@@ -22,6 +26,38 @@ Jarvisの中核。
 * Memory
 * Tool Registry
 * Notifications
+
+Jarvis Coreは、Travel、Photo、Garden、Calendar、Home、DeveloperなどのSkill / Toolを調停する。
+
+UI画面そのものではなく、Jarvis画面が何を表示すべきかを判断するための中核である。
+
+---
+
+## Jarvis screen
+
+UI上のトップ画面。
+
+単なるダッシュボードではなく、Jarvis Coreが複数Skillの情報を統合し、今見せるべきものを表示する入口。
+
+現時点では「喋らないJarvis」として扱い、将来的な双方向会話、音声、通知、自律提案の土台にする。
+
+---
+
+## Home Skill
+
+Home Control / Home Automation系Skill。
+
+Jarvis本人やトップ画面ではない。
+
+扱うもの：
+
+* 家電
+* 家の状態
+* 消し忘れ
+* 在宅
+* 旅行モード
+
+現実世界への作用、在宅情報、生活パターンを扱うため、高リスクSkill候補として扱う。
 
 ---
 
