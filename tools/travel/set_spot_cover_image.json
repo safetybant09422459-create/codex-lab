@@ -1,0 +1,56 @@
+{
+  "id": "set_spot_cover_image",
+  "skill_id": "travel",
+  "name": "Set Spot Cover Image",
+  "description": "Set a Photo Skill asset as the representative cover image for a timeline item.",
+  "status": "implemented",
+  "mode": "write",
+  "risk_level": "medium",
+  "confirmation_required": true,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "timeline_item_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Timeline item id"
+      },
+      "asset_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Photo Skill asset id"
+      }
+    },
+    "required": ["timeline_item_id", "asset_id"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "timeline_item_id": {
+        "type": "string"
+      },
+      "cover_image_id": {
+        "type": "string"
+      },
+      "asset_id": {
+        "type": "string"
+      },
+      "thumbnail_url": {
+        "type": "string",
+        "format": "uri-reference"
+      },
+      "source": {
+        "type": "string",
+        "const": "local_travel_write"
+      }
+    },
+    "required": [
+      "timeline_item_id",
+      "cover_image_id",
+      "asset_id",
+      "thumbnail_url",
+      "source"
+    ]
+  }
+}

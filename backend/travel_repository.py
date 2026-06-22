@@ -25,6 +25,9 @@ class TravelSource(Protocol):
     def set_trip_cover_image(self, **kwargs: Any) -> dict[str, Any]:
         raise NotImplementedError
 
+    def set_spot_cover_image(self, **kwargs: Any) -> dict[str, Any]:
+        raise NotImplementedError
+
 
 class PhotoCandidateProvider(Protocol):
     def get_photos(
@@ -196,6 +199,39 @@ class TravelRepository:
             thumbnail_url = self.photo_provider.thumbnail_url(confirmed_asset_id)
         return {
             "trip_id": normalized_trip_id,
+            "cover_image_id": cover_image["id"],
+            "asset_id": confirmed_asset_id,
+            "thumbnail_url": thumbnail_url,
+            "source": "local_travel_write",
+        }
+
+    def set_spot_cover_image(
+        self,
+        *,
+        timeline_item_id: str,
+        asset_id: str,
+        selected_by: str | None = None,
+    ) -> dict[str, Any]:
+        normalized_timeline_item_id = self._required_text(
+            timeline_item_id, "timeline_item_id"
+        )
+        normalized_asset_id = self._required_text(asset_id, "asset_id")
+        normalized_selected_by = self._optional_text(selected_by) or "admin"
+
+        asset = self.photo_provider.get_asset(normalized_asset_id)
+        confirmed_asset_id = self._required_text(
+            asset.get("asset_id", normalized_asset_id), "asset_id"
+        )
+        cover_image = self.source.set_spot_cover_image(
+            timeline_item_id=normalized_timeline_item_id,
+            asset_id=confirmed_asset_id,
+            selected_by=normalized_selected_by,
+        )
+        thumbnail_url = asset.get("thumbnail_url")
+        if not isinstance(thumbnail_url, str) or not thumbnail_url.strip():
+            thumbnail_url = self.photo_provider.thumbnail_url(confirmed_asset_id)
+        return {
+            "timeline_item_id": normalized_timeline_item_id,
             "cover_image_id": cover_image["id"],
             "asset_id": confirmed_asset_id,
             "thumbnail_url": thumbnail_url,
