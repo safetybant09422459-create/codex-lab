@@ -13,10 +13,114 @@ function setRuntimeStatus(text, isError) {
   message.classList.toggle("error", Boolean(isError));
 }
 
+function asRuntimeArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function photoItemsFromRuntimeValue(value) {
+  var result = value && typeof value === "object" ? value.result : null;
+
+  if (result && typeof result === "object") {
+    return asRuntimeArray(result.photos);
+  }
+  if (value && typeof value === "object") {
+    return asRuntimeArray(value.photos);
+  }
+  return [];
+}
+
+function copyRuntimeText(text, button) {
+  if (!text || !navigator.clipboard) {
+    return;
+  }
+  navigator.clipboard.writeText(text).then(function () {
+    var originalText = button.textContent;
+    button.textContent = "Copied";
+    window.setTimeout(function () {
+      button.textContent = originalText;
+    }, 1200);
+  }).catch(function () {
+    setRuntimeStatus("asset_id copy failed", true);
+  });
+}
+
+function renderRuntimePhotoPreview(value) {
+  var container = runtimeExecuteElements.photoPreview;
+  var photos = photoItemsFromRuntimeValue(value);
+  var i;
+  var photo;
+  var card;
+  var link;
+  var image;
+  var meta;
+  var assetId;
+  var copyButton;
+  var takenAt;
+
+  if (!container) {
+    return;
+  }
+
+  container.innerHTML = "";
+  if (!photos.length) {
+    container.hidden = true;
+    return;
+  }
+
+  container.hidden = false;
+  for (i = 0; i < photos.length; i += 1) {
+    photo = photos[i];
+    if (!photo || typeof photo !== "object" || !photo.thumbnail_url) {
+      continue;
+    }
+
+    assetId = photo.asset_id ? String(photo.asset_id) : "";
+    card = document.createElement("div");
+    card.className = "photo-card";
+
+    link = document.createElement("a");
+    link.className = "photo-thumb-link";
+    link.href = photo.preview_url || photo.thumbnail_url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+
+    image = document.createElement("img");
+    image.src = photo.thumbnail_url;
+    image.alt = assetId ? "Photo " + assetId : "Photo thumbnail";
+    image.loading = "lazy";
+    link.appendChild(image);
+    card.appendChild(link);
+
+    meta = document.createElement("div");
+    meta.className = "photo-meta";
+
+    if (assetId) {
+      copyButton = document.createElement("button");
+      copyButton.type = "button";
+      copyButton.className = "secondary asset-copy";
+      copyButton.textContent = assetId;
+      copyButton.title = "Copy asset_id";
+      copyButton.addEventListener("click", copyRuntimeText.bind(null, assetId, copyButton));
+      meta.appendChild(copyButton);
+    }
+
+    takenAt = document.createElement("span");
+    takenAt.textContent = photo.taken_at || photo.source || "";
+    meta.appendChild(takenAt);
+    card.appendChild(meta);
+    container.appendChild(card);
+  }
+
+  if (!container.children.length) {
+    container.hidden = true;
+  }
+}
+
 function showRuntimeResult(value) {
   if (!runtimeExecuteElements.result) {
     return;
   }
+  renderRuntimePhotoPreview(value);
   if (typeof value === "string") {
     runtimeExecuteElements.result.textContent = value;
     return;
@@ -215,6 +319,7 @@ export function initRuntimeExecute() {
     params: runtimeElement("runtime-params-json"),
     executeButton: runtimeElement("runtime-execute-button"),
     result: runtimeElement("runtime-result"),
+    photoPreview: runtimeElement("runtime-photo-preview"),
     auditButton: runtimeElement("runtime-audit-refresh-button"),
     audit: runtimeElement("runtime-audit"),
     message: runtimeElement("runtime-execute-message"),

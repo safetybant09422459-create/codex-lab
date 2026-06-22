@@ -19,6 +19,7 @@ TOKENS_RE = re.compile(
     r"(?:tokens?\s+used|used\s+tokens?|total\s+tokens?)\s*[:=]?\s*([0-9][0-9,]*)",
     re.IGNORECASE,
 )
+TOKENS_USED_LINE_RE = re.compile(r"\btokens?\s+used\b", re.IGNORECASE)
 
 
 def _append_log(line: str) -> None:
@@ -39,7 +40,7 @@ def _is_runtime_line(line: str) -> bool:
         stripped.startswith("$ ")
         or stripped.startswith("[process exited:")
         or stripped.startswith("[error]")
-        or "tokens used" in stripped.lower()
+        or TOKENS_USED_LINE_RE.search(stripped) is not None
     )
 
 
@@ -51,8 +52,20 @@ def extract_tokens_used(lines: list[str]) -> str | None:
     return None
 
 
+def extract_final_answer_from_tokens_used(lines: list[str]) -> str:
+    cleaned = [_clean_line(line) for line in lines]
+    for index in range(len(cleaned) - 1, -1, -1):
+        if TOKENS_USED_LINE_RE.search(cleaned[index]):
+            return "\n".join(cleaned[index:]).strip()
+    return ""
+
+
 def extract_final_answer(lines: list[str]) -> str:
     cleaned = [_clean_line(line) for line in lines]
+
+    tokens_answer = extract_final_answer_from_tokens_used(lines)
+    if tokens_answer:
+        return tokens_answer
 
     for index in range(len(cleaned) - 1, -1, -1):
         if FINAL_MARKER_RE.match(cleaned[index]):
