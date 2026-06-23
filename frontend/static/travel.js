@@ -5,6 +5,7 @@ var loading = false;
 var detailLoading = false;
 var currentTripDetailData = null;
 var currentTravelView = "list";
+var experienceStatusOptions = ["planned", "completed", "skipped", "archived"];
 
 function getElements() {
   return {
@@ -417,9 +418,198 @@ function renderSpotMeta(labelText, valueText) {
   return row;
 }
 
+function appendExperienceStatusOption(select, value) {
+  var option = document.createElement("option");
+  option.value = value;
+  option.textContent = value;
+  select.appendChild(option);
+}
+
+function renderExperienceActions(elements, data) {
+  var actions = document.createElement("div");
+  var editButton = document.createElement("button");
+
+  actions.className = "travel-experience-actions";
+  editButton.type = "button";
+  editButton.className = "travel-experience-edit-button";
+  editButton.textContent = "編集";
+  editButton.addEventListener("click", function () {
+    renderExperienceEditForm(elements, data, "");
+  });
+
+  actions.appendChild(editButton);
+  return actions;
+}
+
+function renderExperienceEditError(form, message) {
+  var error = form.querySelector(".travel-experience-edit-error");
+
+  if (!error) {
+    return;
+  }
+  error.textContent = message || "";
+  error.hidden = !message;
+}
+
+function experienceStatusIsKnown(status) {
+  var index;
+
+  for (index = 0; index < experienceStatusOptions.length; index += 1) {
+    if (experienceStatusOptions[index] === status) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function experienceIdFromData(data) {
+  var experience = data.experience || data.spot || {};
+
+  return data.experience_id || experience.experience_id || experience.id || "";
+}
+
+function renderExperienceEditForm(elements, data, errorText) {
+  var experience = data.experience || data.spot || {};
+  var form = document.createElement("form");
+  var titleField = document.createElement("div");
+  var titleLabel = document.createElement("label");
+  var titleInput = document.createElement("input");
+  var memoField = document.createElement("div");
+  var memoLabel = document.createElement("label");
+  var memoInput = document.createElement("textarea");
+  var statusField = document.createElement("div");
+  var statusLabel = document.createElement("label");
+  var statusSelect = document.createElement("select");
+  var error = document.createElement("p");
+  var actions = document.createElement("div");
+  var saveButton = document.createElement("button");
+  var cancelButton = document.createElement("button");
+  var status = experience.status || "";
+  var index;
+
+  clearNode(elements.detailContent);
+  currentTravelView = "experience";
+  if (elements.backButton) {
+    elements.backButton.textContent = "旅行へ戻る";
+  }
+
+  form.className = "travel-experience-edit-form";
+  form.setAttribute("data-experience-id", experienceIdFromData(data));
+
+  titleField.className = "travel-experience-edit-field";
+  titleLabel.setAttribute("for", "travel-experience-display-title");
+  titleLabel.textContent = "title";
+  titleInput.id = "travel-experience-display-title";
+  titleInput.name = "display_title";
+  titleInput.value = experience.display_title || "";
+  titleField.appendChild(titleLabel);
+  titleField.appendChild(titleInput);
+
+  memoField.className = "travel-experience-edit-field";
+  memoLabel.setAttribute("for", "travel-experience-memo");
+  memoLabel.textContent = "memo";
+  memoInput.id = "travel-experience-memo";
+  memoInput.name = "memo";
+  memoInput.value = experience.memo || "";
+  memoField.appendChild(memoLabel);
+  memoField.appendChild(memoInput);
+
+  statusField.className = "travel-experience-edit-field";
+  statusLabel.setAttribute("for", "travel-experience-status");
+  statusLabel.textContent = "status";
+  statusSelect.id = "travel-experience-status";
+  statusSelect.name = "status";
+  appendExperienceStatusOption(statusSelect, "");
+  statusSelect.options[0].textContent = "未定";
+  if (status && !experienceStatusIsKnown(status)) {
+    appendExperienceStatusOption(statusSelect, status);
+  }
+  for (index = 0; index < experienceStatusOptions.length; index += 1) {
+    appendExperienceStatusOption(statusSelect, experienceStatusOptions[index]);
+  }
+  statusSelect.value = status;
+  statusField.appendChild(statusLabel);
+  statusField.appendChild(statusSelect);
+
+  error.className = "travel-error travel-experience-edit-error";
+  error.hidden = true;
+
+  actions.className = "travel-experience-edit-actions";
+  saveButton.type = "submit";
+  saveButton.textContent = "保存";
+  cancelButton.type = "button";
+  cancelButton.textContent = "キャンセル";
+  cancelButton.addEventListener("click", function () {
+    cancelExperienceEdit(elements, data);
+  });
+  actions.appendChild(saveButton);
+  actions.appendChild(cancelButton);
+
+  form.appendChild(titleField);
+  form.appendChild(memoField);
+  form.appendChild(statusField);
+  form.appendChild(error);
+  form.appendChild(actions);
+  form.addEventListener("submit", function (event) {
+    submitExperienceUpdate(event, elements, data);
+  });
+
+  elements.detailContent.appendChild(form);
+  renderExperienceEditError(form, errorText);
+  showDetail(elements);
+}
+
+function cancelExperienceEdit(elements, data) {
+  renderExperienceDetail(elements, data);
+}
+
+async function submitExperienceUpdate(event, elements, data) {
+  var form = event.target;
+  var experienceId = form.getAttribute("data-experience-id");
+  var saveButton = form.querySelector('button[type="submit"]');
+  var payload;
+
+  event.preventDefault();
+  if (!experienceId) {
+    renderExperienceEditError(form, "Experience IDが見つかりませんでした。");
+    return;
+  }
+
+  payload = {
+    display_title: form.elements.display_title.value,
+    memo: form.elements.memo.value,
+  };
+  if (form.elements.status.value) {
+    payload.status = form.elements.status.value;
+  }
+
+  if (saveButton) {
+    saveButton.disabled = true;
+  }
+  setTravelStatus(elements, "Experience保存中", false);
+
+  try {
+    await api("/api/travel/experiences/" + encodeURIComponent(experienceId), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    await loadExperienceDetail(experienceId);
+    setTravelStatus(elements, "Experience保存済み", false);
+  } catch (error) {
+    renderExperienceEditError(form, error.message || "Experienceを保存できませんでした。");
+    setTravelStatus(elements, error.message, true);
+  } finally {
+    if (saveButton) {
+      saveButton.disabled = false;
+    }
+  }
+}
+
 function renderExperienceDetail(elements, data) {
   var experience = data.experience || data.spot || {};
   var photos = data.photos || [];
+  var actions = renderExperienceActions(elements, data);
   var title = document.createElement("h3");
   var type = document.createElement("p");
   var meta = document.createElement("div");
@@ -441,6 +631,7 @@ function renderExperienceDetail(elements, data) {
   meta.className = "travel-spot-meta-list";
   meta.appendChild(renderSpotMeta("開始日時", normalizeDate(experience.start_at)));
   meta.appendChild(renderSpotMeta("終了日時", normalizeDate(experience.end_at)));
+  meta.appendChild(renderSpotMeta("status", experience.status || "未定"));
 
   memo.className = "travel-spot-memo";
   memo.textContent = experience.memo || "メモはありません";
@@ -451,6 +642,7 @@ function renderExperienceDetail(elements, data) {
     data.photoError || false
   );
 
+  elements.detailContent.appendChild(actions);
   elements.detailContent.appendChild(type);
   elements.detailContent.appendChild(title);
   elements.detailContent.appendChild(meta);

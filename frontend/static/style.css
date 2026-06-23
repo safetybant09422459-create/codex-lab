@@ -417,6 +417,33 @@ button:disabled {
   line-height: 1.35;
 }
 
+.travel-experience-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+}
+
+.travel-experience-edit-form {
+  display: grid;
+  gap: 12px;
+}
+
+.travel-experience-edit-field {
+  min-width: 0;
+}
+
+.travel-experience-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.travel-experience-edit-error {
+  margin: 0;
+}
+
 .travel-timeline {
   display: grid;
   gap: 8px;

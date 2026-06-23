@@ -29,6 +29,42 @@ class TravelUiExperienceTest(unittest.TestCase):
         self.assertIn("function experienceTypeLabel(experience)", source)
         self.assertIn('"Experience Type: " + experienceTypeLabel(experience)', source)
 
+    def test_experience_edit_form_is_rendered_from_detail(self) -> None:
+        source = TRAVEL_JS.read_text(encoding="utf-8")
+
+        self.assertIn("function renderExperienceEditForm(elements, data, errorText)", source)
+        self.assertIn("function submitExperienceUpdate(event, elements, data)", source)
+        self.assertIn("function cancelExperienceEdit(elements, data)", source)
+        self.assertIn('editButton.textContent = "編集"', source)
+        self.assertIn('titleInput.name = "display_title"', source)
+        self.assertIn('memoInput.name = "memo"', source)
+        self.assertIn('statusSelect.name = "status"', source)
+
+    def test_experience_edit_uses_patch_api(self) -> None:
+        source = TRAVEL_JS.read_text(encoding="utf-8")
+
+        self.assertIn('await api("/api/travel/experiences/" + encodeURIComponent(experienceId), {', source)
+        self.assertIn('method: "PATCH"', source)
+        self.assertIn("body: JSON.stringify(payload)", source)
+        self.assertIn("await loadExperienceDetail(experienceId);", source)
+        self.assertNotIn("/api/runtime/execute", source)
+
+    def test_experience_edit_status_options_preserve_unknown_existing_status(self) -> None:
+        source = TRAVEL_JS.read_text(encoding="utf-8")
+
+        self.assertIn('var experienceStatusOptions = ["planned", "completed", "skipped", "archived"];', source)
+        self.assertIn("if (status && !experienceStatusIsKnown(status))", source)
+        self.assertIn("appendExperienceStatusOption(statusSelect, status);", source)
+
+    def test_travel_js_avoids_safari_unfriendly_syntax(self) -> None:
+        source = TRAVEL_JS.read_text(encoding="utf-8")
+
+        self.assertNotIn(".flatMap(", source)
+        self.assertNotIn("=>", source)
+        self.assertNotIn("?.", source)
+        self.assertNotIn("??", source)
+        self.assertNotIn(".replaceAll(", source)
+
 
 if __name__ == "__main__":
     unittest.main()
