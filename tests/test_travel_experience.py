@@ -7,7 +7,7 @@ from typing import Any
 from backend import main
 from backend.audit import AuditLogger
 from backend.runtime import RuntimeService
-from backend.models import TravelExperienceUpdateRequest
+from backend.models import TravelExperienceCreateRequest, TravelExperienceUpdateRequest
 from backend.travel_executor import TravelExecutor
 from backend.travel_repository import TravelRepository
 
@@ -563,6 +563,64 @@ class TravelExperienceApiTest(unittest.IsolatedAsyncioTestCase):
                     "params": {
                         "experience_id": "item_1",
                         "display_title": "ショー",
+                    },
+                    "confirmed": True,
+                    "role": "admin",
+                },
+            ],
+        )
+
+    async def test_api_creates_experience_through_runtime(self) -> None:
+        runtime_service = FakeRuntimeService(
+            [
+                {
+                    "success": True,
+                    "result": {
+                        "experience_id": "item_created",
+                        "timeline_item_id": "item_created",
+                        "experience_type": "memo",
+                        "experience": {
+                            "id": "item_created",
+                            "experience_id": "item_created",
+                            "timeline_item_id": "item_created",
+                            "experience_type": "memo",
+                            "item_type": "memo",
+                            "trip_id": "trip_1",
+                            "display_title": "ひとこと",
+                            "memo": "楽しかった",
+                            "status": "completed",
+                        },
+                        "source": "local_travel_write",
+                    },
+                }
+            ]
+        )
+        main.runtime_service = runtime_service
+
+        response = await main.travel_create_experience(
+            "trip_1",
+            TravelExperienceCreateRequest(
+                experience_type="memo",
+                display_title="ひとこと",
+                memo="楽しかった",
+                status="completed",
+            ),
+        )
+
+        self.assertEqual(response.experience_id, "item_created")
+        self.assertEqual(response.experience_type, "memo")
+        self.assertEqual(response.execution_mode, "local_travel_write")
+        self.assertEqual(
+            runtime_service.calls,
+            [
+                {
+                    "tool_id": "create_experience",
+                    "params": {
+                        "trip_id": "trip_1",
+                        "experience_type": "memo",
+                        "display_title": "ひとこと",
+                        "memo": "楽しかった",
+                        "status": "completed",
                     },
                     "confirmed": True,
                     "role": "admin",

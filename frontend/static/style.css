@@ -424,11 +424,20 @@ button:disabled {
   gap: 9px;
 }
 
+.travel-experience-create-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.travel-experience-create-form,
 .travel-experience-edit-form {
   display: grid;
   gap: 12px;
 }
 
+.travel-experience-create-field,
 .travel-experience-edit-field {
   min-width: 0;
 }
@@ -440,6 +449,7 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+.travel-experience-create-error,
 .travel-experience-edit-error {
   margin: 0;
 }

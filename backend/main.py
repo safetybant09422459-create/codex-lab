@@ -28,6 +28,7 @@ from .models import (
     ToolResponse,
     TravelExperienceDetailResponse,
     TravelExperiencePhotosResponse,
+    TravelExperienceCreateRequest,
     TravelExperienceUpdateRequest,
     TravelExperienceWriteResponse,
     TravelSpotDetailResponse,
@@ -583,6 +584,31 @@ async def travel_update_experience(
             raise HTTPException(
                 status_code=404, detail="Travel experience not found"
             ) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return _travel_experience_write_response(response)
+
+
+@app.post(
+    "/api/travel/trips/{trip_id}/experiences",
+    response_model=TravelExperienceWriteResponse,
+)
+async def travel_create_experience(
+    trip_id: str, request: TravelExperienceCreateRequest
+) -> TravelExperienceWriteResponse:
+    params = {"trip_id": trip_id, **_model_updates(request)}
+    try:
+        response = runtime_service.execute_stub(
+            "create_experience",
+            params=params,
+            confirmed=True,
+            role="admin",
+        )
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return _travel_experience_write_response(response)

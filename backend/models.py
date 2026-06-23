@@ -228,6 +228,17 @@ class TravelExperienceUpdateRequest(BaseModel):
     cover_image_id: str | None = None
 
 
+class TravelExperienceCreateRequest(BaseModel):
+    experience_type: str
+    display_title: str
+    memo: str | None = None
+    status: str | None = None
+    place_name: str | None = None
+    category: str | None = None
+    start_at: str | None = None
+    end_at: str | None = None
+
+
 class TravelExperienceWriteResponse(BaseModel):
     experience: dict[str, Any]
     experience_id: str

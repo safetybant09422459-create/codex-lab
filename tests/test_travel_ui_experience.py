@@ -56,6 +56,33 @@ class TravelUiExperienceTest(unittest.TestCase):
         self.assertIn("if (status && !experienceStatusIsKnown(status))", source)
         self.assertIn("appendExperienceStatusOption(statusSelect, status);", source)
 
+    def test_experience_create_form_is_rendered_from_trip_detail(self) -> None:
+        source = TRAVEL_JS.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "function renderExperienceCreateForm(elements, data, errorText)", source
+        )
+        self.assertIn("function submitExperienceCreate(event, elements, data)", source)
+        self.assertIn("function cancelExperienceCreate(elements, data)", source)
+        self.assertIn('createButton.textContent = "＋体験追加"', source)
+        self.assertIn('typeSelect.name = "experience_type"', source)
+        self.assertIn('titleInput.name = "display_title"', source)
+        self.assertIn('memoInput.name = "memo"', source)
+        self.assertIn('statusSelect.name = "status"', source)
+
+    def test_experience_create_uses_trip_experience_post_api(self) -> None:
+        source = TRAVEL_JS.read_text(encoding="utf-8")
+
+        self.assertIn(
+            '"/api/travel/trips/" + encodeURIComponent(tripId) + "/experiences"',
+            source,
+        )
+        self.assertIn('method: "POST"', source)
+        self.assertIn("body: JSON.stringify(payload)", source)
+        self.assertIn("await loadTravelDetail(tripId);", source)
+        self.assertIn("await loadExperienceDetail(experienceId);", source)
+        self.assertNotIn("/api/runtime/execute", source)
+
     def test_travel_js_avoids_safari_unfriendly_syntax(self) -> None:
         source = TRAVEL_JS.read_text(encoding="utf-8")
 
