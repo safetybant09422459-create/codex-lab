@@ -21,6 +21,8 @@
 * Travelは家族旅行だけでなく日帰りおでかけも扱う
 * Timelineの主役はPlaceではなくExperienceである
 * 現行DBは将来的に廃止予定である
+* v0.1では既存`travel_timeline_items`をExperienceの保存実体として活かす
+* domain / API / MCPではExperienceと呼び、DB / 既存互換ではTimeline Itemと呼ぶ
 
 実データでは、既存のSpotが以下のような体験名として使われている。
 
@@ -32,6 +34,57 @@
 * まいハーフバースデー
 
 したがって、新TravelではSpotを物理的なPlaceとして正規化するのではなく、Timeline ItemをExperienceとして扱う。
+
+---
+
+## 用語方針
+
+| 文脈 | 正規名 | 補足 |
+| --- | --- | --- |
+| domain / API / MCP / Tool | Experience | Trip / Outing内に時系列で並ぶ家族の体験 |
+| DB / 既存互換 | Timeline Item | `travel_timeline_items`に保存される実体 |
+| UI | タイムライン、体験、スポット、移動、メモ | 画面文脈に応じて使い分ける |
+
+Timeline Itemは生成Viewではなく、v0.1では保存Entityである。Timeline Viewは保存済みExperienceを時刻や`order_no`で並べた表示/取得結果である。
+
+`item_type`は既存DB / 既存Toolとの互換名として残す。domain / API / MCPでは同じ値を`experience_type`と呼ぶ。
+
+正式enum:
+
+* `experience_type`: `spot`, `move`, `event`, `memo`
+
+旧語彙の扱い:
+
+* `place_spot`: `spot`へ寄せる
+* `experience`: type名ではなく概念名として扱う
+* `place_spot / experience`のような揺れは新規設計では使わない
+
+---
+
+## CRUD Tool方針
+
+Canonical Tool:
+
+* `travel.create_experience`
+* `travel.get_experience`
+* `travel.update_experience`
+* `travel.archive_experience`
+
+Alias / UI shortcut:
+
+* `travel.add_spot`
+* `travel.add_move`
+* `travel.add_memo`
+
+Aliasは本流ではない。UIや会話の入力を短くするための入口であり、内部では`experience_type`を指定したCanonical Toolへ寄せる。
+
+既存互換:
+
+* `travel.create_timeline_item`は既存互換として残す
+* `travel.get_spot` / `travel.get_spot_photos`が存在する場合は既存互換として残し、将来`travel.get_experience` / `travel.get_experience_photos`へ寄せる
+* DB上の`travel_timeline_items`はExperienceの保存実体として扱う
+
+v0.1ではSpot / Move / Eventを別テーブル化しない。移動中の写真や思い出メモもExperienceに紐づくため、typeごとに保存テーブルを分けない。
 
 ---
 
@@ -118,13 +171,15 @@ Tripは、家族旅行、日帰りおでかけ、近場イベントを含むTrav
 
 ---
 
-## Timeline Item
+## Experience / Timeline Item
 
 ### 目的
 
-Timeline ItemはTravel v0.1の主役である。
+ExperienceはTravel v0.1の主役である。
 
 物理的な場所ではなく、Trip内で家族が体験した、または体験したいことを表す。
+
+DB / 既存互換上はTimeline Itemと呼び、`travel_timeline_items`へ保存する。
 
 ### テーブル候補
 
@@ -134,7 +189,7 @@ Timeline ItemはTravel v0.1の主役である。
 | --- | --- | --- | --- |
 | `id` | text | yes | Timeline Item ID |
 | `trip_id` | text | yes | 親Trip |
-| `item_type` | text | yes | `spot`, `move`, `event` |
+| `item_type` | text | yes | 既存互換名。domain / API / MCPでは`experience_type`。`spot`, `move`, `event`, `memo` |
 | `display_title` | text | yes | 体験として表示するタイトル |
 | `place_name` | text | no | Google Placesや住所検索で使う場所名 |
 | `place_id` | text | no | Google Places Adapterから得たProvider Place ID |
@@ -142,14 +197,15 @@ Timeline ItemはTravel v0.1の主役である。
 | `start_at` | datetime | no | 予定または実績の開始時刻 |
 | `end_at` | datetime | no | 予定または実績の終了時刻 |
 | `time_kind` | text | no | `planned`, `actual`, `estimated`, `unknown` |
-| `status` | text | yes | `candidate`, `planned`, `confirmed`, `visited`, `skipped`, `cancelled`, `unplanned` |
+| `status` | text | yes | `draft`, `candidate`, `planned`, `confirmed`, `in_progress`, `completed`, `visited`, `skipped`, `cancelled`, `unplanned`, `archived` |
 | `cover_image_id` | text | no | 採用中のCover Image参照 |
 | `memo` | text | no | 体験メモ |
 | `order_no` | integer | no | 時刻未確定時の手動順序 |
+| `archived_at` | datetime | no | 論理アーカイブ日時 |
 | `created_at` | datetime | yes | 作成日時 |
 | `updated_at` | datetime | yes | 更新日時 |
 
-### item_type
+### experience_type / item_type
 
 `spot`
 
@@ -181,16 +237,30 @@ Timeline ItemはTravel v0.1の主役である。
 * まいハーフバースデー
 * 雨なので予定変更
 
+`memo`
+
+Timeline上に置く短い記録や注意。
+
+例:
+
+* お土産は博多駅で見る
+* ここで休憩を入れる
+* 写真は帰宅後に選ぶ
+
 ### 設計判断
 
-Spot、Move、Eventを別テーブルに分けず、v0.1ではTimeline Itemに統合する。
+Spot、Move、Event、Memoを別テーブルに分けず、v0.1ではExperience / Timeline Itemに統合する。
 
 理由:
 
 * 実データ上、SpotがPlaceではなくExperienceとして使われている
+* 移動中も写真や思い出メモを持てる
+* 場所だけが思い出ではない
 * Timeline表示、Tool応答、Memory生成では共通フィールドが多い
 * 初期実装で過剰な正規化を避けられる
 * 将来、MoveやReservationが複雑化した場合だけ派生テーブルを追加できる
+
+削除は物理削除ではなく`archived`または`archived_at`による論理アーカイブを基本にする。共有済み写真、子ども情報、位置情報を含む場合は確認と監査を前提にする。
 
 ---
 
@@ -534,11 +604,11 @@ v0.1の推奨テーブル:
 1. Web UIから利用できるか
    * 利用できる。Trip一覧、Timeline、Experience Card、参加者、Cover Image選択に使える。
 2. API / Toolとして利用できるか
-   * 利用できる。Trip取得、Timeline取得、Timeline Item作成、Cover Image選択、Photo Link候補取得の境界にできる。
+   * 利用できる。Trip取得、Timeline取得、Experience CRUD、Cover Image選択、Photo Link候補取得の境界にできる。
 3. 将来MCP Tool化できるか
-   * できる。特に読み取り系の`travel.list_trips`、`travel.get_timeline`、`travel.get_trip_summary`から始めやすい。
+   * できる。特に読み取り系の`travel.list_trips`、`travel.get_trip_timeline`、`travel.get_experience`から始めやすい。
 4. Jarvis Coreから呼び出せるか
-   * 呼び出せる。UI状態ではなくTrip ID、Timeline Item ID、Participant IDを中心にしている。
+   * 呼び出せる。UI状態ではなくTrip ID、Experience ID、Participant IDを中心にしている。
 5. UI依存のロジックになっていないか
    * なっていない。Cover Imageやdisplay_titleは表示にも使うが、Travelの記憶文脈そのものとして定義している。
 6. 読み取り系か更新系か

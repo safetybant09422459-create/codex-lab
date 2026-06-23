@@ -32,9 +32,8 @@ Travelの核は以下とする。
 
 * Trip / Outing
 * Candidate Spot
-* Spot
-* Move
-* Event
+* Experience
+* Experience Type: spot, move, event, memo
 * Timeline Item
 * Memo
 * Cover Image
@@ -42,6 +41,10 @@ Travelの核は以下とする。
 * Memory
 
 Packing、Budget、Checklist、Souvenirは補助機能として扱う。
+
+Experienceが本体である。spot / move / event / memoはExperienceのtypeであり、場所だけが思い出ではない。移動中も写真や思い出メモを持てる。
+
+DB / 既存互換ではTimeline Itemと呼び、domain / API / MCP / ToolではExperienceと呼ぶ。
 
 ---
 
@@ -71,20 +74,50 @@ Spotは少なくとも以下の状態を持てるようにする。
 
 ---
 
-## Timeline Item / Event
+## Experience / Timeline Item
 
-TimelineはSpotとMoveだけでは構成しない。
+TimelineはExperienceを時系列で並べたViewであり、spotとmoveだけでは構成しない。
 
 「お家出発！」のように、Google Placesにも写真にも紐づかないがTimeline上に置きたい出来事がある。
 
-Timeline Itemの種類は以下を想定する。
+Experience Typeは以下を正式enumとする。
 
-* `place_spot`
+* `spot`
 * `move`
 * `event`
 * `memo`
 
-Timelineは保存Entityではなく、Spot、Move、Event、Memoから生成されるViewを基本にする。
+v0.1では既存`travel_timeline_items`をExperienceの保存実体として活かす。Timeline Itemは生成Viewではなく、DB / 既存互換上の保存Entity名である。
+
+Timeline Viewは、保存済みExperienceを時刻や手動順序で並べた取得/表示結果である。
+
+Spot / Move / Eventを別テーブル化しない。将来、移動経路、予約、Place正規化、検索性能などの理由が明確になった場合だけ派生テーブルを検討する。
+
+---
+
+## Experience CRUD
+
+Canonical Tool:
+
+* `travel.create_experience`
+* `travel.get_experience`
+* `travel.update_experience`
+* `travel.archive_experience`
+
+Alias / UI shortcut:
+
+* `travel.add_spot`
+* `travel.add_move`
+* `travel.add_memo`
+
+Aliasは本流ではない。UIや会話で入力を短くするための入口であり、内部では`experience_type`を指定したCanonical Toolへ寄せる。
+
+既存互換:
+
+* `travel.create_timeline_item`は既存互換として残す
+* `travel.get_spot` / `travel.get_spot_photos`が存在する場合は既存互換として残し、将来`travel.get_experience` / `travel.get_experience_photos`へ寄せる
+
+削除は物理削除ではなく`archived`状態または`archived_at`による論理アーカイブを基本にする。
 
 ---
 
@@ -121,7 +154,7 @@ Memoryは以下をまとめる。
 
 将来は「去年の旅行ハイライト見せて」のような要求に対して、テレビや大画面に画像と思い出メモを流せるようにする。
 
-写真の保存、検索、Thumbnail、Immich連携はPhoto Skillが担当する。TravelはどのTrip / Outing、Spot、Move、Event、Memoryに関連する写真かという文脈を担当する。
+写真の保存、検索、Thumbnail、Immich連携はPhoto Skillが担当する。TravelはどのTrip / Outing、Experience、Memoryに関連する写真かという文脈を担当する。
 
 ---
 
@@ -148,10 +181,10 @@ Travel設計では以下を前提にする。
 
 将来の最小実装では、既存の`travels`、`spots`、`moves`を読み取り中心に活かしつつ、以下を段階的に追加する。
 
-1. Spot statusによるCandidate Spot表現
-2. Event
-3. Timeline Item View
-4. Trip / Spot Cover Imageのsource/status
+1. Experience statusによるCandidate Spot表現
+2. Experience Type: spot, move, event, memo
+3. Timeline View
+4. Trip / Experience Cover Imageのsource/status
 5. Memo
 6. Memory
 7. Photo Link

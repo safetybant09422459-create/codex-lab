@@ -75,6 +75,44 @@ Jarvisは機能を直接知るのではなく、Toolを知る。
 
 ---
 
+## Travel Skill
+
+家族旅行、日帰りのおでかけ、近場イベントを含むFamily Outing Memory Skill。
+
+単なる旅行管理ではなく、Trip / Outingの中に家族の体験を時系列で残す。
+
+---
+
+## Trip / Outing
+
+Travel Skillで扱う旅行またはおでかけの単位。
+
+宿泊旅行だけでなく、日帰り、近場イベント、後から振り返る思い出整理も含む。
+
+---
+
+## Experience
+
+Trip / Outingの中に時系列で並ぶ家族の体験。
+
+Travel Skillの主概念。
+
+Experience Typeは`spot`、`move`、`event`、`memo`。
+
+場所だけでなく、移動中の写真や思い出メモ、Google Placesに紐づかない出来事も含む。
+
+---
+
+## Timeline Item
+
+TravelにおけるExperienceのDB / 既存互換名。
+
+domain、API、Tool、MCPでは原則Experienceと呼ぶ。
+
+既存`travel_timeline_items`はExperienceの保存実体として扱う。
+
+---
+
 ## Module
 
 Tool群をまとめた機能単位。
