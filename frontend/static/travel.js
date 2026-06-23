@@ -211,10 +211,117 @@ function renderTripCoverImage(trip) {
   return figure;
 }
 
+function photoPreviewUrl(photo) {
+  if (!photo || typeof photo !== "object") {
+    return "";
+  }
+  if (typeof photo.preview_url === "string" && photo.preview_url) {
+    return photo.preview_url;
+  }
+  if (typeof photo.thumbnail_url === "string" && photo.thumbnail_url) {
+    return photo.thumbnail_url;
+  }
+  return "";
+}
+
+function showTravelPhotoImageError(card, text) {
+  var errorNode;
+
+  if (!card) {
+    return;
+  }
+
+  errorNode = document.createElement("div");
+  errorNode.className = "photo-image-error";
+  errorNode.textContent = text;
+  card.appendChild(errorNode);
+}
+
+function renderTravelPhotoCard(photo, trip) {
+  var card = document.createElement("div");
+  var link = document.createElement("a");
+  var image = document.createElement("img");
+  var thumbnailUrl = "";
+  var previewUrl = "";
+  var assetId = "";
+
+  photo = photo || {};
+  if (typeof photo.thumbnail_url === "string") {
+    thumbnailUrl = photo.thumbnail_url;
+  }
+  previewUrl = photoPreviewUrl(photo);
+  if (typeof photo.asset_id === "string") {
+    assetId = photo.asset_id;
+  }
+
+  card.className = "travel-photo-card";
+  if (!thumbnailUrl) {
+    showTravelPhotoImageError(card, "Image unavailable");
+    return card;
+  }
+
+  link.className = "travel-photo-link";
+  link.href = previewUrl || thumbnailUrl;
+  link.target = "_blank";
+  link.rel = "noreferrer";
+  if (assetId) {
+    link.setAttribute("aria-label", assetId + " を開く");
+  } else {
+    link.setAttribute("aria-label", (trip.title || "旅行") + " の写真を開く");
+  }
+
+  image.alt = (trip.title || "旅行") + " の写真";
+  image.addEventListener("error", function () {
+    showTravelPhotoImageError(card, "Image load error");
+  });
+  image.src = thumbnailUrl;
+
+  link.appendChild(image);
+  card.appendChild(link);
+  return card;
+}
+
+function renderTravelPhotosSection(trip, photos, photoError) {
+  var section = document.createElement("section");
+  var title = document.createElement("h4");
+  var empty = document.createElement("p");
+  var grid = document.createElement("div");
+  var index;
+
+  section.className = "travel-photos";
+  title.className = "travel-photos-title";
+  title.textContent = "Photos";
+  section.appendChild(title);
+
+  if (photoError) {
+    empty.className = "travel-error";
+    empty.textContent = "写真を取得できませんでした。";
+    section.appendChild(empty);
+    return section;
+  }
+
+  if (!photos || !photos.length) {
+    empty.className = "travel-empty";
+    empty.textContent = "写真はありません";
+    section.appendChild(empty);
+    return section;
+  }
+
+  grid.className = "travel-photo-grid";
+  for (index = 0; index < photos.length && index < 20; index += 1) {
+    grid.appendChild(renderTravelPhotoCard(photos[index], trip));
+  }
+  section.appendChild(grid);
+  return section;
+}
+
 function renderTravelDetail(elements, data) {
   var trip = data.trip || {};
   var timeline = data.timeline || [];
+  var photos = data.photos || [];
+  var photoError = data.photoError || false;
   var coverImage = renderTripCoverImage(trip);
+  var photosSection = renderTravelPhotosSection(trip, photos, photoError);
   var title = document.createElement("h3");
   var dates = document.createElement("p");
   var list = document.createElement("ol");
@@ -232,6 +339,7 @@ function renderTravelDetail(elements, data) {
   if (coverImage) {
     elements.detailContent.appendChild(coverImage);
   }
+  elements.detailContent.appendChild(photosSection);
   elements.detailContent.appendChild(title);
   elements.detailContent.appendChild(dates);
 
@@ -299,6 +407,7 @@ async function loadTravelTrips(force) {
 async function loadTravelDetail(tripId) {
   var elements = getElements();
   var data;
+  var photoData;
 
   if (!elements.screen || !elements.detail || !elements.detailContent || detailLoading) {
     return;
@@ -309,6 +418,16 @@ async function loadTravelDetail(tripId) {
 
   try {
     data = await api("/api/travel/trips/" + encodeURIComponent(tripId));
+    try {
+      photoData = await api(
+        "/api/travel/trips/" + encodeURIComponent(tripId) + "/photos?limit=20"
+      );
+      data.photos = photoData.photos || [];
+      data.photoError = false;
+    } catch (photoError) {
+      data.photos = [];
+      data.photoError = true;
+    }
     renderTravelDetail(elements, data);
     setTravelStatus(elements, "詳細取得済み", false);
   } catch (error) {

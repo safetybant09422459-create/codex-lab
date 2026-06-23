@@ -27,6 +27,7 @@ from .models import (
     SkillResponse,
     ToolResponse,
     TravelTripDetailResponse,
+    TravelTripPhotosResponse,
     TravelTripsResponse,
 )
 from .photo_immich_adapter import ImmichAPIError, ImmichConfigurationError
@@ -242,6 +243,70 @@ async def travel_get_trip_detail(trip_id: str) -> TravelTripDetailResponse:
         trip=trip,
         timeline=timeline_result.get("items") or [],
         source=trip_result.get("source") or "local_travel_read",
+        execution_mode="local_travel_read",
+    )
+
+
+@app.get(
+    "/api/travel/trips/{trip_id}/photos",
+    response_model=TravelTripPhotosResponse,
+)
+async def travel_get_trip_photos(
+    trip_id: str, limit: int = 20, offset: int = 0
+) -> TravelTripPhotosResponse:
+    bounded_limit = min(max(limit, 1), 20)
+    bounded_offset = max(offset, 0)
+
+    try:
+        response = runtime_service.execute_stub(
+            "get_trip_photos",
+            params={
+                "trip_id": trip_id,
+                "limit": bounded_limit,
+                "offset": bounded_offset,
+            },
+            confirmed=False,
+            role="admin",
+        )
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except ValueError as exc:
+        if str(exc) == "trip not found":
+            raise HTTPException(status_code=404, detail="Travel trip not found") from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ImmichConfigurationError as exc:
+        raise HTTPException(
+            status_code=503, detail="Immich connection is not configured"
+        ) from exc
+    except ImmichAPIError as exc:
+        raise HTTPException(
+            status_code=502, detail="Immich photo search request failed"
+        ) from exc
+
+    if not response.get("success"):
+        if response.get("permission_denied"):
+            raise HTTPException(
+                status_code=403,
+                detail=response.get("reason") or "Travel photos permission denied",
+            )
+        if response.get("blocked") and response.get("confirmation_required"):
+            raise HTTPException(
+                status_code=409,
+                detail=response.get("reason") or "Travel photos confirmation required",
+            )
+        raise HTTPException(
+            status_code=500,
+            detail=response.get("reason") or "Travel photos request failed",
+        )
+
+    result = response.get("result") or {}
+    return TravelTripPhotosResponse(
+        trip_id=result.get("trip_id") or trip_id,
+        photos=result.get("photos") or [],
+        pagination=result.get("pagination") or {},
+        source=result.get("source") or "photo_skill",
         execution_mode="local_travel_read",
     )
 

@@ -344,6 +344,58 @@ button:disabled {
   background: var(--surface);
 }
 
+.travel-photos {
+  display: grid;
+  gap: 9px;
+  margin: 0 0 14px;
+}
+
+.travel-photos-title {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.travel-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.travel-photo-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.travel-photo-link {
+  display: block;
+  width: 100%;
+  height: 84px;
+  background: var(--code-bg);
+  aspect-ratio: 1 / 1;
+}
+
+@supports (aspect-ratio: 1 / 1) {
+  .travel-photo-link {
+    height: auto;
+  }
+}
+
+.travel-photo-link:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.travel-photo-link img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .travel-detail-title {
   margin: 0 0 6px;
   overflow-wrap: anywhere;

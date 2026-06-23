@@ -164,3 +164,11 @@ class TravelTripDetailResponse(BaseModel):
     timeline: list[dict[str, Any]]
     source: str
     execution_mode: Literal["local_travel_read"]
+
+
+class TravelTripPhotosResponse(BaseModel):
+    trip_id: str
+    photos: list[dict[str, Any]]
+    pagination: dict[str, Any]
+    source: str
+    execution_mode: Literal["local_travel_read"]

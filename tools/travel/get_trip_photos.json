@@ -51,12 +51,16 @@
               "type": "string",
               "format": "uri-reference"
             },
+            "preview_url": {
+              "type": "string",
+              "format": "uri-reference"
+            },
             "source": {
               "type": "string",
               "const": "immich"
             }
           },
-          "required": ["asset_id", "taken_at", "thumbnail_url", "source"]
+          "required": ["asset_id", "taken_at", "thumbnail_url", "preview_url", "source"]
         }
       },
       "pagination": {

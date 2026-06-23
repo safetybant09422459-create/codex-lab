@@ -28,6 +28,7 @@ class PhotoRepository:
             "asset_id": asset_id,
             "taken_at": self._taken_at(asset),
             "thumbnail_url": self.thumbnail_url(asset_id),
+            "preview_url": self.preview_url(asset_id),
             "source": "immich",
         }
 
