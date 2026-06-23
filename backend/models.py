@@ -211,3 +211,27 @@ class TravelExperienceDetailResponse(BaseModel):
     source: str
     photo_source: str
     execution_mode: Literal["local_travel_read"]
+
+
+class TravelExperienceUpdateRequest(BaseModel):
+    experience_type: str | None = None
+    display_title: str | None = None
+    place_name: str | None = None
+    place_id: str | None = None
+    category: str | None = None
+    start_at: str | None = None
+    end_at: str | None = None
+    time_kind: str | None = None
+    memo: str | None = None
+    order_no: int | None = None
+    status: str | None = None
+    cover_image_id: str | None = None
+
+
+class TravelExperienceWriteResponse(BaseModel):
+    experience: dict[str, Any]
+    experience_id: str
+    experience_type: str | None = None
+    timeline_item_id: str | None = None
+    source: str
+    execution_mode: Literal["local_travel_write"]

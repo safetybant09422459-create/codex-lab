@@ -1,0 +1,50 @@
+{
+  "id": "archive_experience",
+  "skill_id": "travel",
+  "name": "Archive Experience",
+  "description": "Archive a Travel Experience without physical deletion. This updates the existing travel_timeline_items row status to archived and returns the updated Experience.",
+  "status": "implemented",
+  "mode": "write",
+  "risk_level": "medium",
+  "confirmation_required": true,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "experience_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Experience id. This is the existing timeline item id for DB compatibility."
+      }
+    },
+    "required": ["experience_id"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "experience_id": {
+        "type": "string"
+      },
+      "experience_type": {
+        "type": "string"
+      },
+      "timeline_item_id": {
+        "type": "string"
+      },
+      "experience": {
+        "type": "object"
+      },
+      "source": {
+        "type": "string",
+        "const": "local_travel_write"
+      }
+    },
+    "required": [
+      "experience_id",
+      "experience_type",
+      "timeline_item_id",
+      "experience",
+      "source"
+    ]
+  }
+}

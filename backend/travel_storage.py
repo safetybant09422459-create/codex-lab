@@ -253,6 +253,50 @@ class SQLiteTravelStorage:
             )
         return item
 
+    def update_timeline_item(
+        self, timeline_item_id: str, **kwargs: Any
+    ) -> dict[str, Any] | None:
+        allowed_columns = {
+            "item_type",
+            "display_title",
+            "place_name",
+            "place_id",
+            "category",
+            "start_at",
+            "end_at",
+            "time_kind",
+            "memo",
+            "order_no",
+            "status",
+            "cover_image_id",
+        }
+        updates = {
+            key: value for key, value in kwargs.items() if key in allowed_columns
+        }
+        if not updates:
+            return self.get_timeline_item(timeline_item_id)
+
+        now = self._now()
+        assignments = [f"{column} = :{column}" for column in updates]
+        assignments.append("updated_at = :updated_at")
+        values = dict(updates)
+        values["updated_at"] = now
+        values["id"] = timeline_item_id
+
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"""
+                UPDATE travel_timeline_items
+                SET {", ".join(assignments)}
+                WHERE id = :id
+                """,
+                values,
+            )
+            if cursor.rowcount == 0:
+                return None
+
+        return self.get_timeline_item(timeline_item_id)
+
     def set_trip_cover_image(
         self,
         *,

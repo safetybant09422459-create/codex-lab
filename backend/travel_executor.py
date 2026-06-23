@@ -157,6 +157,44 @@ class TravelExecutor(BaseExecutor):
                 "source": "local_travel_write",
             }
 
+        if tool.id == "update_experience":
+            experience = self.repository.update_experience(
+                experience_id=self._experience_id(params),
+                experience_type=params.get("experience_type"),
+                display_title=params.get("display_title"),
+                place_name=params.get("place_name"),
+                place_id=params.get("place_id"),
+                category=params.get("category"),
+                start_at=params.get("start_at"),
+                end_at=params.get("end_at"),
+                time_kind=params.get("time_kind"),
+                memo=params.get("memo"),
+                order_no=params.get("order_no"),
+                status=params.get("status"),
+                cover_image_id=params.get("cover_image_id"),
+            )
+            return {
+                "tool_id": tool.id,
+                "experience": experience,
+                "experience_id": experience.get("experience_id"),
+                "experience_type": experience.get("experience_type"),
+                "timeline_item_id": experience.get("timeline_item_id"),
+                "source": "local_travel_write",
+            }
+
+        if tool.id == "archive_experience":
+            experience = self.repository.archive_experience(
+                experience_id=self._experience_id(params)
+            )
+            return {
+                "tool_id": tool.id,
+                "experience": experience,
+                "experience_id": experience.get("experience_id"),
+                "experience_type": experience.get("experience_type"),
+                "timeline_item_id": experience.get("timeline_item_id"),
+                "source": "local_travel_write",
+            }
+
         if tool.id == "set_trip_cover_image":
             return {
                 "tool_id": tool.id,
@@ -187,6 +225,8 @@ class TravelExecutor(BaseExecutor):
         if tool.id in {
             "create_trip",
             "create_experience",
+            "update_experience",
+            "archive_experience",
             "create_timeline_item",
             "set_trip_cover_image",
             "set_spot_cover_image",

@@ -28,6 +28,8 @@ from .models import (
     ToolResponse,
     TravelExperienceDetailResponse,
     TravelExperiencePhotosResponse,
+    TravelExperienceUpdateRequest,
+    TravelExperienceWriteResponse,
     TravelSpotDetailResponse,
     TravelTripDetailResponse,
     TravelTripPhotosResponse,
@@ -554,6 +556,112 @@ async def travel_get_experience_detail(
         source=experience_result.get("source") or "local_travel_read",
         photo_source=photo_source,
         execution_mode="local_travel_read",
+    )
+
+
+@app.patch(
+    "/api/travel/experiences/{experience_id}",
+    response_model=TravelExperienceWriteResponse,
+)
+async def travel_update_experience(
+    experience_id: str, request: TravelExperienceUpdateRequest
+) -> TravelExperienceWriteResponse:
+    params = {"experience_id": experience_id, **_model_updates(request)}
+    try:
+        response = runtime_service.execute_stub(
+            "update_experience",
+            params=params,
+            confirmed=True,
+            role="admin",
+        )
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except ValueError as exc:
+        if str(exc) == "experience not found":
+            raise HTTPException(
+                status_code=404, detail="Travel experience not found"
+            ) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return _travel_experience_write_response(response)
+
+
+@app.post(
+    "/api/travel/experiences/{experience_id}/archive",
+    response_model=TravelExperienceWriteResponse,
+)
+async def travel_archive_experience(experience_id: str) -> TravelExperienceWriteResponse:
+    try:
+        response = runtime_service.execute_stub(
+            "archive_experience",
+            params={"experience_id": experience_id},
+            confirmed=True,
+            role="admin",
+        )
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except ValueError as exc:
+        if str(exc) == "experience not found":
+            raise HTTPException(
+                status_code=404, detail="Travel experience not found"
+            ) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return _travel_experience_write_response(response)
+
+
+def _model_updates(request: TravelExperienceUpdateRequest) -> dict[str, object]:
+    if hasattr(request, "model_dump"):
+        return request.model_dump(exclude_unset=True)
+    return request.dict(exclude_unset=True)
+
+
+def _travel_experience_write_response(
+    response: dict[str, object],
+) -> TravelExperienceWriteResponse:
+    if not response.get("success"):
+        if response.get("permission_denied"):
+            raise HTTPException(
+                status_code=403,
+                detail=response.get("reason") or "Travel experience permission denied",
+            )
+        if response.get("blocked") and response.get("confirmation_required"):
+            raise HTTPException(
+                status_code=409,
+                detail=response.get("reason")
+                or "Travel experience confirmation required",
+            )
+        raise HTTPException(
+            status_code=500,
+            detail=response.get("reason") or "Travel experience write failed",
+        )
+
+    result = response.get("result") or {}
+    if not isinstance(result, dict):
+        raise HTTPException(status_code=500, detail="Travel experience write failed")
+
+    experience = result.get("experience")
+    if not isinstance(experience, dict):
+        raise HTTPException(status_code=500, detail="Travel experience write failed")
+
+    return TravelExperienceWriteResponse(
+        experience=experience,
+        experience_id=str(
+            result.get("experience_id")
+            or experience.get("experience_id")
+            or experience.get("id")
+        ),
+        experience_type=result.get("experience_type")
+        or experience.get("experience_type"),
+        timeline_item_id=result.get("timeline_item_id")
+        or experience.get("timeline_item_id")
+        or experience.get("id"),
+        source=str(result.get("source") or "local_travel_write"),
+        execution_mode="local_travel_write",
     )
 
 

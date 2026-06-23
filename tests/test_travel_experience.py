@@ -1,8 +1,13 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from typing import Any
 
 from backend import main
+from backend.audit import AuditLogger
+from backend.runtime import RuntimeService
+from backend.models import TravelExperienceUpdateRequest
 from backend.travel_executor import TravelExecutor
 from backend.travel_repository import TravelRepository
 
@@ -11,6 +16,7 @@ class FakeTravelSource:
     def __init__(self, item: dict[str, Any] | None = None) -> None:
         self.item = item
         self.created_kwargs: dict[str, Any] | None = None
+        self.updated_kwargs: dict[str, Any] | None = None
 
     def get_trips(self) -> list[dict[str, Any]]:
         return []
@@ -51,6 +57,19 @@ class FakeTravelSource:
             "created_at": "2026-06-23T10:00:00+09:00",
             "updated_at": "2026-06-23T10:00:00+09:00",
         }
+
+    def update_timeline_item(
+        self, timeline_item_id: str, **kwargs: Any
+    ) -> dict[str, Any] | None:
+        self.updated_kwargs = dict(kwargs)
+        if self.item is None or self.item["id"] != timeline_item_id:
+            return None
+        self.item = {
+            **self.item,
+            **kwargs,
+            "updated_at": "2026-06-23T11:00:00+09:00",
+        }
+        return dict(self.item)
 
     def set_trip_cover_image(self, **kwargs: Any) -> dict[str, Any]:
         raise NotImplementedError
@@ -164,6 +183,135 @@ class ExperienceRepositoryTest(unittest.TestCase):
         self.assertEqual(photos["experience_id"], "item_1")
         self.assertEqual(photos["timeline_item_id"], "item_1")
 
+    def test_update_experience_partial_update_preserves_unspecified_fields(self) -> None:
+        source = FakeTravelSource(
+            {
+                "id": "item_1",
+                "trip_id": "trip_1",
+                "item_type": "spot",
+                "display_title": "水族館",
+                "place_name": "旧施設",
+                "memo": "before",
+                "status": "planned",
+                "updated_at": "2026-06-23T10:00:00+09:00",
+            }
+        )
+        repository = TravelRepository(source=source, photo_provider=FakePhotoProvider())
+
+        experience = repository.update_experience(
+            experience_id="item_1", place_name="新施設", status="done"
+        )
+
+        self.assertEqual(source.updated_kwargs, {"place_name": "新施設", "status": "done"})
+        self.assertEqual(experience["place_name"], "新施設")
+        self.assertEqual(experience["display_title"], "水族館")
+        self.assertEqual(experience["memo"], "before")
+        self.assertEqual(experience["updated_at"], "2026-06-23T11:00:00+09:00")
+
+    def test_update_experience_can_update_only_memo(self) -> None:
+        repository = TravelRepository(
+            source=FakeTravelSource(
+                {
+                    "id": "item_1",
+                    "trip_id": "trip_1",
+                    "item_type": "spot",
+                    "display_title": "水族館",
+                    "memo": "before",
+                }
+            ),
+            photo_provider=FakePhotoProvider(),
+        )
+
+        experience = repository.update_experience(
+            experience_id="item_1", memo="楽しかった"
+        )
+
+        self.assertEqual(experience["memo"], "楽しかった")
+        self.assertEqual(experience["display_title"], "水族館")
+
+    def test_update_experience_can_update_only_display_title(self) -> None:
+        repository = TravelRepository(
+            source=FakeTravelSource(
+                {
+                    "id": "item_1",
+                    "trip_id": "trip_1",
+                    "item_type": "spot",
+                    "display_title": "水族館",
+                    "memo": "before",
+                }
+            ),
+            photo_provider=FakePhotoProvider(),
+        )
+
+        experience = repository.update_experience(
+            experience_id="item_1", display_title="新しい水族館"
+        )
+
+        self.assertEqual(experience["display_title"], "新しい水族館")
+        self.assertEqual(experience["memo"], "before")
+
+    def test_update_experience_can_update_experience_type(self) -> None:
+        source = FakeTravelSource(
+            {
+                "id": "item_1",
+                "trip_id": "trip_1",
+                "item_type": "spot",
+                "display_title": "水族館",
+            }
+        )
+        repository = TravelRepository(source=source, photo_provider=FakePhotoProvider())
+
+        experience = repository.update_experience(
+            experience_id="item_1", experience_type="event"
+        )
+
+        self.assertEqual(source.updated_kwargs, {"item_type": "event"})
+        self.assertEqual(experience["item_type"], "event")
+        self.assertEqual(experience["experience_type"], "event")
+
+    def test_archive_experience_sets_status_and_remains_readable(self) -> None:
+        repository = TravelRepository(
+            source=FakeTravelSource(
+                {
+                    "id": "item_1",
+                    "trip_id": "trip_1",
+                    "item_type": "memo",
+                    "display_title": "ひとこと",
+                    "status": "planned",
+                }
+            ),
+            photo_provider=FakePhotoProvider(),
+        )
+
+        archived = repository.archive_experience(experience_id="item_1")
+        fetched = repository.get_experience("item_1")
+
+        self.assertEqual(archived["status"], "archived")
+        self.assertIsNotNone(fetched)
+        assert fetched is not None
+        self.assertEqual(fetched["status"], "archived")
+
+    def test_get_trip_timeline_keeps_experience_detail_shape(self) -> None:
+        repository = TravelRepository(
+            source=FakeTravelSource(
+                {
+                    "id": "item_1",
+                    "trip_id": "trip_1",
+                    "item_type": "memo",
+                    "display_title": "ひとこと",
+                    "status": "archived",
+                }
+            ),
+            photo_provider=FakePhotoProvider(),
+        )
+
+        timeline = repository.get_trip_timeline("trip_1")
+
+        self.assertEqual(timeline[0]["experience_id"], "item_1")
+        self.assertEqual(timeline[0]["timeline_item_id"], "item_1")
+        self.assertEqual(timeline[0]["experience_type"], "memo")
+        self.assertEqual(timeline[0]["status"], "archived")
+
 
 class ExperienceExecutorTest(unittest.TestCase):
     def test_executes_experience_tools(self) -> None:
@@ -192,6 +340,56 @@ class ExperienceExecutorTest(unittest.TestCase):
         self.assertEqual(get_result["experience"]["experience_id"], "item_1")
         self.assertEqual(photos_result["experience_id"], "item_1")
         self.assertEqual(photos_result["timeline_item_id"], "item_1")
+
+    def test_executes_update_and_archive_experience_tools(self) -> None:
+        repository = TravelRepository(
+            source=FakeTravelSource(
+                {
+                    "id": "item_1",
+                    "trip_id": "trip_1",
+                    "item_type": "spot",
+                    "display_title": "水族館",
+                    "status": "planned",
+                }
+            ),
+            photo_provider=FakePhotoProvider(),
+        )
+        executor = TravelExecutor(repository=repository)
+
+        update_result = executor.execute(
+            SimpleNamespace(id="update_experience"),
+            {"experience_id": "item_1", "memo": "更新"},
+        )
+        archive_result = executor.execute(
+            SimpleNamespace(id="archive_experience"),
+            {"experience_id": "item_1"},
+        )
+
+        self.assertEqual(update_result["experience"]["memo"], "更新")
+        self.assertEqual(archive_result["experience"]["status"], "archived")
+
+    def test_runtime_requires_confirmation_and_admin_for_update_tools(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            runtime_service = RuntimeService(
+                audit_logger=AuditLogger(Path(temp_dir) / "audit.log")
+            )
+
+            guest_result = runtime_service.execute_stub(
+                "update_experience",
+                {"experience_id": "item_1", "memo": "更新"},
+                confirmed=True,
+                role="guest",
+            )
+            admin_unconfirmed_result = runtime_service.execute_stub(
+                "archive_experience",
+                {"experience_id": "item_1"},
+                confirmed=False,
+                role="admin",
+            )
+
+        self.assertTrue(guest_result["permission_denied"])
+        self.assertTrue(admin_unconfirmed_result["blocked"])
+        self.assertTrue(admin_unconfirmed_result["confirmation_required"])
 
 
 class FakeRuntimeService:
@@ -320,6 +518,93 @@ class TravelExperienceApiTest(unittest.IsolatedAsyncioTestCase):
                     "tool_id": "get_experience_photos",
                     "params": {"experience_id": "item_1", "limit": 20, "offset": 0},
                     "confirmed": False,
+                    "role": "admin",
+                },
+            ],
+        )
+
+    async def test_api_updates_experience_through_runtime(self) -> None:
+        runtime_service = FakeRuntimeService(
+            [
+                {
+                    "success": True,
+                    "result": {
+                        "experience_id": "item_1",
+                        "timeline_item_id": "item_1",
+                        "experience_type": "event",
+                        "experience": {
+                            "id": "item_1",
+                            "experience_id": "item_1",
+                            "timeline_item_id": "item_1",
+                            "experience_type": "event",
+                            "item_type": "event",
+                            "display_title": "ショー",
+                        },
+                        "source": "local_travel_write",
+                    },
+                }
+            ]
+        )
+        main.runtime_service = runtime_service
+
+        response = await main.travel_update_experience(
+            "item_1",
+            TravelExperienceUpdateRequest(display_title="ショー"),
+        )
+
+        self.assertEqual(response.experience_id, "item_1")
+        self.assertEqual(response.experience_type, "event")
+        self.assertEqual(response.execution_mode, "local_travel_write")
+        self.assertEqual(
+            runtime_service.calls,
+            [
+                {
+                    "tool_id": "update_experience",
+                    "params": {
+                        "experience_id": "item_1",
+                        "display_title": "ショー",
+                    },
+                    "confirmed": True,
+                    "role": "admin",
+                },
+            ],
+        )
+
+    async def test_api_archives_experience_through_runtime(self) -> None:
+        runtime_service = FakeRuntimeService(
+            [
+                {
+                    "success": True,
+                    "result": {
+                        "experience_id": "item_1",
+                        "timeline_item_id": "item_1",
+                        "experience_type": "memo",
+                        "experience": {
+                            "id": "item_1",
+                            "experience_id": "item_1",
+                            "timeline_item_id": "item_1",
+                            "experience_type": "memo",
+                            "item_type": "memo",
+                            "display_title": "ひとこと",
+                            "status": "archived",
+                        },
+                        "source": "local_travel_write",
+                    },
+                }
+            ]
+        )
+        main.runtime_service = runtime_service
+
+        response = await main.travel_archive_experience("item_1")
+
+        self.assertEqual(response.experience["status"], "archived")
+        self.assertEqual(
+            runtime_service.calls,
+            [
+                {
+                    "tool_id": "archive_experience",
+                    "params": {"experience_id": "item_1"},
+                    "confirmed": True,
                     "role": "admin",
                 },
             ],

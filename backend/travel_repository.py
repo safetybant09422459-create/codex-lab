@@ -4,6 +4,7 @@ from typing import Any, Protocol
 from .travel_storage import SQLiteTravelStorage
 
 JST = timezone(timedelta(hours=9))
+VALID_EXPERIENCE_TYPES = {"spot", "move", "event", "memo"}
 
 
 class TravelSource(Protocol):
@@ -23,6 +24,9 @@ class TravelSource(Protocol):
         raise NotImplementedError
 
     def create_timeline_item(self, **kwargs: Any) -> dict[str, Any]:
+        raise NotImplementedError
+
+    def update_timeline_item(self, timeline_item_id: str, **kwargs: Any) -> dict[str, Any] | None:
         raise NotImplementedError
 
     def set_trip_cover_image(self, **kwargs: Any) -> dict[str, Any]:
@@ -270,6 +274,59 @@ class TravelRepository:
             status=status,
         )
 
+    def update_experience(
+        self,
+        *,
+        experience_id: str,
+        experience_type: Any = None,
+        display_title: Any = None,
+        place_name: Any = None,
+        place_id: Any = None,
+        category: Any = None,
+        start_at: Any = None,
+        end_at: Any = None,
+        time_kind: Any = None,
+        memo: Any = None,
+        order_no: Any = None,
+        status: Any = None,
+        cover_image_id: Any = None,
+    ) -> dict[str, Any]:
+        normalized_experience_id = self._required_text(
+            experience_id, "experience_id"
+        )
+        updates = self._experience_updates(
+            experience_type=experience_type,
+            display_title=display_title,
+            place_name=place_name,
+            place_id=place_id,
+            category=category,
+            start_at=start_at,
+            end_at=end_at,
+            time_kind=time_kind,
+            memo=memo,
+            order_no=order_no,
+            status=status,
+            cover_image_id=cover_image_id,
+        )
+        if not updates:
+            raise ValueError("at least one experience field is required")
+
+        item = self.source.update_timeline_item(normalized_experience_id, **updates)
+        if item is None:
+            raise ValueError("experience not found")
+        return self._normalize_experience(item)
+
+    def archive_experience(self, *, experience_id: str) -> dict[str, Any]:
+        normalized_experience_id = self._required_text(
+            experience_id, "experience_id"
+        )
+        item = self.source.update_timeline_item(
+            normalized_experience_id, status="archived"
+        )
+        if item is None:
+            raise ValueError("experience not found")
+        return self._normalize_experience(item)
+
     def set_trip_cover_image(
         self,
         *,
@@ -384,6 +441,34 @@ class TravelRepository:
         if "timeline_item_id" not in normalized:
             normalized["timeline_item_id"] = item_id
         return normalized
+
+    def _experience_updates(self, **kwargs: Any) -> dict[str, Any]:
+        updates: dict[str, Any] = {}
+        for field_name, value in kwargs.items():
+            if value is None:
+                continue
+            if field_name == "experience_type":
+                updates["item_type"] = self._experience_type_value(value)
+            elif field_name in {"display_title", "status"}:
+                updates[field_name] = self._required_text(value, field_name)
+            elif field_name == "order_no":
+                updates[field_name] = self._optional_int(value, field_name)
+            else:
+                updates[field_name] = self._optional_text(value)
+        return updates
+
+    def _optional_int(self, value: Any, field_name: str) -> int | None:
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f"{field_name} must be an integer")
+        return value
+
+    def _experience_type_value(self, value: Any) -> str:
+        experience_type = self._required_text(value, "experience_type")
+        if experience_type not in VALID_EXPERIENCE_TYPES:
+            raise ValueError("experience_type must be spot, move, event, or memo")
+        return experience_type
 
     def _limit(self, value: Any) -> int:
         if value is None:
