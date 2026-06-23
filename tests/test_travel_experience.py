@@ -265,6 +265,7 @@ class TravelExperienceApiTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.experience_id, "item_1")
         self.assertEqual(response.timeline_item_id, "item_1")
+        self.assertEqual(response.spot["experience_id"], "item_1")
         self.assertEqual(response.photos[0]["asset_id"], "asset_1")
         self.assertEqual(
             runtime_service.calls,
@@ -275,6 +276,46 @@ class TravelExperienceApiTest(unittest.IsolatedAsyncioTestCase):
                     "confirmed": False,
                     "role": "guest",
                 },
+                {
+                    "tool_id": "get_experience_photos",
+                    "params": {"experience_id": "item_1", "limit": 20, "offset": 0},
+                    "confirmed": False,
+                    "role": "admin",
+                },
+            ],
+        )
+
+    async def test_photo_api_executes_experience_photos_through_runtime(self) -> None:
+        runtime_service = FakeRuntimeService(
+            [
+                {
+                    "success": True,
+                    "result": {
+                        "experience_id": "item_1",
+                        "timeline_item_id": "item_1",
+                        "experience_type": "event",
+                        "trip_id": "trip_1",
+                        "photos": [{"asset_id": "asset_1"}],
+                        "pagination": {"limit": 20, "offset": 0, "count": 1},
+                        "source": "photo_skill",
+                    },
+                }
+            ]
+        )
+        main.runtime_service = runtime_service
+
+        response = await main.travel_get_experience_photos(
+            "item_1", limit=100, offset=-1
+        )
+
+        self.assertEqual(response.experience_id, "item_1")
+        self.assertEqual(response.experience_type, "event")
+        self.assertEqual(response.timeline_item_id, "item_1")
+        self.assertEqual(response.trip_id, "trip_1")
+        self.assertEqual(response.photos[0]["asset_id"], "asset_1")
+        self.assertEqual(
+            runtime_service.calls,
+            [
                 {
                     "tool_id": "get_experience_photos",
                     "params": {"experience_id": "item_1", "limit": 20, "offset": 0},

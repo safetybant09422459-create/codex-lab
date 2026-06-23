@@ -27,6 +27,7 @@ from .models import (
     SkillResponse,
     ToolResponse,
     TravelExperienceDetailResponse,
+    TravelExperiencePhotosResponse,
     TravelSpotDetailResponse,
     TravelTripDetailResponse,
     TravelTripPhotosResponse,
@@ -313,6 +314,75 @@ async def travel_get_trip_photos(
     )
 
 
+@app.get(
+    "/api/travel/experiences/{experience_id}/photos",
+    response_model=TravelExperiencePhotosResponse,
+)
+async def travel_get_experience_photos(
+    experience_id: str, limit: int = 20, offset: int = 0
+) -> TravelExperiencePhotosResponse:
+    bounded_limit = min(max(limit, 1), 20)
+    bounded_offset = max(offset, 0)
+
+    try:
+        response = runtime_service.execute_stub(
+            "get_experience_photos",
+            params={
+                "experience_id": experience_id,
+                "limit": bounded_limit,
+                "offset": bounded_offset,
+            },
+            confirmed=False,
+            role="admin",
+        )
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except ValueError as exc:
+        if str(exc) == "timeline item not found":
+            raise HTTPException(
+                status_code=404, detail="Travel experience not found"
+            ) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ImmichConfigurationError as exc:
+        raise HTTPException(
+            status_code=503, detail="Immich connection is not configured"
+        ) from exc
+    except ImmichAPIError as exc:
+        raise HTTPException(
+            status_code=502, detail="Immich photo search request failed"
+        ) from exc
+
+    if not response.get("success"):
+        if response.get("permission_denied"):
+            raise HTTPException(
+                status_code=403,
+                detail=response.get("reason") or "Travel photos permission denied",
+            )
+        if response.get("blocked") and response.get("confirmation_required"):
+            raise HTTPException(
+                status_code=409,
+                detail=response.get("reason") or "Travel photos confirmation required",
+            )
+        raise HTTPException(
+            status_code=500,
+            detail=response.get("reason") or "Travel experience photos request failed",
+        )
+
+    result = response.get("result") or {}
+    return TravelExperiencePhotosResponse(
+        experience_id=str(result.get("experience_id") or experience_id),
+        experience_type=result.get("experience_type"),
+        timeline_item_id=result.get("timeline_item_id") or result.get("experience_id"),
+        trip_id=result.get("trip_id"),
+        photos=result.get("photos") or [],
+        pagination=result.get("pagination") or {},
+        source=result.get("source") or "photo_skill",
+        execution_mode="local_travel_read",
+    )
+
+
 @app.get("/api/travel/spots/{spot_id}", response_model=TravelSpotDetailResponse)
 async def travel_get_spot_detail(
     spot_id: str, limit: int = 20, offset: int = 0
@@ -477,6 +547,7 @@ async def travel_get_experience_detail(
         timeline_item_id=experience_result.get("timeline_item_id")
         or experience.get("timeline_item_id")
         or experience.get("id"),
+        spot=experience,
         photos=photo_result.get("photos") or [],
         pagination=photo_result.get("pagination") or {},
         photo_error=photo_error,

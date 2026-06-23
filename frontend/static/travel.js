@@ -100,9 +100,30 @@ function showDetail(elements) {
   }
 }
 
+function experienceTitle(experience) {
+  experience = experience || {};
+  return experience.display_title || experience.place_name || experience.memo || "無題";
+}
+
 function spotTitle(spot) {
-  spot = spot || {};
-  return spot.display_title || spot.place_name || spot.memo || "無題";
+  return experienceTitle(spot);
+}
+
+function experienceTypeLabel(experience) {
+  var type;
+
+  experience = experience || {};
+  type = experience.experience_type || experience.item_type || "spot";
+  if (type === "move") {
+    return "Move";
+  }
+  if (type === "event") {
+    return "Event";
+  }
+  if (type === "memo") {
+    return "Memo";
+  }
+  return "Spot";
 }
 
 function renderTrips(elements, trips) {
@@ -152,21 +173,22 @@ function renderTimelineItem(item) {
   var titleText;
 
   item = item || {};
-  titleText = spotTitle(item);
+  titleText = experienceTitle(item);
 
   row.className = "travel-timeline-item";
   button.className = "travel-timeline-link";
   button.type = "button";
-  button.setAttribute("data-spot-id", item.id || "");
+  button.setAttribute("data-experience-id", item.experience_id || item.id || "");
+  button.setAttribute("data-spot-id", item.timeline_item_id || item.id || "");
   time.textContent = formatTimelineTime(item.start_at);
   title.textContent = titleText;
 
   button.appendChild(time);
   button.appendChild(title);
   button.addEventListener("click", function () {
-    var spotId = this.getAttribute("data-spot-id");
-    if (spotId) {
-      loadSpotDetail(spotId);
+    var experienceId = this.getAttribute("data-experience-id");
+    if (experienceId) {
+      loadExperienceDetail(experienceId);
     }
   });
   row.appendChild(button);
@@ -395,41 +417,50 @@ function renderSpotMeta(labelText, valueText) {
   return row;
 }
 
-function renderSpotDetail(elements, data) {
-  var spot = data.spot || {};
+function renderExperienceDetail(elements, data) {
+  var experience = data.experience || data.spot || {};
   var photos = data.photos || [];
   var title = document.createElement("h3");
+  var type = document.createElement("p");
   var meta = document.createElement("div");
   var memo = document.createElement("p");
   var photosSection;
 
   clearNode(elements.detailContent);
-  currentTravelView = "spot";
+  currentTravelView = "experience";
   if (elements.backButton) {
     elements.backButton.textContent = "旅行へ戻る";
   }
 
+  type.className = "travel-experience-type";
+  type.textContent = "Experience Type: " + experienceTypeLabel(experience);
+
   title.className = "travel-detail-title";
-  title.textContent = spotTitle(spot);
+  title.textContent = experienceTitle(experience);
 
   meta.className = "travel-spot-meta-list";
-  meta.appendChild(renderSpotMeta("開始日時", normalizeDate(spot.start_at)));
-  meta.appendChild(renderSpotMeta("終了日時", normalizeDate(spot.end_at)));
+  meta.appendChild(renderSpotMeta("開始日時", normalizeDate(experience.start_at)));
+  meta.appendChild(renderSpotMeta("終了日時", normalizeDate(experience.end_at)));
 
   memo.className = "travel-spot-memo";
-  memo.textContent = spot.memo || "メモはありません";
+  memo.textContent = experience.memo || "メモはありません";
 
   photosSection = renderTravelPhotosSection(
-    { title: spotTitle(spot) },
+    { title: experienceTitle(experience) },
     photos,
     data.photoError || false
   );
 
+  elements.detailContent.appendChild(type);
   elements.detailContent.appendChild(title);
   elements.detailContent.appendChild(meta);
   elements.detailContent.appendChild(photosSection);
   elements.detailContent.appendChild(memo);
   showDetail(elements);
+}
+
+function renderSpotDetail(elements, data) {
+  renderExperienceDetail(elements, data);
 }
 
 function renderError(elements, message) {
@@ -517,7 +548,7 @@ async function loadTravelDetail(tripId) {
   }
 }
 
-async function loadSpotDetail(spotId) {
+async function loadExperienceDetail(experienceId) {
   var elements = getElements();
   var data;
 
@@ -526,27 +557,33 @@ async function loadSpotDetail(spotId) {
   }
 
   detailLoading = true;
-  currentTravelView = "spot";
+  currentTravelView = "experience";
   if (elements.backButton) {
     elements.backButton.textContent = "旅行へ戻る";
   }
-  setTravelStatus(elements, "Spot詳細読み込み中", false);
+  setTravelStatus(elements, "Experience詳細読み込み中", false);
 
   try {
-    data = await api("/api/travel/spots/" + encodeURIComponent(spotId) + "?limit=20");
+    data = await api(
+      "/api/travel/experiences/" + encodeURIComponent(experienceId) + "?limit=20"
+    );
     data.photoError = data.photo_error || false;
-    renderSpotDetail(elements, data);
-    setTravelStatus(elements, "Spot詳細取得済み", false);
+    renderExperienceDetail(elements, data);
+    setTravelStatus(elements, "Experience詳細取得済み", false);
   } catch (error) {
-    if (error.message === "Travel spot not found") {
-      renderDetailError(elements, "Spotが見つかりませんでした。");
+    if (error.message === "Travel experience not found") {
+      renderDetailError(elements, "Experienceが見つかりませんでした。");
     } else {
-      renderDetailError(elements, "Spot詳細を取得できませんでした。");
+      renderDetailError(elements, "Experience詳細を取得できませんでした。");
     }
     setTravelStatus(elements, error.message, true);
   } finally {
     detailLoading = false;
   }
+}
+
+async function loadSpotDetail(spotId) {
+  return loadExperienceDetail(spotId);
 }
 
 function maybeLoadTravelTrips(force) {
@@ -570,7 +607,10 @@ function bindTravelScreen() {
   if (elements.backButton) {
     elements.backButton.addEventListener("click", function () {
       var nextElements = getElements();
-      if (currentTravelView === "spot" && currentTripDetailData) {
+      if (
+        (currentTravelView === "experience" || currentTravelView === "spot") &&
+        currentTripDetailData
+      ) {
         renderTravelDetail(nextElements, currentTripDetailData);
         setTravelStatus(nextElements, "詳細取得済み", false);
         return;
