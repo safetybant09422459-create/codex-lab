@@ -151,3 +151,43 @@ AI
 人間承認
 
 から始める。
+
+---
+
+## Lesson 0006
+
+### テーマ
+
+Safari Firstの必要性
+
+### 状況
+
+Jarvis Shell v0.1でSafari問題が再発した。
+
+Chromeでは動いても、iPhone / Safariで動かないfrontendはJarvisの主要利用端末で未完成になる。
+
+### 原因
+
+`frontend/static/shell.js` の `Array.prototype.flatMap` がSafariで問題になった。
+
+`shell.js` import時に例外が起きると、`app.js` の初期化が止まり、Developer UI / Runtime UI も巻き込んで止まる構造になっていた。
+
+### 対策
+
+`shell.js` を直接読み込み、自身で初期化する構造に寄せた。
+
+また、Safari-safeな `var` / `function` / plain object 中心の実装へ寄せた。
+
+### 学び
+
+新規frontend JSでは、`flatMap` などSafari互換上の不安がある構文やAPIを不用意に使わない。
+
+import先のトップレベル例外でアプリ全体を止めない。
+
+Shell / Runtime Execute / Developer UI の初期化はできるだけ分離し、一部の失敗が全体停止にならない構造にする。
+
+### 次への反映
+
+Safari First / Safari-safe Frontend を設計原則として明文化する。
+
+新規frontend JS追加時は、Safariでの実機確認を必須チェックに含める。

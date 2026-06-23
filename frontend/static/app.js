@@ -1,4 +1,5 @@
 import { bindTabs } from "./tabs.js";
+import { bindShellNavigation } from "./shell.js";
 import { bindGitActions, loadProject, refreshChanges } from "./review.js";
 import { bindServiceActions, refreshService, refreshSkills, refreshTools } from "./update.js";
 import { api } from "./api.js";
@@ -40,6 +41,7 @@ function bindDevelopActions() {
   });
 }
 
+bindShellNavigation();
 bindTabs();
 bindDevelopActions();
 bindGitActions();

@@ -220,6 +220,34 @@ Enjoy The Journey
 
 ## Principle 16
 
+Safari First / Safari-safe Frontend
+
+Jarvisの主要利用端末には、iPhone / Safari を含める。
+
+Chromeで動いてもSafariで動かない場合は、未完成として扱う。
+
+frontend実装では、Safari互換を優先する。
+
+新しめのJavaScript構文やAPIを不用意に使わない。
+
+特に以下に注意する。
+
+* `flatMap`
+* `Map`依存
+* optional chaining
+* nullish coalescing
+* top-levelで落ちるimport依存
+
+frontend JSは、Safariで一部が失敗しても既存Developer UIやRuntime UI全体を巻き込まない構造にする。
+
+Shell / Runtime Execute / Developer UI の初期化はできるだけ分離し、片方の失敗で全体が止まらないようにする。
+
+新規frontend JS追加時は、Safariでの実機確認を必須チェックに含める。
+
+---
+
+## Principle 17
+
 Skill Standard Architecture
 
 Skillは標準レイヤー構造に揃える。

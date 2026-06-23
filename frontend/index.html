@@ -3,12 +3,122 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Jarvis Dev v0.3</title>
+    <title>Jarvis Shell v0.1</title>
     <link rel="stylesheet" href="/static/style.css" />
 
   </head>
   <body>
-    <main>
+    <main class="shell">
+      <header class="shell-header">
+        <div>
+          <h1>Jarvis</h1>
+          <p class="muted">Jarvis Shell v0.1</p>
+        </div>
+        <span class="pill">Web UI Shell</span>
+      </header>
+
+      <nav class="shell-nav" aria-label="Jarvis Shell">
+        <button class="shell-nav-button active" type="button" data-screen="jarvis-screen" aria-current="page">Jarvis</button>
+        <button class="shell-nav-button" type="button" data-screen="travel-screen">Travel</button>
+        <button class="shell-nav-button" type="button" data-screen="photo-screen">Photo</button>
+        <button class="shell-nav-button" type="button" data-screen="garden-screen">Garden</button>
+        <button class="shell-nav-button" type="button" data-screen="calendar-screen">Calendar</button>
+        <button class="shell-nav-button" type="button" data-screen="home-screen">Home</button>
+        <button class="shell-nav-button" type="button" data-screen="developer-screen">Developer</button>
+      </nav>
+
+      <section id="jarvis-screen" class="shell-screen active" data-screen-name="Jarvis">
+        <div class="shell-screen-head">
+          <div>
+            <h2>Jarvis</h2>
+            <p class="muted">Jarvis Core が将来選んだ要約、提案、確認入口を表示するトップ画面。</p>
+          </div>
+        </div>
+        <div class="placeholder-grid">
+          <section class="placeholder-panel">
+            <h3>Today</h3>
+            <p>予定、天気、注意事項などを将来ここに表示します。</p>
+          </section>
+          <section class="placeholder-panel">
+            <h3>Suggestions</h3>
+            <p>Jarvis Core / Skill Router から受け取る提案の表示枠です。</p>
+          </section>
+        </div>
+      </section>
+
+      <section id="travel-screen" class="shell-screen" data-screen-name="Travel" hidden>
+        <div class="shell-screen-head">
+          <div>
+            <h2>Travel</h2>
+            <p class="muted">Travel Skill の将来画面。旅程、スポット、写真連携の受け皿です。</p>
+          </div>
+        </div>
+        <div class="placeholder-panel">
+          <h3>Travel Skill</h3>
+          <p>現時点ではプレースホルダーです。Travel UI は Developer 内には置きません。</p>
+        </div>
+      </section>
+
+      <section id="photo-screen" class="shell-screen" data-screen-name="Photo" hidden>
+        <div class="shell-screen-head">
+          <div>
+            <h2>Photo</h2>
+            <p class="muted">Photo Skill の将来画面。写真検索、表示、思い出候補の受け皿です。</p>
+          </div>
+        </div>
+        <div class="placeholder-panel">
+          <h3>Photo Skill</h3>
+          <p>現時点ではプレースホルダーです。写真取得や外部Adapter処理はShellに持ちません。</p>
+        </div>
+      </section>
+
+      <section id="garden-screen" class="shell-screen" data-screen-name="Garden" hidden>
+        <div class="shell-screen-head">
+          <div>
+            <h2>Garden</h2>
+            <p class="muted">Garden Skill の将来画面。水やり、作業、注意の受け皿です。</p>
+          </div>
+        </div>
+        <div class="placeholder-panel">
+          <h3>Garden Skill</h3>
+          <p>現時点ではプレースホルダーです。Skill固有ロジックは後続実装で分離します。</p>
+        </div>
+      </section>
+
+      <section id="calendar-screen" class="shell-screen" data-screen-name="Calendar" hidden>
+        <div class="shell-screen-head">
+          <div>
+            <h2>Calendar</h2>
+            <p class="muted">Calendar Skill の将来画面。予定確認や提案入口の受け皿です。</p>
+          </div>
+        </div>
+        <div class="placeholder-panel">
+          <h3>Calendar Skill</h3>
+          <p>現時点ではプレースホルダーです。予定更新は将来Runtime確認経由で扱います。</p>
+        </div>
+      </section>
+
+      <section id="home-screen" class="shell-screen" data-screen-name="Home" hidden>
+        <div class="shell-screen-head">
+          <div>
+            <h2>Home</h2>
+            <p class="muted">Home Control / Home Automation Skill の将来画面。Jarvis本人やトップ画面ではありません。</p>
+          </div>
+        </div>
+        <div class="placeholder-panel">
+          <h3>Home Skill</h3>
+          <p>現時点ではプレースホルダーです。家の状態や家電操作は高リスク候補として扱います。</p>
+        </div>
+      </section>
+
+      <section id="developer-screen" class="shell-screen" data-screen-name="Developer" hidden>
+        <div class="shell-screen-head">
+          <div>
+            <h2>Developer</h2>
+            <p class="muted">管理者向けDeveloper UIへの導線。既存機能をこの画面内に維持します。</p>
+          </div>
+        </div>
+
       <section class="project">
         <div class="project-top">
           <div>
@@ -168,8 +278,10 @@
           <pre id="log">ログはここに表示されます。</pre>
         </div>
       </section>
+      </section>
     </main>
 
+    <script type="module" src="/static/shell.js"></script>
     <script type="module" src="/static/app.js"></script>
 
   </body>
