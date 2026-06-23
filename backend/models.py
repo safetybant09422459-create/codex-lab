@@ -175,7 +175,24 @@ class TravelTripPhotosResponse(BaseModel):
 
 
 class TravelSpotDetailResponse(BaseModel):
+    experience: dict[str, Any] | None = None
+    experience_id: str | None = None
+    experience_type: str | None = None
+    timeline_item_id: str | None = None
     spot: dict[str, Any]
+    photos: list[dict[str, Any]]
+    pagination: dict[str, Any]
+    photo_error: bool = False
+    source: str
+    photo_source: str
+    execution_mode: Literal["local_travel_read"]
+
+
+class TravelExperienceDetailResponse(BaseModel):
+    experience: dict[str, Any]
+    experience_id: str
+    experience_type: str | None = None
+    timeline_item_id: str | None = None
     photos: list[dict[str, Any]]
     pagination: dict[str, Any]
     photo_error: bool = False

@@ -1,0 +1,94 @@
+{
+  "id": "create_experience",
+  "skill_id": "travel",
+  "name": "Create Experience",
+  "description": "Create a travel experience in the local Travel DB. Phase 1 stores it in travel_timeline_items.",
+  "status": "implemented",
+  "mode": "write",
+  "risk_level": "medium",
+  "confirmation_required": true,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "trip_id": {
+        "type": "string",
+        "description": "Trip id"
+      },
+      "experience_type": {
+        "type": "string",
+        "enum": ["spot", "move", "event", "memo"],
+        "description": "Experience type"
+      },
+      "display_title": {
+        "type": "string",
+        "description": "Display title"
+      },
+      "place_name": {
+        "type": "string",
+        "description": "Place name"
+      },
+      "place_id": {
+        "type": "string",
+        "description": "Place id"
+      },
+      "category": {
+        "type": "string",
+        "description": "Category"
+      },
+      "start_at": {
+        "type": "string",
+        "description": "Start datetime"
+      },
+      "end_at": {
+        "type": "string",
+        "description": "End datetime"
+      },
+      "time_kind": {
+        "type": "string",
+        "description": "Time kind"
+      },
+      "memo": {
+        "type": "string",
+        "description": "Experience memo"
+      },
+      "order_no": {
+        "type": "integer",
+        "description": "Display order"
+      },
+      "status": {
+        "type": "string",
+        "description": "Experience status"
+      }
+    },
+    "required": ["trip_id", "experience_type", "display_title"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "experience_id": {
+        "type": "string"
+      },
+      "experience_type": {
+        "type": "string"
+      },
+      "timeline_item_id": {
+        "type": "string"
+      },
+      "experience": {
+        "type": "object"
+      },
+      "source": {
+        "type": "string",
+        "const": "local_travel_write"
+      }
+    },
+    "required": [
+      "experience_id",
+      "experience_type",
+      "timeline_item_id",
+      "experience",
+      "source"
+    ]
+  }
+}

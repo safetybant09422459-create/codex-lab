@@ -35,10 +35,24 @@ class TravelExecutor(BaseExecutor):
 
         if tool.id == "get_spot":
             timeline_item_id = self._timeline_item_id(params)
+            experience = self.repository.get_spot(timeline_item_id)
             return {
                 "tool_id": tool.id,
+                "experience_id": timeline_item_id,
+                "experience_type": self._experience_type(experience),
                 "timeline_item_id": timeline_item_id,
-                "spot": self.repository.get_spot(timeline_item_id),
+                "experience": experience,
+                "spot": experience,
+                "source": "local_travel_read",
+            }
+
+        if tool.id == "get_experience":
+            experience_id = self._experience_id(params)
+            return {
+                "tool_id": tool.id,
+                "experience_id": experience_id,
+                "experience": (experience := self.repository.get_experience(experience_id)),
+                "experience_type": self._experience_type(experience),
                 "source": "local_travel_read",
             }
 
@@ -66,6 +80,18 @@ class TravelExecutor(BaseExecutor):
                 "source": "photo_skill",
             }
 
+        if tool.id == "get_experience_photos":
+            experience_id = self._experience_id(params)
+            return {
+                "tool_id": tool.id,
+                **self.repository.get_experience_photos(
+                    experience_id,
+                    limit=params.get("limit", 50),
+                    offset=params.get("offset", 0),
+                ),
+                "source": "photo_skill",
+            }
+
         if tool.id == "create_trip":
             return {
                 "tool_id": tool.id,
@@ -83,22 +109,51 @@ class TravelExecutor(BaseExecutor):
             }
 
         if tool.id == "create_timeline_item":
+            item = self.repository.create_timeline_item(
+                trip_id=params.get("trip_id"),
+                item_type=params.get("item_type"),
+                display_title=params.get("display_title"),
+                place_name=params.get("place_name"),
+                place_id=params.get("place_id"),
+                category=params.get("category"),
+                start_at=params.get("start_at"),
+                end_at=params.get("end_at"),
+                time_kind=params.get("time_kind"),
+                memo=params.get("memo"),
+                order_no=params.get("order_no"),
+                status=params.get("status"),
+            )
             return {
                 "tool_id": tool.id,
-                "item": self.repository.create_timeline_item(
-                    trip_id=params.get("trip_id"),
-                    item_type=params.get("item_type"),
-                    display_title=params.get("display_title"),
-                    place_name=params.get("place_name"),
-                    place_id=params.get("place_id"),
-                    category=params.get("category"),
-                    start_at=params.get("start_at"),
-                    end_at=params.get("end_at"),
-                    time_kind=params.get("time_kind"),
-                    memo=params.get("memo"),
-                    order_no=params.get("order_no"),
-                    status=params.get("status"),
-                ),
+                "experience": item,
+                "item": item,
+                "experience_id": item.get("experience_id"),
+                "experience_type": item.get("experience_type"),
+                "timeline_item_id": item.get("timeline_item_id"),
+                "source": "local_travel_write",
+            }
+
+        if tool.id == "create_experience":
+            experience = self.repository.create_experience(
+                trip_id=params.get("trip_id"),
+                experience_type=params.get("experience_type"),
+                display_title=params.get("display_title"),
+                place_name=params.get("place_name"),
+                place_id=params.get("place_id"),
+                category=params.get("category"),
+                start_at=params.get("start_at"),
+                end_at=params.get("end_at"),
+                time_kind=params.get("time_kind"),
+                memo=params.get("memo"),
+                order_no=params.get("order_no"),
+                status=params.get("status"),
+            )
+            return {
+                "tool_id": tool.id,
+                "experience": experience,
+                "experience_id": experience.get("experience_id"),
+                "experience_type": experience.get("experience_type"),
+                "timeline_item_id": experience.get("timeline_item_id"),
                 "source": "local_travel_write",
             }
 
@@ -131,6 +186,7 @@ class TravelExecutor(BaseExecutor):
     def get_execution_mode(self, tool: Any) -> str:
         if tool.id in {
             "create_trip",
+            "create_experience",
             "create_timeline_item",
             "set_trip_cover_image",
             "set_spot_cover_image",
@@ -149,3 +205,20 @@ class TravelExecutor(BaseExecutor):
         if isinstance(timeline_item_id, str) and timeline_item_id.strip():
             return timeline_item_id.strip()
         raise ValueError("timeline_item_id is required")
+
+    def _experience_id(self, params: dict[str, Any]) -> str:
+        experience_id = params.get("experience_id")
+        if isinstance(experience_id, str) and experience_id.strip():
+            return experience_id.strip()
+        timeline_item_id = params.get("timeline_item_id")
+        if isinstance(timeline_item_id, str) and timeline_item_id.strip():
+            return timeline_item_id.strip()
+        raise ValueError("experience_id is required")
+
+    def _experience_type(self, experience: dict[str, Any] | None) -> str | None:
+        if experience is None:
+            return None
+        experience_type = experience.get("experience_type")
+        if isinstance(experience_type, str) and experience_type.strip():
+            return experience_type.strip()
+        return None

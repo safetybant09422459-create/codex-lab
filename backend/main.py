@@ -26,6 +26,7 @@ from .models import (
     ServiceResponse,
     SkillResponse,
     ToolResponse,
+    TravelExperienceDetailResponse,
     TravelSpotDetailResponse,
     TravelTripDetailResponse,
     TravelTripPhotosResponse,
@@ -377,11 +378,109 @@ async def travel_get_spot_detail(
             photo_source = str(photo_result.get("source") or "photo_skill")
 
     return TravelSpotDetailResponse(
+        experience=spot,
+        experience_id=spot_result.get("experience_id") or spot.get("experience_id"),
+        experience_type=spot_result.get("experience_type")
+        or spot.get("experience_type"),
+        timeline_item_id=spot_result.get("timeline_item_id")
+        or spot.get("timeline_item_id")
+        or spot.get("id"),
         spot=spot,
         photos=photo_result.get("photos") or [],
         pagination=photo_result.get("pagination") or {},
         photo_error=photo_error,
         source=spot_result.get("source") or "local_travel_read",
+        photo_source=photo_source,
+        execution_mode="local_travel_read",
+    )
+
+
+@app.get(
+    "/api/travel/experiences/{experience_id}",
+    response_model=TravelExperienceDetailResponse,
+)
+async def travel_get_experience_detail(
+    experience_id: str, limit: int = 20, offset: int = 0
+) -> TravelExperienceDetailResponse:
+    bounded_limit = min(max(limit, 1), 20)
+    bounded_offset = max(offset, 0)
+
+    try:
+        experience_response = runtime_service.execute_stub(
+            "get_experience",
+            params={"experience_id": experience_id},
+            confirmed=False,
+            role="guest",
+        )
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not experience_response.get("success"):
+        raise HTTPException(
+            status_code=500,
+            detail=experience_response.get("reason")
+            or "Travel experience request failed",
+        )
+
+    experience_result = experience_response.get("result") or {}
+    experience = experience_result.get("experience")
+    if experience is None:
+        raise HTTPException(status_code=404, detail="Travel experience not found")
+
+    photo_result: dict[str, object] = {}
+    photo_source = "photo_skill"
+    photo_error = False
+    try:
+        photo_response = runtime_service.execute_stub(
+            "get_experience_photos",
+            params={
+                "experience_id": experience_id,
+                "limit": bounded_limit,
+                "offset": bounded_offset,
+            },
+            confirmed=False,
+            role="admin",
+        )
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except ValueError as exc:
+        if str(exc) == "timeline item not found":
+            raise HTTPException(
+                status_code=404, detail="Travel experience not found"
+            ) from exc
+        photo_error = True
+    except (ImmichConfigurationError, ImmichAPIError):
+        photo_error = True
+
+    if not photo_error:
+        if not photo_response.get("success"):
+            photo_error = True
+        else:
+            photo_result = photo_response.get("result") or {}
+            photo_source = str(photo_result.get("source") or "photo_skill")
+
+    return TravelExperienceDetailResponse(
+        experience=experience,
+        experience_id=str(
+            experience_result.get("experience_id")
+            or experience.get("experience_id")
+            or experience.get("id")
+        ),
+        experience_type=experience_result.get("experience_type")
+        or experience.get("experience_type"),
+        timeline_item_id=experience_result.get("timeline_item_id")
+        or experience.get("timeline_item_id")
+        or experience.get("id"),
+        photos=photo_result.get("photos") or [],
+        pagination=photo_result.get("pagination") or {},
+        photo_error=photo_error,
+        source=experience_result.get("source") or "local_travel_read",
         photo_source=photo_source,
         execution_mode="local_travel_read",
     )

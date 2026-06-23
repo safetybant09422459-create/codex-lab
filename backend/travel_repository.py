@@ -92,16 +92,28 @@ class TravelRepository:
         return self._with_cover_image_url(trip)
 
     def get_trip_timeline(self, trip_id: str) -> list[dict[str, Any]]:
-        return self.source.get_trip_timeline(trip_id)
+        return [
+            self._normalize_experience(item)
+            for item in self.source.get_trip_timeline(trip_id)
+        ]
 
     def get_timeline_item(self, timeline_item_id: str) -> dict[str, Any] | None:
         return self.source.get_timeline_item(timeline_item_id)
+
+    def get_experience(self, experience_id: str) -> dict[str, Any] | None:
+        normalized_experience_id = self._required_text(
+            experience_id, "experience_id"
+        )
+        item = self.get_timeline_item(normalized_experience_id)
+        if item is None:
+            return None
+        return self._normalize_experience(item)
 
     def get_spot(self, timeline_item_id: str) -> dict[str, Any] | None:
         normalized_timeline_item_id = self._required_text(
             timeline_item_id, "timeline_item_id"
         )
-        return self.get_timeline_item(normalized_timeline_item_id)
+        return self.get_experience(normalized_timeline_item_id)
 
     def get_trip_photos(
         self, trip_id: str, limit: int = 50, offset: int = 0
@@ -134,13 +146,18 @@ class TravelRepository:
     def get_spot_photos(
         self, timeline_item_id: str, limit: int = 50, offset: int = 0
     ) -> dict[str, Any]:
+        return self.get_experience_photos(timeline_item_id, limit, offset)
+
+    def get_experience_photos(
+        self, experience_id: str, limit: int = 50, offset: int = 0
+    ) -> dict[str, Any]:
         normalized_timeline_item_id = self._required_text(
-            timeline_item_id, "timeline_item_id"
+            experience_id, "experience_id"
         )
         normalized_limit = self._limit(limit)
         normalized_offset = self._offset(offset)
 
-        item = self.get_timeline_item(normalized_timeline_item_id)
+        item = self.get_experience(normalized_timeline_item_id)
         if item is None:
             raise ValueError("timeline item not found")
 
@@ -152,6 +169,10 @@ class TravelRepository:
             offset=normalized_offset,
         )
         return {
+            "experience_id": normalized_timeline_item_id,
+            "experience_type": self._required_text(
+                item.get("experience_type"), "experience_type"
+            ),
             "timeline_item_id": normalized_timeline_item_id,
             "trip_id": self._required_text(item.get("trip_id"), "trip_id"),
             "photos": photos,
@@ -186,6 +207,38 @@ class TravelRepository:
             created_by=self._optional_text(created_by),
         )
 
+    def create_experience(
+        self,
+        *,
+        trip_id: str,
+        experience_type: str,
+        display_title: str,
+        place_name: str | None = None,
+        place_id: str | None = None,
+        category: str | None = None,
+        start_at: str | None = None,
+        end_at: str | None = None,
+        time_kind: str | None = None,
+        memo: str | None = None,
+        order_no: int | None = None,
+        status: str | None = None,
+    ) -> dict[str, Any]:
+        item = self.source.create_timeline_item(
+            trip_id=self._required_text(trip_id, "trip_id"),
+            item_type=self._required_text(experience_type, "experience_type"),
+            display_title=self._required_text(display_title, "display_title"),
+            place_name=self._optional_text(place_name),
+            place_id=self._optional_text(place_id),
+            category=self._optional_text(category),
+            start_at=self._optional_text(start_at),
+            end_at=self._optional_text(end_at),
+            time_kind=self._optional_text(time_kind),
+            memo=self._optional_text(memo),
+            order_no=order_no,
+            status=self._optional_text(status) or "planned",
+        )
+        return self._normalize_experience(item)
+
     def create_timeline_item(
         self,
         *,
@@ -202,19 +255,19 @@ class TravelRepository:
         order_no: int | None = None,
         status: str | None = None,
     ) -> dict[str, Any]:
-        return self.source.create_timeline_item(
-            trip_id=self._required_text(trip_id, "trip_id"),
-            item_type=self._required_text(item_type, "item_type"),
-            display_title=self._required_text(display_title, "display_title"),
-            place_name=self._optional_text(place_name),
-            place_id=self._optional_text(place_id),
-            category=self._optional_text(category),
-            start_at=self._optional_text(start_at),
-            end_at=self._optional_text(end_at),
-            time_kind=self._optional_text(time_kind),
-            memo=self._optional_text(memo),
+        return self.create_experience(
+            trip_id=trip_id,
+            experience_type=item_type,
+            display_title=display_title,
+            place_name=place_name,
+            place_id=place_id,
+            category=category,
+            start_at=start_at,
+            end_at=end_at,
+            time_kind=time_kind,
+            memo=memo,
             order_no=order_no,
-            status=self._optional_text(status) or "planned",
+            status=status,
         )
 
     def set_trip_cover_image(
@@ -317,6 +370,20 @@ class TravelRepository:
             normalized_cover["url"] = image_ref
         trip["cover_image"] = normalized_cover
         return trip
+
+    def _normalize_experience(self, item: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(item)
+        item_id = normalized.get("id")
+        item_type = normalized.get("item_type") or "spot"
+        if "experience_id" not in normalized:
+            normalized["experience_id"] = item_id
+        if "experience_type" not in normalized:
+            normalized["experience_type"] = item_type
+        if "item_type" not in normalized:
+            normalized["item_type"] = item_type
+        if "timeline_item_id" not in normalized:
+            normalized["timeline_item_id"] = item_id
+        return normalized
 
     def _limit(self, value: Any) -> int:
         if value is None:

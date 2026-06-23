@@ -1,0 +1,40 @@
+{
+  "id": "get_experience",
+  "skill_id": "travel",
+  "name": "Get Experience",
+  "description": "Get one travel experience. Phase 1 reads from travel_timeline_items and returns Experience-normalized fields.",
+  "status": "implemented",
+  "mode": "read",
+  "risk_level": "low",
+  "confirmation_required": false,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "experience_id": {
+        "type": "string",
+        "description": "Travel experience id"
+      }
+    },
+    "required": ["experience_id"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "experience_id": {
+        "type": "string"
+      },
+      "experience_type": {
+        "type": ["string", "null"]
+      },
+      "experience": {
+        "type": ["object", "null"]
+      },
+      "source": {
+        "type": "string",
+        "const": "local_travel_read"
+      }
+    },
+    "required": ["experience_id", "experience_type", "experience", "source"]
+  }
+}
