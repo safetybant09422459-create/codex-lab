@@ -86,7 +86,10 @@ class TravelRepository:
         return self.source.get_trips()
 
     def get_trip(self, trip_id: str) -> dict[str, Any] | None:
-        return self.source.get_trip(trip_id)
+        trip = self.source.get_trip(trip_id)
+        if trip is None:
+            return None
+        return self._with_cover_image_url(trip)
 
     def get_trip_timeline(self, trip_id: str) -> list[dict[str, Any]]:
         return self.source.get_trip_timeline(trip_id)
@@ -287,6 +290,27 @@ class TravelRepository:
             normalized = value.strip()
             return normalized or None
         return str(value)
+
+    def _with_cover_image_url(self, trip: dict[str, Any]) -> dict[str, Any]:
+        cover_image = trip.get("cover_image")
+        if not isinstance(cover_image, dict):
+            return trip
+
+        image_ref = self._optional_text(cover_image.get("image_ref"))
+        image_source = self._optional_text(cover_image.get("image_source"))
+        if image_ref is None:
+            return trip
+
+        normalized_cover = dict(cover_image)
+        if image_source == "photo_asset":
+            normalized_cover["asset_id"] = image_ref
+            normalized_cover["thumbnail_url"] = self.photo_provider.thumbnail_url(
+                image_ref
+            )
+        elif image_source in {"local", "manual", "google_places"}:
+            normalized_cover["url"] = image_ref
+        trip["cover_image"] = normalized_cover
+        return trip
 
     def _limit(self, value: Any) -> int:
         if value is None:

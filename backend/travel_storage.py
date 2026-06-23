@@ -90,15 +90,40 @@ class SQLiteTravelStorage:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT id, title, status, privacy_level, start_date, end_date,
-                       prefectures, outing_type, cover_image_id, memo, created_by,
-                       created_at, updated_at
-                FROM travel_trips
-                WHERE id = ?
+                SELECT
+                    t.id,
+                    t.title,
+                    t.status,
+                    t.privacy_level,
+                    t.start_date,
+                    t.end_date,
+                    t.prefectures,
+                    t.outing_type,
+                    t.cover_image_id,
+                    t.memo,
+                    t.created_by,
+                    t.created_at,
+                    t.updated_at,
+                    c.id AS cover_id,
+                    c.image_source AS cover_image_source,
+                    c.image_ref AS cover_image_ref,
+                    c.source_provider AS cover_source_provider,
+                    c.attribution AS cover_attribution,
+                    c.selected_by AS cover_selected_by,
+                    c.selected_at AS cover_selected_at,
+                    c.status AS cover_status,
+                    c.created_at AS cover_created_at
+                FROM travel_trips t
+                LEFT JOIN travel_cover_images c
+                  ON c.id = t.cover_image_id
+                 AND c.owner_type = 'trip'
+                 AND c.owner_id = t.id
+                 AND c.status = 'active'
+                WHERE t.id = ?
                 """,
                 (trip_id,),
             ).fetchone()
-        return self._row_to_dict(row) if row is not None else None
+        return self._trip_row_to_dict(row) if row is not None else None
 
     def get_trip_timeline(self, trip_id: str) -> list[dict[str, Any]]:
         with self._connect() as conn:
@@ -361,6 +386,42 @@ class SQLiteTravelStorage:
 
     def _row_to_dict(self, row: sqlite3.Row) -> dict[str, Any]:
         return dict(row)
+
+    def _trip_row_to_dict(self, row: sqlite3.Row) -> dict[str, Any]:
+        data = dict(row)
+        trip = {
+            key: data.get(key)
+            for key in (
+                "id",
+                "title",
+                "status",
+                "privacy_level",
+                "start_date",
+                "end_date",
+                "prefectures",
+                "outing_type",
+                "cover_image_id",
+                "memo",
+                "created_by",
+                "created_at",
+                "updated_at",
+            )
+        }
+        if data.get("cover_id"):
+            trip["cover_image"] = {
+                "id": data.get("cover_id"),
+                "owner_type": "trip",
+                "owner_id": data.get("id"),
+                "image_source": data.get("cover_image_source"),
+                "image_ref": data.get("cover_image_ref"),
+                "source_provider": data.get("cover_source_provider"),
+                "attribution": data.get("cover_attribution"),
+                "selected_by": data.get("cover_selected_by"),
+                "selected_at": data.get("cover_selected_at"),
+                "status": data.get("cover_status"),
+                "created_at": data.get("cover_created_at"),
+            }
+        return trip
 
     def _now(self) -> str:
         return datetime.now().astimezone().isoformat(timespec="seconds")

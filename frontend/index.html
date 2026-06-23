@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Jarvis Shell v0.2</title>
+    <title>Jarvis Shell v0.3</title>
     <link rel="stylesheet" href="/static/style.css" />
 
   </head>
@@ -12,7 +12,7 @@
       <header class="shell-header">
         <div>
           <h1>Jarvis</h1>
-          <p class="muted">Jarvis Shell v0.2</p>
+          <p class="muted">Jarvis Shell v0.3</p>
         </div>
         <span class="pill">Web UI Shell</span>
       </header>
@@ -60,6 +60,12 @@
             <span id="travel-status" class="status">読み込み待機中</span>
           </div>
           <div id="travel-list" class="travel-list">Travel画面を開くと旅行一覧を読み込みます。</div>
+        </div>
+        <div id="travel-detail" class="panel travel-detail" hidden>
+          <div class="travel-detail-actions">
+            <button id="travel-back-button" class="secondary" type="button">一覧へ戻る</button>
+          </div>
+          <div id="travel-detail-content"></div>
         </div>
       </section>
 

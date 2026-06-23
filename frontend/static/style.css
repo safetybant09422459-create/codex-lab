@@ -258,10 +258,25 @@ button:disabled {
 .travel-trip-row {
   display: grid;
   gap: 5px;
+  width: 100%;
   min-width: 0;
   padding: 11px;
   border: 1px solid var(--border);
   border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+.travel-trip-row:active {
+  background: var(--panel);
+}
+
+.travel-trip-row:focus {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .travel-trip-row h4 {
@@ -282,6 +297,92 @@ button:disabled {
 .travel-error {
   color: var(--danger);
   font-weight: 700;
+}
+
+.travel-detail {
+  display: grid;
+  gap: 12px;
+}
+
+.travel-detail[hidden] {
+  display: none;
+}
+
+.travel-detail-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.travel-cover-image {
+  position: relative;
+  width: 100%;
+  margin: 0 0 12px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--panel);
+  aspect-ratio: 16 / 9;
+}
+
+.travel-cover-image[hidden] {
+  display: none;
+}
+
+.travel-cover-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.travel-cover-image .photo-image-error {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  left: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.travel-detail-title {
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+  font-size: 1.2rem;
+  line-height: 1.25;
+}
+
+.travel-detail-dates {
+  margin: 0 0 14px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.travel-timeline {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.travel-timeline-item {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+
+.travel-timeline-item time {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.travel-timeline-item span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
 }
 
 .panel,

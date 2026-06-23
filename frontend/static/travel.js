@@ -2,13 +2,17 @@ import { api } from "./api.js";
 
 var loaded = false;
 var loading = false;
+var detailLoading = false;
 
 function getElements() {
   return {
     screen: document.querySelector("#travel-screen"),
     list: document.querySelector("#travel-list"),
+    detail: document.querySelector("#travel-detail"),
+    detailContent: document.querySelector("#travel-detail-content"),
     status: document.querySelector("#travel-status"),
     refreshButton: document.querySelector("#travel-refresh-button"),
+    backButton: document.querySelector("#travel-back-button"),
   };
 }
 
@@ -35,6 +39,26 @@ function dateRange(trip) {
   return normalizeDate(trip.start_date) + " ～ " + normalizeDate(trip.end_date);
 }
 
+function formatTimelineTime(value) {
+  var timeMatch;
+
+  if (typeof value !== "string" || !value) {
+    return "時刻未定";
+  }
+
+  timeMatch = value.match(/T(\d{2}):(\d{2})/);
+  if (timeMatch) {
+    return timeMatch[1] + ":" + timeMatch[2];
+  }
+
+  timeMatch = value.match(/^(\d{2}):(\d{2})/);
+  if (timeMatch) {
+    return timeMatch[1] + ":" + timeMatch[2];
+  }
+
+  return value;
+}
+
 function clearNode(node) {
   while (node.firstChild) {
     node.removeChild(node.firstChild);
@@ -47,6 +71,30 @@ function renderEmpty(elements) {
   empty.className = "travel-empty";
   empty.textContent = "旅行はまだありません。";
   elements.list.appendChild(empty);
+}
+
+function showList(elements) {
+  if (elements.list) {
+    elements.list.hidden = false;
+  }
+  if (elements.detail) {
+    elements.detail.hidden = true;
+  }
+  if (elements.refreshButton) {
+    elements.refreshButton.hidden = false;
+  }
+}
+
+function showDetail(elements) {
+  if (elements.list) {
+    elements.list.hidden = true;
+  }
+  if (elements.detail) {
+    elements.detail.hidden = false;
+  }
+  if (elements.refreshButton) {
+    elements.refreshButton.hidden = true;
+  }
 }
 
 function renderTrips(elements, trips) {
@@ -65,8 +113,10 @@ function renderTrips(elements, trips) {
 
   for (index = 0; index < trips.length; index += 1) {
     trip = trips[index] || {};
-    row = document.createElement("article");
+    row = document.createElement("button");
     row.className = "travel-trip-row";
+    row.type = "button";
+    row.setAttribute("data-trip-id", trip.id || "");
 
     title = document.createElement("h4");
     title.textContent = trip.title || "無題の旅行";
@@ -76,8 +126,127 @@ function renderTrips(elements, trips) {
 
     row.appendChild(title);
     row.appendChild(dates);
+    row.addEventListener("click", function () {
+      var tripId = this.getAttribute("data-trip-id");
+      if (tripId) {
+        loadTravelDetail(tripId);
+      }
+    });
     elements.list.appendChild(row);
   }
+}
+
+function renderTimelineItem(item) {
+  var row = document.createElement("li");
+  var time = document.createElement("time");
+  var title = document.createElement("span");
+  var titleText;
+
+  item = item || {};
+  titleText = item.display_title || item.place_name || item.memo || "無題";
+
+  row.className = "travel-timeline-item";
+  time.textContent = formatTimelineTime(item.start_at);
+  title.textContent = titleText;
+
+  row.appendChild(time);
+  row.appendChild(title);
+  return row;
+}
+
+function tripCoverImageUrl(trip) {
+  var coverImage;
+
+  if (!trip || typeof trip !== "object") {
+    return "";
+  }
+
+  coverImage = trip.cover_image;
+  if (!coverImage || typeof coverImage !== "object") {
+    return "";
+  }
+
+  if (typeof coverImage.thumbnail_url === "string" && coverImage.thumbnail_url) {
+    return coverImage.thumbnail_url;
+  }
+  if (typeof coverImage.url === "string" && coverImage.url) {
+    return coverImage.url;
+  }
+  return "";
+}
+
+function showTravelCoverImageError(figure, text) {
+  var errorNode;
+
+  if (!figure) {
+    return;
+  }
+
+  errorNode = document.createElement("div");
+  errorNode.className = "photo-image-error";
+  errorNode.textContent = text;
+  figure.appendChild(errorNode);
+}
+
+function renderTripCoverImage(trip) {
+  var imageUrl = tripCoverImageUrl(trip);
+  var figure;
+  var image;
+
+  if (!imageUrl) {
+    return null;
+  }
+
+  figure = document.createElement("figure");
+  figure.className = "travel-cover-image";
+
+  image = document.createElement("img");
+  image.alt = (trip.title || "旅行") + " 代表写真";
+  image.addEventListener("error", function () {
+    showTravelCoverImageError(figure, "Image load error");
+  });
+  image.src = imageUrl;
+
+  figure.appendChild(image);
+  return figure;
+}
+
+function renderTravelDetail(elements, data) {
+  var trip = data.trip || {};
+  var timeline = data.timeline || [];
+  var coverImage = renderTripCoverImage(trip);
+  var title = document.createElement("h3");
+  var dates = document.createElement("p");
+  var list = document.createElement("ol");
+  var empty = document.createElement("p");
+  var index;
+
+  clearNode(elements.detailContent);
+
+  title.className = "travel-detail-title";
+  title.textContent = trip.title || "無題の旅行";
+  dates.className = "travel-detail-dates";
+  dates.textContent = dateRange(trip);
+  list.className = "travel-timeline";
+
+  if (coverImage) {
+    elements.detailContent.appendChild(coverImage);
+  }
+  elements.detailContent.appendChild(title);
+  elements.detailContent.appendChild(dates);
+
+  if (!timeline.length) {
+    empty.className = "travel-empty";
+    empty.textContent = "タイムラインはまだありません。";
+    elements.detailContent.appendChild(empty);
+  } else {
+    for (index = 0; index < timeline.length; index += 1) {
+      list.appendChild(renderTimelineItem(timeline[index]));
+    }
+    elements.detailContent.appendChild(list);
+  }
+
+  showDetail(elements);
 }
 
 function renderError(elements, message) {
@@ -86,6 +255,17 @@ function renderError(elements, message) {
   error.className = "travel-error";
   error.textContent = message;
   elements.list.appendChild(error);
+}
+
+function renderDetailError(elements, message) {
+  var error;
+
+  clearNode(elements.detailContent);
+  error = document.createElement("p");
+  error.className = "travel-error";
+  error.textContent = message;
+  elements.detailContent.appendChild(error);
+  showDetail(elements);
 }
 
 async function loadTravelTrips(force) {
@@ -106,12 +286,40 @@ async function loadTravelTrips(force) {
     data = await api("/api/travel/trips");
     renderTrips(elements, data.trips || []);
     loaded = true;
+    showList(elements);
     setTravelStatus(elements, "取得済み", false);
   } catch (error) {
     renderError(elements, "旅行一覧を取得できませんでした。");
     setTravelStatus(elements, error.message, true);
   } finally {
     loading = false;
+  }
+}
+
+async function loadTravelDetail(tripId) {
+  var elements = getElements();
+  var data;
+
+  if (!elements.screen || !elements.detail || !elements.detailContent || detailLoading) {
+    return;
+  }
+
+  detailLoading = true;
+  setTravelStatus(elements, "詳細読み込み中", false);
+
+  try {
+    data = await api("/api/travel/trips/" + encodeURIComponent(tripId));
+    renderTravelDetail(elements, data);
+    setTravelStatus(elements, "詳細取得済み", false);
+  } catch (error) {
+    if (error.message === "Travel trip not found") {
+      renderDetailError(elements, "旅行が見つかりませんでした。");
+    } else {
+      renderDetailError(elements, "旅行詳細を取得できませんでした。");
+    }
+    setTravelStatus(elements, error.message, true);
+  } finally {
+    detailLoading = false;
   }
 }
 
@@ -130,6 +338,13 @@ function bindTravelScreen() {
   if (elements.refreshButton) {
     elements.refreshButton.addEventListener("click", function () {
       loadTravelTrips(true);
+    });
+  }
+
+  if (elements.backButton) {
+    elements.backButton.addEventListener("click", function () {
+      showList(getElements());
+      setTravelStatus(getElements(), "取得済み", false);
     });
   }
 

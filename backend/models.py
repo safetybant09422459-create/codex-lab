@@ -157,3 +157,10 @@ class TravelTripsResponse(BaseModel):
     trips: list[dict[str, Any]]
     source: str
     execution_mode: Literal["local_travel_read"]
+
+
+class TravelTripDetailResponse(BaseModel):
+    trip: dict[str, Any]
+    timeline: list[dict[str, Any]]
+    source: str
+    execution_mode: Literal["local_travel_read"]

@@ -26,6 +26,7 @@ from .models import (
     ServiceResponse,
     SkillResponse,
     ToolResponse,
+    TravelTripDetailResponse,
     TravelTripsResponse,
 )
 from .photo_immich_adapter import ImmichAPIError, ImmichConfigurationError
@@ -184,6 +185,63 @@ async def travel_get_trips() -> TravelTripsResponse:
     return TravelTripsResponse(
         trips=result.get("trips") or [],
         source=result.get("source") or "local_travel_read",
+        execution_mode="local_travel_read",
+    )
+
+
+@app.get("/api/travel/trips/{trip_id}", response_model=TravelTripDetailResponse)
+async def travel_get_trip_detail(trip_id: str) -> TravelTripDetailResponse:
+    try:
+        trip_response = runtime_service.execute_stub(
+            "get_trip",
+            params={"trip_id": trip_id},
+            confirmed=False,
+            role="guest",
+        )
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not trip_response.get("success"):
+        raise HTTPException(
+            status_code=500,
+            detail=trip_response.get("reason") or "Travel trip request failed",
+        )
+
+    trip_result = trip_response.get("result") or {}
+    trip = trip_result.get("trip")
+    if trip is None:
+        raise HTTPException(status_code=404, detail="Travel trip not found")
+
+    try:
+        timeline_response = runtime_service.execute_stub(
+            "get_trip_timeline",
+            params={"trip_id": trip_id},
+            confirmed=False,
+            role="guest",
+        )
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not timeline_response.get("success"):
+        raise HTTPException(
+            status_code=500,
+            detail=timeline_response.get("reason")
+            or "Travel timeline request failed",
+        )
+
+    timeline_result = timeline_response.get("result") or {}
+    return TravelTripDetailResponse(
+        trip=trip,
+        timeline=timeline_result.get("items") or [],
+        source=trip_result.get("source") or "local_travel_read",
         execution_mode="local_travel_read",
     )
 
