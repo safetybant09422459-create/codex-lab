@@ -151,3 +151,9 @@ class RuntimeExecuteResponse(BaseModel):
 
 class AuditResponse(BaseModel):
     items: list[dict[str, Any]]
+
+
+class TravelTripsResponse(BaseModel):
+    trips: list[dict[str, Any]]
+    source: str
+    execution_mode: Literal["local_travel_read"]

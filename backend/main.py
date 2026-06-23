@@ -26,6 +26,7 @@ from .models import (
     ServiceResponse,
     SkillResponse,
     ToolResponse,
+    TravelTripsResponse,
 )
 from .photo_immich_adapter import ImmichAPIError, ImmichConfigurationError
 from .photo_repository import PhotoRepository
@@ -158,6 +159,33 @@ async def runtime_execute(request: RuntimeRequest) -> RuntimeExecuteResponse:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidToolDefinitionError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/travel/trips", response_model=TravelTripsResponse)
+async def travel_get_trips() -> TravelTripsResponse:
+    try:
+        response = runtime_service.execute_stub(
+            "get_trips", params={}, confirmed=False, role="guest"
+        )
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not response.get("success"):
+        raise HTTPException(
+            status_code=500,
+            detail=response.get("reason") or "Travel trips request failed",
+        )
+
+    result = response.get("result") or {}
+    return TravelTripsResponse(
+        trips=result.get("trips") or [],
+        source=result.get("source") or "local_travel_read",
+        execution_mode="local_travel_read",
+    )
 
 
 @app.get("/api/photo/assets/{asset_id}/thumbnail")

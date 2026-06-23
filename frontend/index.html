@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Jarvis Shell v0.1</title>
+    <title>Jarvis Shell v0.2</title>
     <link rel="stylesheet" href="/static/style.css" />
 
   </head>
@@ -12,7 +12,7 @@
       <header class="shell-header">
         <div>
           <h1>Jarvis</h1>
-          <p class="muted">Jarvis Shell v0.1</p>
+          <p class="muted">Jarvis Shell v0.2</p>
         </div>
         <span class="pill">Web UI Shell</span>
       </header>
@@ -50,12 +50,16 @@
         <div class="shell-screen-head">
           <div>
             <h2>Travel</h2>
-            <p class="muted">Travel Skill の将来画面。旅程、スポット、写真連携の受け皿です。</p>
+            <p class="muted">Travel Skill の旅行一覧。</p>
           </div>
+          <button id="travel-refresh-button" class="secondary" type="button">更新</button>
         </div>
-        <div class="placeholder-panel">
-          <h3>Travel Skill</h3>
-          <p>現時点ではプレースホルダーです。Travel UI は Developer 内には置きません。</p>
+        <div class="panel travel-panel">
+          <div class="section-head">
+            <h3>Travel</h3>
+            <span id="travel-status" class="status">読み込み待機中</span>
+          </div>
+          <div id="travel-list" class="travel-list">Travel画面を開くと旅行一覧を読み込みます。</div>
         </div>
       </section>
 
@@ -282,6 +286,7 @@
     </main>
 
     <script type="module" src="/static/shell.js"></script>
+    <script type="module" src="/static/travel.js"></script>
     <script type="module" src="/static/app.js"></script>
 
   </body>
