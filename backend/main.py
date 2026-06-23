@@ -374,13 +374,29 @@ async def travel_get_experience_photos(
         )
 
     result = response.get("result") or {}
+    photos = result.get("photos") or []
+    pagination = dict(result.get("pagination") or {})
+    pagination_limit = pagination.get("limit") or bounded_limit
+    pagination_offset = pagination.get("offset") or bounded_offset
+    pagination_count = pagination.get("count")
+    if pagination_count is None:
+        pagination_count = len(photos)
+    if "has_more" not in pagination:
+        pagination["has_more"] = pagination_count == pagination_limit
+    pagination["limit"] = pagination_limit
+    pagination["offset"] = pagination_offset
+    pagination["count"] = pagination_count
     return TravelExperiencePhotosResponse(
         experience_id=str(result.get("experience_id") or experience_id),
         experience_type=result.get("experience_type"),
         timeline_item_id=result.get("timeline_item_id") or result.get("experience_id"),
         trip_id=result.get("trip_id"),
-        photos=result.get("photos") or [],
-        pagination=result.get("pagination") or {},
+        photos=photos,
+        limit=pagination_limit,
+        offset=pagination_offset,
+        count=pagination_count,
+        has_more=pagination.get("has_more"),
+        pagination=pagination,
         source=result.get("source") or "photo_skill",
         execution_mode="local_travel_read",
     )

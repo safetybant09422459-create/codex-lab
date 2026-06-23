@@ -5,6 +5,8 @@ var loading = false;
 var detailLoading = false;
 var currentTripDetailData = null;
 var currentTravelView = "list";
+var experiencePhotosPageSize = 20;
+var experiencePhotosLoading = false;
 var experienceStatusOptions = ["planned", "completed", "skipped", "archived"];
 var experienceCreateStatusOptions = ["planned", "completed", "skipped"];
 var experienceCreateTypeOptions = ["spot", "move", "event", "memo"];
@@ -357,6 +359,109 @@ function renderTravelPhotosSection(trip, photos, photoError) {
     grid.appendChild(renderTravelPhotoCard(photos[index], trip));
   }
   section.appendChild(grid);
+  return section;
+}
+
+function experiencePhotoPagination(data) {
+  if (!data || typeof data !== "object" || !data.pagination) {
+    return {};
+  }
+  return data.pagination;
+}
+
+function experiencePhotosHasMore(photos, pagination, limit) {
+  if (pagination && typeof pagination.has_more === "boolean") {
+    return pagination.has_more;
+  }
+  if (!photos) {
+    return false;
+  }
+  return photos.length === limit;
+}
+
+function appendExperiencePhotos(data, pageData) {
+  var photos = pageData.photos || [];
+  var index;
+
+  if (!data.photos) {
+    data.photos = [];
+  }
+  for (index = 0; index < photos.length; index += 1) {
+    data.photos.push(photos[index]);
+  }
+  data.pagination = pageData.pagination || {
+    limit: pageData.limit,
+    offset: pageData.offset,
+    count: photos.length,
+    has_more: pageData.has_more,
+  };
+  data.experiencePhotosHasMore = experiencePhotosHasMore(
+    photos,
+    data.pagination,
+    data.experiencePhotosLimit || experiencePhotosPageSize
+  );
+}
+
+function renderExperiencePhotoControls(elements, data) {
+  var controls = document.createElement("div");
+  var moreButton = document.createElement("button");
+  var photos = data.photos || [];
+
+  controls.className = "travel-experience-photo-controls";
+  moreButton.type = "button";
+  moreButton.className = "travel-experience-photo-more";
+  moreButton.textContent = "もっと見る";
+  moreButton.disabled = experiencePhotosLoading;
+  moreButton.hidden = !data.experiencePhotosHasMore;
+  moreButton.addEventListener("click", function () {
+    loadExperiencePhotosPage(
+      elements,
+      data,
+      photos.length,
+      data.experiencePhotosLimit || experiencePhotosPageSize
+    );
+  });
+
+  controls.appendChild(moreButton);
+  return controls;
+}
+
+function renderExperiencePhotosSection(elements, data) {
+  var section = document.createElement("section");
+  var title = document.createElement("h4");
+  var empty = document.createElement("p");
+  var grid = document.createElement("div");
+  var photos = data.photos || [];
+  var experience = data.experience || data.spot || {};
+  var index;
+
+  section.className = "travel-photos travel-experience-photos";
+  title.className = "travel-photos-title";
+  title.textContent = "Photos";
+  section.appendChild(title);
+
+  if (data.photoError || data.photo_error) {
+    empty.className = "travel-error";
+    empty.textContent = "写真を取得できませんでした。";
+    section.appendChild(empty);
+    return section;
+  }
+
+  if (!photos.length) {
+    empty.className = "travel-empty";
+    empty.textContent = "写真はありません";
+    section.appendChild(empty);
+  } else {
+    grid.className = "travel-photo-grid";
+    for (index = 0; index < photos.length; index += 1) {
+      grid.appendChild(
+        renderTravelPhotoCard(photos[index], { title: experienceTitle(experience) })
+      );
+    }
+    section.appendChild(grid);
+  }
+
+  section.appendChild(renderExperiencePhotoControls(elements, data));
   return section;
 }
 
@@ -790,7 +895,6 @@ async function submitExperienceUpdate(event, elements, data) {
 
 function renderExperienceDetail(elements, data) {
   var experience = data.experience || data.spot || {};
-  var photos = data.photos || [];
   var actions = renderExperienceActions(elements, data);
   var title = document.createElement("h3");
   var type = document.createElement("p");
@@ -818,11 +922,7 @@ function renderExperienceDetail(elements, data) {
   memo.className = "travel-spot-memo";
   memo.textContent = experience.memo || "メモはありません";
 
-  photosSection = renderTravelPhotosSection(
-    { title: experienceTitle(experience) },
-    photos,
-    data.photoError || false
-  );
+  photosSection = renderExperiencePhotosSection(elements, data);
 
   elements.detailContent.appendChild(actions);
   elements.detailContent.appendChild(type);
@@ -925,6 +1025,7 @@ async function loadTravelDetail(tripId) {
 async function loadExperienceDetail(experienceId) {
   var elements = getElements();
   var data;
+  var pagination;
 
   if (!elements.screen || !elements.detail || !elements.detailContent || detailLoading) {
     return;
@@ -939,9 +1040,20 @@ async function loadExperienceDetail(experienceId) {
 
   try {
     data = await api(
-      "/api/travel/experiences/" + encodeURIComponent(experienceId) + "?limit=20"
+      "/api/travel/experiences/" +
+        encodeURIComponent(experienceId) +
+        "?limit=" +
+        experiencePhotosPageSize +
+        "&offset=0"
     );
     data.photoError = data.photo_error || false;
+    data.experiencePhotosLimit = experiencePhotosPageSize;
+    pagination = experiencePhotoPagination(data);
+    data.experiencePhotosHasMore = experiencePhotosHasMore(
+      data.photos || [],
+      pagination,
+      experiencePhotosPageSize
+    );
     renderExperienceDetail(elements, data);
     setTravelStatus(elements, "Experience詳細取得済み", false);
   } catch (error) {
@@ -953,6 +1065,39 @@ async function loadExperienceDetail(experienceId) {
     setTravelStatus(elements, error.message, true);
   } finally {
     detailLoading = false;
+  }
+}
+
+async function loadExperiencePhotosPage(elements, data, offset, limit) {
+  var experienceId = experienceIdFromData(data);
+  var pageData;
+
+  if (!experienceId || experiencePhotosLoading) {
+    return;
+  }
+
+  experiencePhotosLoading = true;
+  renderExperienceDetail(elements, data);
+  setTravelStatus(elements, "Experience写真読み込み中", false);
+
+  try {
+    pageData = await api(
+      "/api/travel/experiences/" +
+        encodeURIComponent(experienceId) +
+        "/photos?limit=" +
+        limit +
+        "&offset=" +
+        offset
+    );
+    appendExperiencePhotos(data, pageData);
+    data.photoError = false;
+    renderExperienceDetail(elements, data);
+    setTravelStatus(elements, "Experience写真取得済み", false);
+  } catch (error) {
+    setTravelStatus(elements, error.message, true);
+  } finally {
+    experiencePhotosLoading = false;
+    renderExperienceDetail(elements, data);
   }
 }
 

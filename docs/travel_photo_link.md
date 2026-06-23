@@ -261,3 +261,42 @@ TravelとPhotoの接続では、以下に注意する。
 初期実装では、読み取り候補の提示を中心にする。
 
 Album作成、共有、明示リンク確定、Cover Imageの家族写真置き換えなどは更新系として扱い、Runtimeの確認と監査を通す。
+
+---
+
+## Photo Link v0.1設計メモ
+
+v0.1では、Experience詳細の候補写真を追加読み込みできるようにし、明示リンク保存は次段階に分ける。
+
+理由:
+
+* 現在のDBは`SQLiteTravelStorage.initialize()`で`CREATE TABLE IF NOT EXISTS`を直接実行する方式で、差分migrationの方針が未整備である
+* 明示リンク保存は更新系であり、確認、監査、権限、共有範囲の扱いを同時に決める必要がある
+* 候補写真のページネーションは読み取り系で、Photo Skill境界を壊さず先に安全に導入できる
+
+次段階で追加するテーブル候補:
+
+```sql
+CREATE TABLE travel_experience_photo_links (
+    id TEXT PRIMARY KEY,
+    experience_id TEXT NOT NULL,
+    photo_asset_id TEXT NOT NULL,
+    link_type TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    created_by TEXT
+);
+```
+
+`link_type`はまず以下を想定する。
+
+* `linked`: このExperienceの写真として明示確定
+* `cover_candidate`: Cover Image候補
+* `hidden`: このExperience候補から非表示
+
+API候補:
+
+* `GET /api/travel/experiences/{experience_id}/photos?limit=20&offset=0`
+* `POST /api/travel/experiences/{experience_id}/photo-links`
+* `DELETE /api/travel/experiences/{experience_id}/photo-links/{link_id}`
+
+保存系APIは、Runtime確認とauditを通し、Photo Assetの公開範囲をTravel側表示に持ち込まない。

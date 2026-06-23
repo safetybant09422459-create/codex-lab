@@ -144,6 +144,7 @@ class TravelRepository:
                 "limit": normalized_limit,
                 "offset": normalized_offset,
                 "count": len(photos),
+                "has_more": len(photos) == normalized_limit,
             },
         }
 
@@ -184,6 +185,7 @@ class TravelRepository:
                 "limit": normalized_limit,
                 "offset": normalized_offset,
                 "count": len(photos),
+                "has_more": len(photos) == normalized_limit,
             },
         }
 

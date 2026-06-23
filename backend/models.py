@@ -180,6 +180,10 @@ class TravelExperiencePhotosResponse(BaseModel):
     timeline_item_id: str | None = None
     trip_id: str | None = None
     photos: list[dict[str, Any]]
+    limit: int | None = None
+    offset: int | None = None
+    count: int | None = None
+    has_more: bool | None = None
     pagination: dict[str, Any]
     source: str
     execution_mode: Literal["local_travel_read"]

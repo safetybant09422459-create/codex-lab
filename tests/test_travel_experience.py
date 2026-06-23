@@ -160,7 +160,10 @@ class ExperienceRepositoryTest(unittest.TestCase):
         self.assertEqual(result["timeline_item_id"], "item_1")
         self.assertEqual(result["experience_type"], "memo")
         self.assertEqual(result["trip_id"], "trip_1")
-        self.assertEqual(result["pagination"], {"limit": 10, "offset": 2, "count": 1})
+        self.assertEqual(
+            result["pagination"],
+            {"limit": 10, "offset": 2, "count": 1, "has_more": False},
+        )
 
     def test_legacy_spot_aliases_delegate_to_experience_boundary(self) -> None:
         repository = TravelRepository(
@@ -449,7 +452,12 @@ class TravelExperienceApiTest(unittest.IsolatedAsyncioTestCase):
                         "experience_type": "spot",
                         "trip_id": "trip_1",
                         "photos": [{"asset_id": "asset_1"}],
-                        "pagination": {"limit": 20, "offset": 0, "count": 1},
+                        "pagination": {
+                            "limit": 20,
+                            "offset": 0,
+                            "count": 1,
+                            "has_more": False,
+                        },
                         "source": "photo_skill",
                     },
                 },
@@ -494,7 +502,12 @@ class TravelExperienceApiTest(unittest.IsolatedAsyncioTestCase):
                         "experience_type": "event",
                         "trip_id": "trip_1",
                         "photos": [{"asset_id": "asset_1"}],
-                        "pagination": {"limit": 20, "offset": 0, "count": 1},
+                        "pagination": {
+                            "limit": 20,
+                            "offset": 0,
+                            "count": 1,
+                            "has_more": False,
+                        },
                         "source": "photo_skill",
                     },
                 }
@@ -511,12 +524,61 @@ class TravelExperienceApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.timeline_item_id, "item_1")
         self.assertEqual(response.trip_id, "trip_1")
         self.assertEqual(response.photos[0]["asset_id"], "asset_1")
+        self.assertEqual(response.limit, 20)
+        self.assertEqual(response.offset, 0)
+        self.assertEqual(response.count, 1)
+        self.assertEqual(response.has_more, False)
         self.assertEqual(
             runtime_service.calls,
             [
                 {
                     "tool_id": "get_experience_photos",
                     "params": {"experience_id": "item_1", "limit": 20, "offset": 0},
+                    "confirmed": False,
+                    "role": "admin",
+                },
+            ],
+        )
+
+    async def test_photo_api_accepts_experience_photos_offset_page(self) -> None:
+        runtime_service = FakeRuntimeService(
+            [
+                {
+                    "success": True,
+                    "result": {
+                        "experience_id": "item_1",
+                        "timeline_item_id": "item_1",
+                        "experience_type": "event",
+                        "trip_id": "trip_1",
+                        "photos": [{"asset_id": "asset_21"}],
+                        "pagination": {
+                            "limit": 20,
+                            "offset": 20,
+                            "count": 1,
+                            "has_more": False,
+                        },
+                        "source": "photo_skill",
+                    },
+                }
+            ]
+        )
+        main.runtime_service = runtime_service
+
+        response = await main.travel_get_experience_photos(
+            "item_1", limit=20, offset=20
+        )
+
+        self.assertEqual(response.photos[0]["asset_id"], "asset_21")
+        self.assertEqual(response.limit, 20)
+        self.assertEqual(response.offset, 20)
+        self.assertEqual(response.count, 1)
+        self.assertEqual(response.has_more, False)
+        self.assertEqual(
+            runtime_service.calls,
+            [
+                {
+                    "tool_id": "get_experience_photos",
+                    "params": {"experience_id": "item_1", "limit": 20, "offset": 20},
                     "confirmed": False,
                     "role": "admin",
                 },

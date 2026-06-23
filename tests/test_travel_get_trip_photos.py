@@ -83,7 +83,10 @@ class GetTripPhotosTest(unittest.TestCase):
         result = repository.get_trip_photos("trip_1", limit=20, offset=0)
 
         self.assertEqual(result["trip_id"], "trip_1")
-        self.assertEqual(result["pagination"], {"limit": 20, "offset": 0, "count": 1})
+        self.assertEqual(
+            result["pagination"],
+            {"limit": 20, "offset": 0, "count": 1, "has_more": False},
+        )
         self.assertEqual(result["photos"][0]["asset_id"], "asset_1")
         self.assertEqual(
             provider.calls,

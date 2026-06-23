@@ -101,7 +101,10 @@ class GetSpotPhotosTest(unittest.TestCase):
 
         self.assertEqual(result["timeline_item_id"], "item_1")
         self.assertEqual(result["trip_id"], "trip_1")
-        self.assertEqual(result["pagination"], {"limit": 25, "offset": 5, "count": 1})
+        self.assertEqual(
+            result["pagination"],
+            {"limit": 25, "offset": 5, "count": 1, "has_more": False},
+        )
         self.assertEqual(result["photos"][0]["asset_id"], "asset_1")
         self.assertEqual(
             provider.calls,

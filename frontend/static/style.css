@@ -396,6 +396,28 @@ button:disabled {
   object-fit: cover;
 }
 
+.travel-experience-photo-controls {
+  display: flex;
+  justify-content: center;
+  min-height: 34px;
+}
+
+.travel-experience-photo-more {
+  min-width: 120px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 12px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.travel-experience-photo-more:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
 .travel-detail-title {
   margin: 0 0 6px;
   overflow-wrap: anywhere;

@@ -83,6 +83,16 @@ class TravelUiExperienceTest(unittest.TestCase):
         self.assertIn("await loadExperienceDetail(experienceId);", source)
         self.assertNotIn("/api/runtime/execute", source)
 
+    def test_experience_photos_have_more_button_and_page_loader(self) -> None:
+        source = TRAVEL_JS.read_text(encoding="utf-8")
+
+        self.assertIn("function loadExperiencePhotosPage(elements, data, offset, limit)", source)
+        self.assertIn("function appendExperiencePhotos(data, pageData)", source)
+        self.assertIn("function renderExperiencePhotoControls(elements, data)", source)
+        self.assertIn('moreButton.textContent = "もっと見る"', source)
+        self.assertIn('"/photos?limit="', source)
+        self.assertIn('"&offset="', source)
+
     def test_travel_js_avoids_safari_unfriendly_syntax(self) -> None:
         source = TRAVEL_JS.read_text(encoding="utf-8")
 
