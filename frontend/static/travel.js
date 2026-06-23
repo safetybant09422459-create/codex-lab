@@ -3,6 +3,8 @@ import { api } from "./api.js";
 var loaded = false;
 var loading = false;
 var detailLoading = false;
+var currentTripDetailData = null;
+var currentTravelView = "list";
 
 function getElements() {
   return {
@@ -83,6 +85,7 @@ function showList(elements) {
   if (elements.refreshButton) {
     elements.refreshButton.hidden = false;
   }
+  currentTravelView = "list";
 }
 
 function showDetail(elements) {
@@ -95,6 +98,11 @@ function showDetail(elements) {
   if (elements.refreshButton) {
     elements.refreshButton.hidden = true;
   }
+}
+
+function spotTitle(spot) {
+  spot = spot || {};
+  return spot.display_title || spot.place_name || spot.memo || "無題";
 }
 
 function renderTrips(elements, trips) {
@@ -138,19 +146,30 @@ function renderTrips(elements, trips) {
 
 function renderTimelineItem(item) {
   var row = document.createElement("li");
+  var button = document.createElement("button");
   var time = document.createElement("time");
   var title = document.createElement("span");
   var titleText;
 
   item = item || {};
-  titleText = item.display_title || item.place_name || item.memo || "無題";
+  titleText = spotTitle(item);
 
   row.className = "travel-timeline-item";
+  button.className = "travel-timeline-link";
+  button.type = "button";
+  button.setAttribute("data-spot-id", item.id || "");
   time.textContent = formatTimelineTime(item.start_at);
   title.textContent = titleText;
 
-  row.appendChild(time);
-  row.appendChild(title);
+  button.appendChild(time);
+  button.appendChild(title);
+  button.addEventListener("click", function () {
+    var spotId = this.getAttribute("data-spot-id");
+    if (spotId) {
+      loadSpotDetail(spotId);
+    }
+  });
+  row.appendChild(button);
   return row;
 }
 
@@ -255,6 +274,7 @@ function renderTravelPhotoCard(photo, trip) {
   }
 
   card.className = "travel-photo-card";
+  trip = trip || {};
   if (!thumbnailUrl) {
     showTravelPhotoImageError(card, "Image unavailable");
     return card;
@@ -329,6 +349,11 @@ function renderTravelDetail(elements, data) {
   var index;
 
   clearNode(elements.detailContent);
+  currentTripDetailData = data;
+  currentTravelView = "trip";
+  if (elements.backButton) {
+    elements.backButton.textContent = "一覧へ戻る";
+  }
 
   title.className = "travel-detail-title";
   title.textContent = trip.title || "無題の旅行";
@@ -354,6 +379,56 @@ function renderTravelDetail(elements, data) {
     elements.detailContent.appendChild(list);
   }
 
+  showDetail(elements);
+}
+
+function renderSpotMeta(labelText, valueText) {
+  var row = document.createElement("p");
+  var label = document.createElement("strong");
+  var value = document.createElement("span");
+
+  row.className = "travel-spot-meta";
+  label.textContent = labelText;
+  value.textContent = valueText || "未定";
+  row.appendChild(label);
+  row.appendChild(value);
+  return row;
+}
+
+function renderSpotDetail(elements, data) {
+  var spot = data.spot || {};
+  var photos = data.photos || [];
+  var title = document.createElement("h3");
+  var meta = document.createElement("div");
+  var memo = document.createElement("p");
+  var photosSection;
+
+  clearNode(elements.detailContent);
+  currentTravelView = "spot";
+  if (elements.backButton) {
+    elements.backButton.textContent = "旅行へ戻る";
+  }
+
+  title.className = "travel-detail-title";
+  title.textContent = spotTitle(spot);
+
+  meta.className = "travel-spot-meta-list";
+  meta.appendChild(renderSpotMeta("開始日時", normalizeDate(spot.start_at)));
+  meta.appendChild(renderSpotMeta("終了日時", normalizeDate(spot.end_at)));
+
+  memo.className = "travel-spot-memo";
+  memo.textContent = spot.memo || "メモはありません";
+
+  photosSection = renderTravelPhotosSection(
+    { title: spotTitle(spot) },
+    photos,
+    data.photoError || false
+  );
+
+  elements.detailContent.appendChild(title);
+  elements.detailContent.appendChild(meta);
+  elements.detailContent.appendChild(photosSection);
+  elements.detailContent.appendChild(memo);
   showDetail(elements);
 }
 
@@ -442,6 +517,38 @@ async function loadTravelDetail(tripId) {
   }
 }
 
+async function loadSpotDetail(spotId) {
+  var elements = getElements();
+  var data;
+
+  if (!elements.screen || !elements.detail || !elements.detailContent || detailLoading) {
+    return;
+  }
+
+  detailLoading = true;
+  currentTravelView = "spot";
+  if (elements.backButton) {
+    elements.backButton.textContent = "旅行へ戻る";
+  }
+  setTravelStatus(elements, "Spot詳細読み込み中", false);
+
+  try {
+    data = await api("/api/travel/spots/" + encodeURIComponent(spotId) + "?limit=20");
+    data.photoError = data.photo_error || false;
+    renderSpotDetail(elements, data);
+    setTravelStatus(elements, "Spot詳細取得済み", false);
+  } catch (error) {
+    if (error.message === "Travel spot not found") {
+      renderDetailError(elements, "Spotが見つかりませんでした。");
+    } else {
+      renderDetailError(elements, "Spot詳細を取得できませんでした。");
+    }
+    setTravelStatus(elements, error.message, true);
+  } finally {
+    detailLoading = false;
+  }
+}
+
 function maybeLoadTravelTrips(force) {
   var elements = getElements();
   if (!elements.screen || elements.screen.hidden) {
@@ -462,8 +569,14 @@ function bindTravelScreen() {
 
   if (elements.backButton) {
     elements.backButton.addEventListener("click", function () {
-      showList(getElements());
-      setTravelStatus(getElements(), "取得済み", false);
+      var nextElements = getElements();
+      if (currentTravelView === "spot" && currentTripDetailData) {
+        renderTravelDetail(nextElements, currentTripDetailData);
+        setTravelStatus(nextElements, "詳細取得済み", false);
+        return;
+      }
+      showList(nextElements);
+      setTravelStatus(nextElements, "取得済み", false);
     });
   }
 

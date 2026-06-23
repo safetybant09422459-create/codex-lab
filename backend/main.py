@@ -26,6 +26,7 @@ from .models import (
     ServiceResponse,
     SkillResponse,
     ToolResponse,
+    TravelSpotDetailResponse,
     TravelTripDetailResponse,
     TravelTripPhotosResponse,
     TravelTripsResponse,
@@ -307,6 +308,81 @@ async def travel_get_trip_photos(
         photos=result.get("photos") or [],
         pagination=result.get("pagination") or {},
         source=result.get("source") or "photo_skill",
+        execution_mode="local_travel_read",
+    )
+
+
+@app.get("/api/travel/spots/{spot_id}", response_model=TravelSpotDetailResponse)
+async def travel_get_spot_detail(
+    spot_id: str, limit: int = 20, offset: int = 0
+) -> TravelSpotDetailResponse:
+    bounded_limit = min(max(limit, 1), 20)
+    bounded_offset = max(offset, 0)
+
+    try:
+        spot_response = runtime_service.execute_stub(
+            "get_spot",
+            params={"timeline_item_id": spot_id},
+            confirmed=False,
+            role="guest",
+        )
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not spot_response.get("success"):
+        raise HTTPException(
+            status_code=500,
+            detail=spot_response.get("reason") or "Travel spot request failed",
+        )
+
+    spot_result = spot_response.get("result") or {}
+    spot = spot_result.get("spot")
+    if spot is None:
+        raise HTTPException(status_code=404, detail="Travel spot not found")
+
+    photo_result: dict[str, object] = {}
+    photo_source = "photo_skill"
+    photo_error = False
+    try:
+        photo_response = runtime_service.execute_stub(
+            "get_spot_photos",
+            params={
+                "timeline_item_id": spot_id,
+                "limit": bounded_limit,
+                "offset": bounded_offset,
+            },
+            confirmed=False,
+            role="admin",
+        )
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except ValueError as exc:
+        if str(exc) == "timeline item not found":
+            raise HTTPException(status_code=404, detail="Travel spot not found") from exc
+        photo_error = True
+    except (ImmichConfigurationError, ImmichAPIError):
+        photo_error = True
+
+    if not photo_error:
+        if not photo_response.get("success"):
+            photo_error = True
+        else:
+            photo_result = photo_response.get("result") or {}
+            photo_source = str(photo_result.get("source") or "photo_skill")
+
+    return TravelSpotDetailResponse(
+        spot=spot,
+        photos=photo_result.get("photos") or [],
+        pagination=photo_result.get("pagination") or {},
+        photo_error=photo_error,
+        source=spot_result.get("source") or "local_travel_read",
+        photo_source=photo_source,
         execution_mode="local_travel_read",
     )
 

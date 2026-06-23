@@ -1,6 +1,9 @@
 import unittest
 from typing import Any
 
+from fastapi import HTTPException
+
+from backend import main
 from backend.travel_repository import TravelRepository
 
 
@@ -62,6 +65,24 @@ class FakePhotoProvider:
 
 
 class GetSpotPhotosTest(unittest.TestCase):
+    def test_get_spot_returns_timeline_item(self) -> None:
+        repository = TravelRepository(
+            source=FakeTravelSource(
+                {
+                    "id": "item_1",
+                    "trip_id": "trip_1",
+                    "display_title": "アンパンマンミュージアム1日目",
+                    "start_at": "2026-04-02T10:00:00+09:00",
+                }
+            ),
+            photo_provider=FakePhotoProvider(),
+        )
+
+        result = repository.get_spot("item_1")
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["display_title"], "アンパンマンミュージアム1日目")
+
     def test_uses_timeline_item_range_and_returns_photo_payload(self) -> None:
         provider = FakePhotoProvider()
         repository = TravelRepository(
@@ -131,6 +152,152 @@ class GetSpotPhotosTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "timeline item not found"):
             repository.get_spot_photos("item_1")
+
+
+class FakeRuntimeService:
+    def __init__(self, responses: list[dict[str, Any]]) -> None:
+        self.responses = responses
+        self.calls: list[dict[str, Any]] = []
+
+    def execute_stub(
+        self,
+        tool_id: str,
+        params: dict[str, Any],
+        confirmed: bool = False,
+        role: str | None = None,
+    ) -> dict[str, Any]:
+        self.calls.append(
+            {
+                "tool_id": tool_id,
+                "params": params,
+                "confirmed": confirmed,
+                "role": role,
+            }
+        )
+        return self.responses.pop(0)
+
+
+class TravelSpotApiTest(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        self.original_runtime_service = main.runtime_service
+
+    def tearDown(self) -> None:
+        main.runtime_service = self.original_runtime_service
+
+    async def test_api_executes_spot_and_spot_photos_through_runtime(self) -> None:
+        runtime_service = FakeRuntimeService(
+            [
+                {
+                    "success": True,
+                    "result": {
+                        "timeline_item_id": "item_1",
+                        "spot": {
+                            "id": "item_1",
+                            "trip_id": "trip_1",
+                            "display_title": "アンパンマンミュージアム1日目",
+                            "start_at": "2026-04-02T10:00:00+09:00",
+                            "end_at": "2026-04-02T12:00:00+09:00",
+                            "memo": "初日",
+                        },
+                        "source": "local_travel_read",
+                    },
+                },
+                {
+                    "success": True,
+                    "result": {
+                        "timeline_item_id": "item_1",
+                        "trip_id": "trip_1",
+                        "photos": [
+                            {
+                                "asset_id": "asset_1",
+                                "taken_at": "2026-04-02T10:00:00+09:00",
+                                "thumbnail_url": "/api/photo/assets/asset_1/thumbnail",
+                                "preview_url": "/api/photo/assets/asset_1/preview",
+                                "source": "immich",
+                            }
+                        ],
+                        "pagination": {"limit": 20, "offset": 0, "count": 1},
+                        "source": "photo_skill",
+                    },
+                },
+            ]
+        )
+        main.runtime_service = runtime_service
+
+        response = await main.travel_get_spot_detail("item_1", limit=100, offset=-1)
+
+        self.assertEqual(response.spot["display_title"], "アンパンマンミュージアム1日目")
+        self.assertEqual(response.photos[0]["asset_id"], "asset_1")
+        self.assertFalse(response.photo_error)
+        self.assertEqual(
+            runtime_service.calls,
+            [
+                {
+                    "tool_id": "get_spot",
+                    "params": {"timeline_item_id": "item_1"},
+                    "confirmed": False,
+                    "role": "guest",
+                },
+                {
+                    "tool_id": "get_spot_photos",
+                    "params": {"timeline_item_id": "item_1", "limit": 20, "offset": 0},
+                    "confirmed": False,
+                    "role": "admin",
+                },
+            ],
+        )
+
+    async def test_api_maps_missing_spot_to_404(self) -> None:
+        main.runtime_service = FakeRuntimeService(
+            [
+                {
+                    "success": True,
+                    "result": {
+                        "timeline_item_id": "item_1",
+                        "spot": None,
+                        "source": "local_travel_read",
+                    },
+                }
+            ]
+        )
+
+        with self.assertRaises(HTTPException) as context:
+            await main.travel_get_spot_detail("item_1", limit=20, offset=0)
+
+        self.assertEqual(context.exception.status_code, 404)
+        self.assertEqual(context.exception.detail, "Travel spot not found")
+
+    async def test_api_returns_spot_when_photo_lookup_fails(self) -> None:
+        runtime_service = FakeRuntimeService(
+            [
+                {
+                    "success": True,
+                    "result": {
+                        "timeline_item_id": "item_1",
+                        "spot": {
+                            "id": "item_1",
+                            "trip_id": "trip_1",
+                            "display_title": "アンパンマンミュージアム1日目",
+                        },
+                        "source": "local_travel_read",
+                    },
+                },
+                {
+                    "success": False,
+                    "result": None,
+                    "blocked": True,
+                    "permission_denied": True,
+                    "reason": "photo read denied",
+                },
+            ]
+        )
+        main.runtime_service = runtime_service
+
+        response = await main.travel_get_spot_detail("item_1", limit=20, offset=0)
+
+        self.assertEqual(response.spot["id"], "item_1")
+        self.assertEqual(response.photos, [])
+        self.assertTrue(response.photo_error)
 
 
 if __name__ == "__main__":

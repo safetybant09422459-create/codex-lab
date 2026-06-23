@@ -33,6 +33,15 @@ class TravelExecutor(BaseExecutor):
                 "source": "local_travel_read",
             }
 
+        if tool.id == "get_spot":
+            timeline_item_id = self._timeline_item_id(params)
+            return {
+                "tool_id": tool.id,
+                "timeline_item_id": timeline_item_id,
+                "spot": self.repository.get_spot(timeline_item_id),
+                "source": "local_travel_read",
+            }
+
         if tool.id == "get_trip_photos":
             trip_id = self._trip_id(params)
             return {

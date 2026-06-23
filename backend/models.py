@@ -172,3 +172,13 @@ class TravelTripPhotosResponse(BaseModel):
     pagination: dict[str, Any]
     source: str
     execution_mode: Literal["local_travel_read"]
+
+
+class TravelSpotDetailResponse(BaseModel):
+    spot: dict[str, Any]
+    photos: list[dict[str, Any]]
+    pagination: dict[str, Any]
+    photo_error: bool = False
+    source: str
+    photo_source: str
+    execution_mode: Literal["local_travel_read"]

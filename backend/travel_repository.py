@@ -97,6 +97,12 @@ class TravelRepository:
     def get_timeline_item(self, timeline_item_id: str) -> dict[str, Any] | None:
         return self.source.get_timeline_item(timeline_item_id)
 
+    def get_spot(self, timeline_item_id: str) -> dict[str, Any] | None:
+        normalized_timeline_item_id = self._required_text(
+            timeline_item_id, "timeline_item_id"
+        )
+        return self.get_timeline_item(normalized_timeline_item_id)
+
     def get_trip_photos(
         self, trip_id: str, limit: int = 50, offset: int = 0
     ) -> dict[str, Any]:
