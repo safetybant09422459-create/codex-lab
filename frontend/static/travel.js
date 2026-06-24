@@ -7,6 +7,7 @@ var currentTripDetailData = null;
 var currentTravelView = "list";
 var experiencePhotosPageSize = 20;
 var experiencePhotosLoading = false;
+var experiencePhotoLinkLoading = false;
 var experienceStatusOptions = ["planned", "completed", "skipped", "archived"];
 var experienceCreateStatusOptions = ["planned", "completed", "skipped"];
 var experienceCreateTypeOptions = ["spot", "move", "event", "memo"];
@@ -283,15 +284,24 @@ function showTravelPhotoImageError(card, text) {
   card.appendChild(errorNode);
 }
 
-function renderTravelPhotoCard(photo, trip) {
+function renderTravelPhotoCard(photo, trip, options) {
   var card = document.createElement("div");
   var link = document.createElement("a");
   var image = document.createElement("img");
+  var badges = document.createElement("div");
+  var badge;
+  var actions;
+  var linkButton;
+  var coverButton;
+  var hideButton;
   var thumbnailUrl = "";
   var previewUrl = "";
   var assetId = "";
+  var state = "";
 
   photo = photo || {};
+  options = options || {};
+  state = options.experiencePhotoState || "candidate";
   if (typeof photo.thumbnail_url === "string") {
     thumbnailUrl = photo.thumbnail_url;
   }
@@ -325,6 +335,61 @@ function renderTravelPhotoCard(photo, trip) {
 
   link.appendChild(image);
   card.appendChild(link);
+
+  if (options.showExperienceState) {
+    badges.className = "travel-photo-badges";
+    badge = document.createElement("span");
+    badge.className = "travel-photo-badge";
+    if (state === "cover") {
+      badge.className += " cover";
+      badge.textContent = "カバー";
+    } else if (state === "linked") {
+      badge.className += " linked";
+      badge.textContent = "リンク済み";
+    } else {
+      badge.textContent = "候補";
+    }
+    badges.appendChild(badge);
+    card.appendChild(badges);
+  }
+
+  if (options.showLinkActions && assetId) {
+    actions = document.createElement("div");
+    linkButton = document.createElement("button");
+    coverButton = document.createElement("button");
+    hideButton = document.createElement("button");
+
+    actions.className = "travel-photo-actions";
+
+    linkButton.type = "button";
+    linkButton.className = "travel-photo-action";
+    linkButton.textContent = state === "candidate" ? "採用" : "採用済み";
+    linkButton.disabled = !!options.linkBusy || state === "linked" || state === "cover";
+    linkButton.addEventListener("click", function () {
+      linkExperiencePhoto(options.elements, options.data, assetId, "linked");
+    });
+    actions.appendChild(linkButton);
+
+    coverButton.type = "button";
+    coverButton.className = "travel-photo-action secondary";
+    coverButton.textContent = "カバーにする";
+    coverButton.disabled = !!options.linkBusy || state === "cover";
+    coverButton.addEventListener("click", function () {
+      linkExperiencePhoto(options.elements, options.data, assetId, "cover");
+    });
+    actions.appendChild(coverButton);
+
+    hideButton.type = "button";
+    hideButton.className = "travel-photo-action secondary";
+    hideButton.textContent = "候補から外す";
+    hideButton.disabled = !!options.linkBusy;
+    hideButton.addEventListener("click", function () {
+      hideExperiencePhotoCandidate(options.elements, options.data, assetId);
+    });
+    actions.appendChild(hideButton);
+
+    card.appendChild(actions);
+  }
   return card;
 }
 
@@ -402,6 +467,191 @@ function appendExperiencePhotos(data, pageData) {
   );
 }
 
+function photoAssetId(photo) {
+  if (photo && typeof photo.asset_id === "string" && photo.asset_id) {
+    return photo.asset_id;
+  }
+  if (photo && typeof photo.photo_asset_id === "string" && photo.photo_asset_id) {
+    return photo.photo_asset_id;
+  }
+  return "";
+}
+
+function activeExperiencePhotoLinks(data) {
+  var links = data.photoLinks || data.photo_links || [];
+  var activeLinks = [];
+  var index;
+
+  for (index = 0; index < links.length; index += 1) {
+    if (!links[index].status || links[index].status === "active") {
+      activeLinks.push(links[index]);
+    }
+  }
+  return activeLinks;
+}
+
+function linkedPhotoAssetMap(data) {
+  var links = activeExperiencePhotoLinks(data);
+  var map = {};
+  var assetId;
+  var index;
+
+  for (index = 0; index < links.length; index += 1) {
+    assetId = photoAssetId(links[index]);
+    if (assetId) {
+      map[assetId] = true;
+    }
+  }
+  return map;
+}
+
+function experiencePhotoLinkStateMap(data) {
+  var links = activeExperiencePhotoLinks(data);
+  var map = {};
+  var assetId;
+  var index;
+
+  for (index = 0; index < links.length; index += 1) {
+    assetId = photoAssetId(links[index]);
+    if (assetId) {
+      if (links[index].link_type === "cover") {
+        map[assetId] = "cover";
+      } else if (!map[assetId]) {
+        map[assetId] = "linked";
+      }
+    }
+  }
+  return map;
+}
+
+function experiencePhotoState(data, photo) {
+  var assetId = photoAssetId(photo);
+  var stateMap = experiencePhotoLinkStateMap(data);
+
+  if (assetId && stateMap[assetId]) {
+    return stateMap[assetId];
+  }
+  return "candidate";
+}
+
+function isExperiencePhotoAlreadyLinked(data, photo) {
+  var assetId = photoAssetId(photo);
+  var linkedMap = linkedPhotoAssetMap(data);
+  return !!(assetId && linkedMap[assetId]);
+}
+
+function isExperiencePhotoCandidateHidden(data, photo) {
+  var assetId = photoAssetId(photo);
+  var hidden = data.hiddenExperiencePhotoCandidates || {};
+  return !!(assetId && hidden[assetId]);
+}
+
+function mergeExperiencePhotoLink(data, link) {
+  var links;
+  var index;
+
+  if (!data || !link || typeof link !== "object") {
+    return;
+  }
+  if (!data.photoLinks) {
+    data.photoLinks = [];
+  }
+  links = data.photoLinks;
+
+  if (link.link_type === "cover") {
+    for (index = 0; index < links.length; index += 1) {
+      if (links[index].link_type === "cover" && links[index].status === "active") {
+        links[index].status = "archived";
+      }
+    }
+  }
+
+  for (index = 0; index < links.length; index += 1) {
+    if (links[index].id && link.id && links[index].id === link.id) {
+      links[index] = link;
+      return;
+    }
+  }
+  links.push(link);
+}
+
+function hideExperiencePhotoCandidate(elements, data, assetId) {
+  if (!data.hiddenExperiencePhotoCandidates) {
+    data.hiddenExperiencePhotoCandidates = {};
+  }
+  if (assetId) {
+    data.hiddenExperiencePhotoCandidates[assetId] = true;
+    renderExperienceDetail(elements, data);
+    setTravelStatus(elements, "候補から外しました", false);
+  }
+}
+
+function renderOutOfRangePhotoLinkNotice(elements, data) {
+  var section = document.createElement("section");
+  var title = document.createElement("h4");
+  var button = document.createElement("button");
+  var message = document.createElement("p");
+
+  section.className = "travel-photos travel-out-of-range-photos";
+  title.className = "travel-photos-title";
+  title.textContent = "期間外写真";
+  button.type = "button";
+  button.className = "travel-experience-photo-more";
+  button.textContent = "期間外写真を探す";
+  message.className = "travel-muted";
+  message.hidden = true;
+  message.textContent = "期間外写真検索は未実装です。";
+  button.addEventListener("click", function () {
+    message.hidden = false;
+    setTravelStatus(elements, "期間外写真検索は未実装です", false);
+  });
+
+  section.appendChild(title);
+  section.appendChild(button);
+  section.appendChild(message);
+  return section;
+}
+
+function renderExperienceLinkedPhotosSection(elements, data) {
+  var section = document.createElement("section");
+  var title = document.createElement("h4");
+  var empty = document.createElement("p");
+  var grid = document.createElement("div");
+  var links = activeExperiencePhotoLinks(data);
+  var experience = data.experience || data.spot || {};
+  var state;
+  var index;
+
+  section.className = "travel-photos travel-linked-photos";
+  title.className = "travel-photos-title";
+  title.textContent = "リンク済み写真・カバー写真";
+  section.appendChild(title);
+
+  if (!links.length) {
+    empty.className = "travel-empty";
+    empty.textContent = "リンク済み写真はありません";
+    section.appendChild(empty);
+    return section;
+  }
+
+  grid.className = "travel-photo-grid";
+  for (index = 0; index < links.length; index += 1) {
+    state = links[index].link_type === "cover" ? "cover" : "linked";
+    grid.appendChild(
+      renderTravelPhotoCard(
+        links[index],
+        { title: experienceTitle(experience) },
+        {
+          showExperienceState: true,
+          experiencePhotoState: state,
+        }
+      )
+    );
+  }
+  section.appendChild(grid);
+  return section;
+}
+
 function renderExperiencePhotoControls(elements, data) {
   var controls = document.createElement("div");
   var moreButton = document.createElement("button");
@@ -433,11 +683,13 @@ function renderExperiencePhotosSection(elements, data) {
   var grid = document.createElement("div");
   var photos = data.photos || [];
   var experience = data.experience || data.spot || {};
+  var renderedCount = 0;
+  var photoState;
   var index;
 
   section.className = "travel-photos travel-experience-photos";
   title.className = "travel-photos-title";
-  title.textContent = "Photos";
+  title.textContent = "候補写真";
   section.appendChild(title);
 
   if (data.photoError || data.photo_error) {
@@ -449,16 +701,37 @@ function renderExperiencePhotosSection(elements, data) {
 
   if (!photos.length) {
     empty.className = "travel-empty";
-    empty.textContent = "写真はありません";
+    empty.textContent = "候補写真はありません";
     section.appendChild(empty);
   } else {
     grid.className = "travel-photo-grid";
     for (index = 0; index < photos.length; index += 1) {
-      grid.appendChild(
-        renderTravelPhotoCard(photos[index], { title: experienceTitle(experience) })
-      );
+      if (!isExperiencePhotoCandidateHidden(data, photos[index])) {
+        photoState = experiencePhotoState(data, photos[index]);
+        grid.appendChild(
+          renderTravelPhotoCard(
+            photos[index],
+            { title: experienceTitle(experience) },
+            {
+              showLinkActions: true,
+              showExperienceState: true,
+              experiencePhotoState: photoState,
+              elements: elements,
+              data: data,
+              linkBusy: experiencePhotoLinkLoading,
+            }
+          )
+        );
+        renderedCount += 1;
+      }
     }
-    section.appendChild(grid);
+    if (renderedCount === 0) {
+      empty.className = "travel-empty";
+      empty.textContent = "表示中の候補写真はありません";
+      section.appendChild(empty);
+    } else {
+      section.appendChild(grid);
+    }
   }
 
   section.appendChild(renderExperiencePhotoControls(elements, data));
@@ -900,7 +1173,9 @@ function renderExperienceDetail(elements, data) {
   var type = document.createElement("p");
   var meta = document.createElement("div");
   var memo = document.createElement("p");
+  var linkedPhotosSection;
   var photosSection;
+  var outOfRangeSection;
 
   clearNode(elements.detailContent);
   currentTravelView = "experience";
@@ -922,13 +1197,17 @@ function renderExperienceDetail(elements, data) {
   memo.className = "travel-spot-memo";
   memo.textContent = experience.memo || "メモはありません";
 
+  linkedPhotosSection = renderExperienceLinkedPhotosSection(elements, data);
   photosSection = renderExperiencePhotosSection(elements, data);
+  outOfRangeSection = renderOutOfRangePhotoLinkNotice(elements, data);
 
   elements.detailContent.appendChild(actions);
   elements.detailContent.appendChild(type);
   elements.detailContent.appendChild(title);
   elements.detailContent.appendChild(meta);
+  elements.detailContent.appendChild(linkedPhotosSection);
   elements.detailContent.appendChild(photosSection);
+  elements.detailContent.appendChild(outOfRangeSection);
   elements.detailContent.appendChild(memo);
   showDetail(elements);
 }
@@ -1025,6 +1304,7 @@ async function loadTravelDetail(tripId) {
 async function loadExperienceDetail(experienceId) {
   var elements = getElements();
   var data;
+  var linkData;
   var pagination;
 
   if (!elements.screen || !elements.detail || !elements.detailContent || detailLoading) {
@@ -1047,6 +1327,16 @@ async function loadExperienceDetail(experienceId) {
         "&offset=0"
     );
     data.photoError = data.photo_error || false;
+    try {
+      linkData = await api(
+        "/api/travel/experiences/" +
+          encodeURIComponent(experienceId) +
+          "/photo-links"
+      );
+      data.photoLinks = linkData.links || [];
+    } catch (linkError) {
+      data.photoLinks = [];
+    }
     data.experiencePhotosLimit = experiencePhotosPageSize;
     pagination = experiencePhotoPagination(data);
     data.experiencePhotosHasMore = experiencePhotosHasMore(
@@ -1065,6 +1355,43 @@ async function loadExperienceDetail(experienceId) {
     setTravelStatus(elements, error.message, true);
   } finally {
     detailLoading = false;
+  }
+}
+
+async function linkExperiencePhoto(elements, data, assetId, linkType) {
+  var experienceId = experienceIdFromData(data);
+  var response;
+
+  if (!experienceId || !assetId || experiencePhotoLinkLoading) {
+    return;
+  }
+
+  experiencePhotoLinkLoading = true;
+  renderExperienceDetail(elements, data);
+  setTravelStatus(elements, "写真リンク保存中", false);
+
+  try {
+    response = await api(
+      "/api/travel/experiences/" +
+        encodeURIComponent(experienceId) +
+        "/photo-links",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          photo_asset_id: assetId,
+          link_type: linkType || "linked",
+        }),
+      }
+    );
+    mergeExperiencePhotoLink(data, response.link);
+    renderExperienceDetail(elements, data);
+    setTravelStatus(elements, "写真リンク保存済み", false);
+  } catch (error) {
+    setTravelStatus(elements, error.message || "写真リンクを保存できませんでした。", true);
+  } finally {
+    experiencePhotoLinkLoading = false;
+    renderExperienceDetail(elements, data);
   }
 }
 

@@ -93,6 +93,51 @@ class TravelUiExperienceTest(unittest.TestCase):
         self.assertIn('"/photos?limit="', source)
         self.assertIn('"&offset="', source)
 
+    def test_experience_photo_cards_have_link_actions(self) -> None:
+        source = TRAVEL_JS.read_text(encoding="utf-8")
+
+        self.assertIn("function linkExperiencePhoto(elements, data, assetId, linkType)", source)
+        self.assertIn('linkButton.textContent = state === "candidate" ? "採用" : "採用済み"', source)
+        self.assertIn('coverButton.textContent = "カバーにする"', source)
+        self.assertIn('hideButton.textContent = "候補から外す"', source)
+        self.assertIn('"/photo-links"', source)
+        self.assertIn('photo_asset_id: assetId', source)
+        self.assertIn('link_type: linkType || "linked"', source)
+
+    def test_experience_detail_distinguishes_candidates_linked_and_cover(self) -> None:
+        source = TRAVEL_JS.read_text(encoding="utf-8")
+
+        self.assertIn("function renderExperienceLinkedPhotosSection(elements, data)", source)
+        self.assertIn('title.textContent = "リンク済み写真・カバー写真"', source)
+        self.assertIn('title.textContent = "候補写真"', source)
+        self.assertIn('badge.textContent = "カバー"', source)
+        self.assertIn('badge.textContent = "リンク済み"', source)
+        self.assertIn('badge.textContent = "候補"', source)
+        self.assertIn("function isExperiencePhotoAlreadyLinked(data, photo)", source)
+        self.assertIn("linkedPhotosSection = renderExperienceLinkedPhotosSection(elements, data)", source)
+
+    def test_experience_photo_linking_updates_current_detail_state(self) -> None:
+        source = TRAVEL_JS.read_text(encoding="utf-8")
+
+        self.assertIn("function mergeExperiencePhotoLink(data, link)", source)
+        self.assertIn("mergeExperiencePhotoLink(data, response.link);", source)
+        self.assertIn("renderExperienceDetail(elements, data);", source)
+        self.assertNotIn("await loadExperienceDetail(experienceId);\n    setTravelStatus(elements, \"写真リンク保存済み\"", source)
+
+    def test_experience_photo_candidates_can_be_hidden_in_ui(self) -> None:
+        source = TRAVEL_JS.read_text(encoding="utf-8")
+
+        self.assertIn("function hideExperiencePhotoCandidate(elements, data, assetId)", source)
+        self.assertIn("hiddenExperiencePhotoCandidates", source)
+        self.assertIn("function isExperiencePhotoCandidateHidden(data, photo)", source)
+
+    def test_out_of_range_photo_link_entrypoint_exists(self) -> None:
+        source = TRAVEL_JS.read_text(encoding="utf-8")
+
+        self.assertIn("function renderOutOfRangePhotoLinkNotice(elements, data)", source)
+        self.assertIn('button.textContent = "期間外写真を探す"', source)
+        self.assertIn('message.textContent = "期間外写真検索は未実装です。"', source)
+
     def test_travel_js_avoids_safari_unfriendly_syntax(self) -> None:
         source = TRAVEL_JS.read_text(encoding="utf-8")
 
