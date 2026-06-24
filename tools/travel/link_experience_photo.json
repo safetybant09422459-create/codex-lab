@@ -1,0 +1,49 @@
+{
+  "id": "link_experience_photo",
+  "skill_id": "travel",
+  "name": "Link Experience Photo",
+  "description": "Explicitly attach a Photo skill asset to a Travel Experience as a linked or cover photo.",
+  "status": "implemented",
+  "mode": "write",
+  "risk_level": "medium",
+  "confirmation_required": true,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "experience_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Travel experience id."
+      },
+      "photo_asset_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Photo skill asset id."
+      },
+      "link_type": {
+        "type": "string",
+        "enum": ["linked", "cover"],
+        "default": "linked"
+      },
+      "created_by": {
+        "type": "string",
+        "description": "Actor creating the link."
+      }
+    },
+    "required": ["experience_id", "photo_asset_id"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "link": {
+        "type": "object"
+      },
+      "source": {
+        "type": "string",
+        "const": "local_travel_write"
+      }
+    },
+    "required": ["link", "source"]
+  }
+}

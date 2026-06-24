@@ -35,6 +35,17 @@ class TravelSource(Protocol):
     def set_spot_cover_image(self, **kwargs: Any) -> dict[str, Any]:
         raise NotImplementedError
 
+    def link_experience_photo(self, **kwargs: Any) -> dict[str, Any]:
+        raise NotImplementedError
+
+    def get_experience_photo_links(
+        self, experience_id: str, status: str = "active"
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    def archive_experience_photo_link(self, **kwargs: Any) -> dict[str, Any] | None:
+        raise NotImplementedError
+
 
 class PhotoCandidateProvider(Protocol):
     def get_photos(
@@ -46,6 +57,9 @@ class PhotoCandidateProvider(Protocol):
         raise NotImplementedError
 
     def thumbnail_url(self, asset_id: str) -> str:
+        raise NotImplementedError
+
+    def preview_url(self, asset_id: str) -> str:
         raise NotImplementedError
 
 
@@ -75,6 +89,13 @@ class PhotoRepositoryCandidateProvider:
 
             self.repository = PhotoRepository()
         return self.repository.thumbnail_url(asset_id)
+
+    def preview_url(self, asset_id: str) -> str:
+        if self.repository is None:
+            from .photo_repository import PhotoRepository
+
+            self.repository = PhotoRepository()
+        return self.repository.preview_url(asset_id)
 
 
 class TravelRepository:
@@ -396,6 +417,87 @@ class TravelRepository:
             "source": "local_travel_write",
         }
 
+    def link_experience_photo(
+        self,
+        *,
+        experience_id: str,
+        photo_asset_id: str,
+        link_type: str = "linked",
+        created_by: str | None = None,
+    ) -> dict[str, Any]:
+        normalized_experience_id = self._required_text(
+            experience_id, "experience_id"
+        )
+        normalized_photo_asset_id = self._required_text(
+            photo_asset_id, "photo_asset_id"
+        )
+        normalized_link_type = self._photo_link_type(link_type)
+        normalized_created_by = self._optional_text(created_by) or "admin"
+
+        if self.get_experience(normalized_experience_id) is None:
+            raise ValueError("experience not found")
+
+        asset = self.photo_provider.get_asset(normalized_photo_asset_id)
+        confirmed_asset_id = self._required_text(
+            asset.get("asset_id", normalized_photo_asset_id), "photo_asset_id"
+        )
+        link = self.source.link_experience_photo(
+            experience_id=normalized_experience_id,
+            photo_asset_id=confirmed_asset_id,
+            link_type=normalized_link_type,
+            created_by=normalized_created_by,
+        )
+        return {
+            "link": self._normalize_photo_link(link),
+            "source": "local_travel_write",
+        }
+
+    def get_experience_photo_links(
+        self, experience_id: str, status: str = "active"
+    ) -> dict[str, Any]:
+        normalized_experience_id = self._required_text(
+            experience_id, "experience_id"
+        )
+        normalized_status = self._photo_link_status(status)
+        experience = self.get_experience(normalized_experience_id)
+        if experience is None:
+            raise ValueError("experience not found")
+
+        links = [
+            self._normalize_photo_link(link)
+            for link in self.source.get_experience_photo_links(
+                normalized_experience_id, normalized_status
+            )
+        ]
+        return {
+            "experience_id": normalized_experience_id,
+            "timeline_item_id": normalized_experience_id,
+            "trip_id": experience.get("trip_id"),
+            "links": links,
+            "count": len(links),
+            "source": "local_travel_read",
+        }
+
+    def archive_experience_photo_link(
+        self, *, experience_id: str, link_id: str
+    ) -> dict[str, Any]:
+        normalized_experience_id = self._required_text(
+            experience_id, "experience_id"
+        )
+        normalized_link_id = self._required_text(link_id, "link_id")
+        if self.get_experience(normalized_experience_id) is None:
+            raise ValueError("experience not found")
+
+        link = self.source.archive_experience_photo_link(
+            experience_id=normalized_experience_id, link_id=normalized_link_id
+        )
+        if link is None:
+            raise ValueError("photo link not found")
+        return {
+            "link": self._normalize_photo_link(link),
+            "source": "local_travel_write",
+        }
+
     def _required_text(self, value: Any, field_name: str) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
@@ -471,6 +573,28 @@ class TravelRepository:
         if experience_type not in VALID_EXPERIENCE_TYPES:
             raise ValueError("experience_type must be spot, move, event, or memo")
         return experience_type
+
+    def _photo_link_type(self, value: Any) -> str:
+        link_type = self._required_text(value, "link_type")
+        if link_type not in {"linked", "cover"}:
+            raise ValueError("link_type must be linked or cover")
+        return link_type
+
+    def _photo_link_status(self, value: Any) -> str:
+        status = self._required_text(value, "status")
+        if status not in {"active", "archived"}:
+            raise ValueError("status must be active or archived")
+        return status
+
+    def _normalize_photo_link(self, link: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(link)
+        asset_id = self._required_text(
+            normalized.get("photo_asset_id"), "photo_asset_id"
+        )
+        normalized["asset_id"] = asset_id
+        normalized["thumbnail_url"] = self.photo_provider.thumbnail_url(asset_id)
+        normalized["preview_url"] = self.photo_provider.preview_url(asset_id)
+        return normalized
 
     def _limit(self, value: Any) -> int:
         if value is None:

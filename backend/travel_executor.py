@@ -92,6 +92,16 @@ class TravelExecutor(BaseExecutor):
                 "source": "photo_skill",
             }
 
+        if tool.id == "get_experience_photo_links":
+            experience_id = self._experience_id(params)
+            return {
+                "tool_id": tool.id,
+                **self.repository.get_experience_photo_links(
+                    experience_id,
+                    status=params.get("status", "active"),
+                ),
+            }
+
         if tool.id == "create_trip":
             return {
                 "tool_id": tool.id,
@@ -195,6 +205,28 @@ class TravelExecutor(BaseExecutor):
                 "source": "local_travel_write",
             }
 
+        if tool.id == "link_experience_photo":
+            result = self.repository.link_experience_photo(
+                experience_id=self._experience_id(params),
+                photo_asset_id=params.get("photo_asset_id"),
+                link_type=params.get("link_type", "linked"),
+                created_by=params.get("created_by"),
+            )
+            return {
+                "tool_id": tool.id,
+                **result,
+            }
+
+        if tool.id == "archive_experience_photo_link":
+            result = self.repository.archive_experience_photo_link(
+                experience_id=self._experience_id(params),
+                link_id=params.get("link_id"),
+            )
+            return {
+                "tool_id": tool.id,
+                **result,
+            }
+
         if tool.id == "set_trip_cover_image":
             return {
                 "tool_id": tool.id,
@@ -230,6 +262,8 @@ class TravelExecutor(BaseExecutor):
             "create_timeline_item",
             "set_trip_cover_image",
             "set_spot_cover_image",
+            "link_experience_photo",
+            "archive_experience_photo_link",
         }:
             return "local_travel_write"
         return "local_travel_read"

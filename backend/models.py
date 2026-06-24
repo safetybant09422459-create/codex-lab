@@ -189,6 +189,28 @@ class TravelExperiencePhotosResponse(BaseModel):
     execution_mode: Literal["local_travel_read"]
 
 
+class TravelExperiencePhotoLinksResponse(BaseModel):
+    experience_id: str
+    timeline_item_id: str | None = None
+    trip_id: str | None = None
+    links: list[dict[str, Any]]
+    count: int
+    source: str
+    execution_mode: Literal["local_travel_read"]
+
+
+class TravelExperiencePhotoLinkRequest(BaseModel):
+    photo_asset_id: str
+    link_type: Literal["linked", "cover"] = "linked"
+
+
+class TravelExperiencePhotoLinkWriteResponse(BaseModel):
+    link: dict[str, Any]
+    experience_id: str
+    source: str
+    execution_mode: Literal["local_travel_write"]
+
+
 class TravelSpotDetailResponse(BaseModel):
     experience: dict[str, Any] | None = None
     experience_id: str | None = None

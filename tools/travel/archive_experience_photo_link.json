@@ -1,0 +1,40 @@
+{
+  "id": "archive_experience_photo_link",
+  "skill_id": "travel",
+  "name": "Archive Experience Photo Link",
+  "description": "Archive an explicit photo link on a Travel Experience without physically deleting it.",
+  "status": "implemented",
+  "mode": "write",
+  "risk_level": "medium",
+  "confirmation_required": true,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "experience_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Travel experience id."
+      },
+      "link_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Experience photo link id."
+      }
+    },
+    "required": ["experience_id", "link_id"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "link": {
+        "type": "object"
+      },
+      "source": {
+        "type": "string",
+        "const": "local_travel_write"
+      }
+    },
+    "required": ["link", "source"]
+  }
+}

@@ -27,6 +27,9 @@ from .models import (
     SkillResponse,
     ToolResponse,
     TravelExperienceDetailResponse,
+    TravelExperiencePhotoLinkRequest,
+    TravelExperiencePhotoLinkWriteResponse,
+    TravelExperiencePhotoLinksResponse,
     TravelExperiencePhotosResponse,
     TravelExperienceCreateRequest,
     TravelExperienceUpdateRequest,
@@ -402,6 +405,117 @@ async def travel_get_experience_photos(
     )
 
 
+@app.get(
+    "/api/travel/experiences/{experience_id}/photo-links",
+    response_model=TravelExperiencePhotoLinksResponse,
+)
+async def travel_get_experience_photo_links(
+    experience_id: str,
+) -> TravelExperiencePhotoLinksResponse:
+    try:
+        response = runtime_service.execute_stub(
+            "get_experience_photo_links",
+            params={"experience_id": experience_id},
+            confirmed=False,
+            role="admin",
+        )
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except ValueError as exc:
+        if str(exc) == "experience not found":
+            raise HTTPException(
+                status_code=404, detail="Travel experience not found"
+            ) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not response.get("success"):
+        if response.get("permission_denied"):
+            raise HTTPException(
+                status_code=403,
+                detail=response.get("reason") or "Travel photo links permission denied",
+            )
+        raise HTTPException(
+            status_code=500,
+            detail=response.get("reason") or "Travel photo links request failed",
+        )
+
+    result = response.get("result") or {}
+    links = result.get("links") or []
+    return TravelExperiencePhotoLinksResponse(
+        experience_id=str(result.get("experience_id") or experience_id),
+        timeline_item_id=result.get("timeline_item_id") or result.get("experience_id"),
+        trip_id=result.get("trip_id"),
+        links=links,
+        count=int(result.get("count") or len(links)),
+        source=str(result.get("source") or "local_travel_read"),
+        execution_mode="local_travel_read",
+    )
+
+
+@app.post(
+    "/api/travel/experiences/{experience_id}/photo-links",
+    response_model=TravelExperiencePhotoLinkWriteResponse,
+)
+async def travel_link_experience_photo(
+    experience_id: str, request: TravelExperiencePhotoLinkRequest
+) -> TravelExperiencePhotoLinkWriteResponse:
+    try:
+        response = runtime_service.execute_stub(
+            "link_experience_photo",
+            params={
+                "experience_id": experience_id,
+                "photo_asset_id": request.photo_asset_id,
+                "link_type": request.link_type,
+            },
+            confirmed=True,
+            role="admin",
+        )
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except ValueError as exc:
+        if str(exc) == "experience not found":
+            raise HTTPException(
+                status_code=404, detail="Travel experience not found"
+            ) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return _travel_photo_link_write_response(response, experience_id)
+
+
+@app.post(
+    "/api/travel/experiences/{experience_id}/photo-links/{link_id}/archive",
+    response_model=TravelExperiencePhotoLinkWriteResponse,
+)
+async def travel_archive_experience_photo_link(
+    experience_id: str, link_id: str
+) -> TravelExperiencePhotoLinkWriteResponse:
+    try:
+        response = runtime_service.execute_stub(
+            "archive_experience_photo_link",
+            params={"experience_id": experience_id, "link_id": link_id},
+            confirmed=True,
+            role="admin",
+        )
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except ValueError as exc:
+        if str(exc) == "experience not found":
+            raise HTTPException(
+                status_code=404, detail="Travel experience not found"
+            ) from exc
+        if str(exc) == "photo link not found":
+            raise HTTPException(status_code=404, detail="Travel photo link not found") from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return _travel_photo_link_write_response(response, experience_id)
+
+
 @app.get("/api/travel/spots/{spot_id}", response_model=TravelSpotDetailResponse)
 async def travel_get_spot_detail(
     spot_id: str, limit: int = 20, offset: int = 0
@@ -702,6 +816,42 @@ def _travel_experience_write_response(
         timeline_item_id=result.get("timeline_item_id")
         or experience.get("timeline_item_id")
         or experience.get("id"),
+        source=str(result.get("source") or "local_travel_write"),
+        execution_mode="local_travel_write",
+    )
+
+
+def _travel_photo_link_write_response(
+    response: dict[str, object], experience_id: str
+) -> TravelExperiencePhotoLinkWriteResponse:
+    if not response.get("success"):
+        if response.get("permission_denied"):
+            raise HTTPException(
+                status_code=403,
+                detail=response.get("reason") or "Travel photo link permission denied",
+            )
+        if response.get("blocked") and response.get("confirmation_required"):
+            raise HTTPException(
+                status_code=409,
+                detail=response.get("reason")
+                or "Travel photo link confirmation required",
+            )
+        raise HTTPException(
+            status_code=500,
+            detail=response.get("reason") or "Travel photo link write failed",
+        )
+
+    result = response.get("result") or {}
+    if not isinstance(result, dict):
+        raise HTTPException(status_code=500, detail="Travel photo link write failed")
+
+    link = result.get("link")
+    if not isinstance(link, dict):
+        raise HTTPException(status_code=500, detail="Travel photo link write failed")
+
+    return TravelExperiencePhotoLinkWriteResponse(
+        link=link,
+        experience_id=str(link.get("experience_id") or experience_id),
         source=str(result.get("source") or "local_travel_write"),
         execution_mode="local_travel_write",
     )

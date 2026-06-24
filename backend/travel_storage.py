@@ -70,6 +70,18 @@ class SQLiteTravelStorage:
                     status TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS travel_experience_photo_links (
+                    id TEXT PRIMARY KEY,
+                    experience_id TEXT NOT NULL,
+                    photo_asset_id TEXT NOT NULL,
+                    link_type TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_by TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(experience_id) REFERENCES travel_timeline_items(id)
+                );
                 """
             )
 
@@ -421,6 +433,124 @@ class SQLiteTravelStorage:
                 (cover_image["id"], now, timeline_item_id),
             )
         return cover_image
+
+    def link_experience_photo(
+        self,
+        *,
+        experience_id: str,
+        photo_asset_id: str,
+        link_type: str,
+        created_by: str = "admin",
+    ) -> dict[str, Any]:
+        now = self._now()
+        with self._connect() as conn:
+            item = conn.execute(
+                """
+                SELECT id
+                FROM travel_timeline_items
+                WHERE id = ?
+                """,
+                (experience_id,),
+            ).fetchone()
+            if item is None:
+                raise ValueError("experience not found")
+
+            if link_type == "cover":
+                conn.execute(
+                    """
+                    UPDATE travel_experience_photo_links
+                    SET status = 'archived', updated_at = ?
+                    WHERE experience_id = ?
+                      AND link_type = 'cover'
+                      AND status = 'active'
+                    """,
+                    (now, experience_id),
+                )
+
+            existing = conn.execute(
+                """
+                SELECT id, experience_id, photo_asset_id, link_type, status,
+                       created_by, created_at, updated_at
+                FROM travel_experience_photo_links
+                WHERE experience_id = ?
+                  AND photo_asset_id = ?
+                  AND link_type = ?
+                  AND status = 'active'
+                """,
+                (experience_id, photo_asset_id, link_type),
+            ).fetchone()
+            if existing is not None:
+                return self._row_to_dict(existing)
+
+            link = {
+                "id": f"explink_{uuid.uuid4().hex}",
+                "experience_id": experience_id,
+                "photo_asset_id": photo_asset_id,
+                "link_type": link_type,
+                "status": "active",
+                "created_by": created_by,
+                "created_at": now,
+                "updated_at": now,
+            }
+            conn.execute(
+                """
+                INSERT INTO travel_experience_photo_links (
+                    id, experience_id, photo_asset_id, link_type, status,
+                    created_by, created_at, updated_at
+                )
+                VALUES (
+                    :id, :experience_id, :photo_asset_id, :link_type, :status,
+                    :created_by, :created_at, :updated_at
+                )
+                """,
+                link,
+            )
+        return link
+
+    def get_experience_photo_links(
+        self, experience_id: str, status: str = "active"
+    ) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, experience_id, photo_asset_id, link_type, status,
+                       created_by, created_at, updated_at
+                FROM travel_experience_photo_links
+                WHERE experience_id = ?
+                  AND status = ?
+                ORDER BY link_type = 'cover' DESC, created_at, id
+                """,
+                (experience_id, status),
+            ).fetchall()
+        return [self._row_to_dict(row) for row in rows]
+
+    def archive_experience_photo_link(
+        self, *, experience_id: str, link_id: str
+    ) -> dict[str, Any] | None:
+        now = self._now()
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE travel_experience_photo_links
+                SET status = 'archived', updated_at = ?
+                WHERE id = ?
+                  AND experience_id = ?
+                """,
+                (now, link_id, experience_id),
+            )
+            if cursor.rowcount == 0:
+                return None
+            row = conn.execute(
+                """
+                SELECT id, experience_id, photo_asset_id, link_type, status,
+                       created_by, created_at, updated_at
+                FROM travel_experience_photo_links
+                WHERE id = ?
+                  AND experience_id = ?
+                """,
+                (link_id, experience_id),
+            ).fetchone()
+        return self._row_to_dict(row) if row is not None else None
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
