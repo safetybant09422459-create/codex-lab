@@ -2,7 +2,7 @@
   "id": "get_experience_photo_links",
   "skill_id": "travel",
   "name": "Get Experience Photo Links",
-  "description": "Get active photo links explicitly attached to a Travel Experience.",
+  "description": "Get active or archived photo links explicitly attached to, covering, or hidden from a Travel Experience.",
   "status": "implemented",
   "mode": "read",
   "risk_level": "medium",

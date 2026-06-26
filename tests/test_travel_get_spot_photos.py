@@ -37,6 +37,11 @@ class FakeTravelSource:
     def set_spot_cover_image(self, **kwargs: Any) -> dict[str, Any]:
         raise NotImplementedError
 
+    def get_experience_photo_links(
+        self, experience_id: str, status: str = "active"
+    ) -> list[dict[str, Any]]:
+        return []
+
 
 class FakePhotoProvider:
     def __init__(self) -> None:

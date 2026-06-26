@@ -417,32 +417,48 @@ button:disabled {
   line-height: 1.1;
 }
 
-.travel-photo-badge.linked {
-  border-color: var(--success);
-  color: var(--success);
-}
-
 .travel-photo-badge.cover {
   border-color: var(--accent);
   background: var(--accent);
   color: #fff;
 }
 
-.travel-photo-actions {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 6px;
-  padding: 7px;
-  border-top: 1px solid var(--border);
+.travel-photo-select-button {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  min-height: 28px;
+  border-radius: 6px;
+  padding: 0 7px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1.1;
+  cursor: pointer;
 }
 
-.travel-photo-action {
-  min-height: 34px;
-  width: 100%;
-  border-radius: 6px;
-  padding: 0 8px;
-  font-size: 0.82rem;
-  line-height: 1.1;
+.travel-experience-photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.travel-experience-photo-action {
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+
+.travel-experience-photo-action.secondary {
+  color: var(--muted);
 }
 
 .travel-experience-photo-controls {

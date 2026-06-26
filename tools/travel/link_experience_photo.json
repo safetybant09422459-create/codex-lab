@@ -2,7 +2,7 @@
   "id": "link_experience_photo",
   "skill_id": "travel",
   "name": "Link Experience Photo",
-  "description": "Explicitly attach a Photo skill asset to a Travel Experience as a linked or cover photo.",
+  "description": "Explicitly attach, cover, or hide a Photo skill asset for a Travel Experience.",
   "status": "implemented",
   "mode": "write",
   "risk_level": "medium",
@@ -23,7 +23,7 @@
       },
       "link_type": {
         "type": "string",
-        "enum": ["linked", "cover"],
+        "enum": ["linked", "cover", "hidden", "excluded"],
         "default": "linked"
       },
       "created_by": {

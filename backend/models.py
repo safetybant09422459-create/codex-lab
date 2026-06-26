@@ -201,7 +201,7 @@ class TravelExperiencePhotoLinksResponse(BaseModel):
 
 class TravelExperiencePhotoLinkRequest(BaseModel):
     photo_asset_id: str
-    link_type: Literal["linked", "cover"] = "linked"
+    link_type: Literal["linked", "cover", "hidden", "excluded"] = "linked"
 
 
 class TravelExperiencePhotoLinkWriteResponse(BaseModel):

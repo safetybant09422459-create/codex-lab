@@ -138,8 +138,9 @@ class FakeTravelSource:
 
 
 class FakePhotoProvider:
-    def __init__(self) -> None:
+    def __init__(self, photos: list[dict[str, Any]] | None = None) -> None:
         self.calls: list[dict[str, Any]] = []
+        self.photos = photos
 
     def get_photos(
         self, from_at: str, to_at: str, limit: int, offset: int = 0
@@ -147,6 +148,8 @@ class FakePhotoProvider:
         self.calls.append(
             {"from_at": from_at, "to_at": to_at, "limit": limit, "offset": offset}
         )
+        if self.photos is not None:
+            return [dict(photo) for photo in self.photos]
         return [{"asset_id": "asset_1", "taken_at": from_at, "source": "immich"}]
 
     def get_asset(self, asset_id: str) -> dict[str, Any]:
@@ -432,6 +435,60 @@ class ExperienceRepositoryTest(unittest.TestCase):
         self.assertEqual(link["status"], "active")
         self.assertEqual(link["thumbnail_url"], "/api/photo/assets/asset_1/thumbnail")
 
+    def test_hidden_and_excluded_experience_photo_links_can_be_created(self) -> None:
+        source = FakeTravelSource(
+            {
+                "id": "item_1",
+                "trip_id": "trip_1",
+                "item_type": "spot",
+                "display_title": "水族館",
+            }
+        )
+        repository = TravelRepository(source=source, photo_provider=FakePhotoProvider())
+
+        hidden = repository.link_experience_photo(
+            experience_id="item_1", photo_asset_id="asset_1", link_type="hidden"
+        )
+        excluded = repository.link_experience_photo(
+            experience_id="item_1", photo_asset_id="asset_2", link_type="excluded"
+        )
+
+        self.assertEqual(hidden["link"]["link_type"], "hidden")
+        self.assertEqual(hidden["link"]["status"], "active")
+        self.assertEqual(excluded["link"]["link_type"], "excluded")
+        self.assertEqual(excluded["link"]["status"], "active")
+
+    def test_hidden_and_excluded_photos_do_not_return_as_candidates(self) -> None:
+        source = FakeTravelSource(
+            {
+                "id": "item_1",
+                "trip_id": "trip_1",
+                "item_type": "spot",
+                "display_title": "水族館",
+                "start_at": "2026-04-02T10:00:00+09:00",
+                "end_at": "2026-04-02T11:00:00+09:00",
+            }
+        )
+        provider = FakePhotoProvider(
+            photos=[
+                {"asset_id": "asset_1", "source": "immich"},
+                {"asset_id": "asset_2", "source": "immich"},
+                {"asset_id": "asset_3", "source": "immich"},
+            ]
+        )
+        repository = TravelRepository(source=source, photo_provider=provider)
+        repository.link_experience_photo(
+            experience_id="item_1", photo_asset_id="asset_1", link_type="hidden"
+        )
+        repository.link_experience_photo(
+            experience_id="item_1", photo_asset_id="asset_2", link_type="excluded"
+        )
+
+        result = repository.get_experience_photos("item_1")
+
+        self.assertEqual([photo["asset_id"] for photo in result["photos"]], ["asset_3"])
+        self.assertEqual(result["pagination"]["count"], 1)
+
     def test_duplicate_experience_photo_link_reuses_active_link(self) -> None:
         source = FakeTravelSource(
             {
@@ -525,6 +582,28 @@ class ExperienceRepositoryTest(unittest.TestCase):
         self.assertEqual(archived["link"]["status"], "archived")
         self.assertEqual(repository.get_experience_photo_links("item_1")["links"], [])
 
+    def test_archive_cover_experience_photo_link_removes_active_cover(self) -> None:
+        source = FakeTravelSource(
+            {
+                "id": "item_1",
+                "trip_id": "trip_1",
+                "item_type": "spot",
+                "display_title": "水族館",
+            }
+        )
+        repository = TravelRepository(source=source, photo_provider=FakePhotoProvider())
+        cover = repository.link_experience_photo(
+            experience_id="item_1", photo_asset_id="asset_1", link_type="cover"
+        )
+
+        archived = repository.archive_experience_photo_link(
+            experience_id="item_1", link_id=cover["link"]["id"]
+        )
+
+        self.assertEqual(archived["link"]["link_type"], "cover")
+        self.assertEqual(archived["link"]["status"], "archived")
+        self.assertEqual(repository.get_experience_photo_links("item_1")["links"], [])
+
 
 class ExperienceExecutorTest(unittest.TestCase):
     def test_executes_experience_tools(self) -> None:
@@ -614,10 +693,19 @@ class ExperienceExecutorTest(unittest.TestCase):
                 "link_id": link_result["link"]["id"],
             },
         )
+        hidden_result = executor.execute(
+            SimpleNamespace(id="link_experience_photo"),
+            {
+                "experience_id": "item_1",
+                "photo_asset_id": "asset_2",
+                "link_type": "hidden",
+            },
+        )
 
         self.assertEqual(link_result["link"]["photo_asset_id"], "asset_1")
         self.assertEqual(links_result["count"], 1)
         self.assertEqual(archive_result["link"]["status"], "archived")
+        self.assertEqual(hidden_result["link"]["link_type"], "hidden")
 
     def test_runtime_requires_confirmation_and_admin_for_update_tools(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -1068,6 +1156,51 @@ class TravelExperienceApiTest(unittest.IsolatedAsyncioTestCase):
                         "experience_id": "item_1",
                         "photo_asset_id": "asset_1",
                         "link_type": "linked",
+                    },
+                    "confirmed": True,
+                    "role": "admin",
+                },
+            ],
+        )
+
+    async def test_api_links_hidden_experience_photo_through_runtime(self) -> None:
+        runtime_service = FakeRuntimeService(
+            [
+                {
+                    "success": True,
+                    "result": {
+                        "link": {
+                            "id": "link_1",
+                            "experience_id": "item_1",
+                            "photo_asset_id": "asset_1",
+                            "asset_id": "asset_1",
+                            "link_type": "hidden",
+                            "status": "active",
+                        },
+                        "source": "local_travel_write",
+                    },
+                }
+            ]
+        )
+        main.runtime_service = runtime_service
+
+        response = await main.travel_link_experience_photo(
+            "item_1",
+            TravelExperiencePhotoLinkRequest(
+                photo_asset_id="asset_1", link_type="hidden"
+            ),
+        )
+
+        self.assertEqual(response.link["link_type"], "hidden")
+        self.assertEqual(
+            runtime_service.calls,
+            [
+                {
+                    "tool_id": "link_experience_photo",
+                    "params": {
+                        "experience_id": "item_1",
+                        "photo_asset_id": "asset_1",
+                        "link_type": "hidden",
                     },
                     "confirmed": True,
                     "role": "admin",

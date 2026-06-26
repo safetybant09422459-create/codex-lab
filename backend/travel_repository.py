@@ -5,6 +5,8 @@ from .travel_storage import SQLiteTravelStorage
 
 JST = timezone(timedelta(hours=9))
 VALID_EXPERIENCE_TYPES = {"spot", "move", "event", "memo"}
+EXCLUDED_EXPERIENCE_PHOTO_LINK_TYPES = {"hidden", "excluded"}
+EXPERIENCE_PHOTO_LINK_TYPES = {"linked", "cover", "hidden", "excluded"}
 
 
 class TravelSource(Protocol):
@@ -193,6 +195,9 @@ class TravelRepository:
             to_at=to_at.isoformat(),
             limit=normalized_limit,
             offset=normalized_offset,
+        )
+        photos = self._without_excluded_experience_photos(
+            normalized_timeline_item_id, photos
         )
         return {
             "experience_id": normalized_timeline_item_id,
@@ -576,8 +581,8 @@ class TravelRepository:
 
     def _photo_link_type(self, value: Any) -> str:
         link_type = self._required_text(value, "link_type")
-        if link_type not in {"linked", "cover"}:
-            raise ValueError("link_type must be linked or cover")
+        if link_type not in EXPERIENCE_PHOTO_LINK_TYPES:
+            raise ValueError("link_type must be linked, cover, hidden, or excluded")
         return link_type
 
     def _photo_link_status(self, value: Any) -> str:
@@ -595,6 +600,37 @@ class TravelRepository:
         normalized["thumbnail_url"] = self.photo_provider.thumbnail_url(asset_id)
         normalized["preview_url"] = self.photo_provider.preview_url(asset_id)
         return normalized
+
+    def _without_excluded_experience_photos(
+        self, experience_id: str, photos: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        excluded_asset_ids = self._excluded_experience_photo_asset_ids(experience_id)
+        if not excluded_asset_ids:
+            return photos
+
+        visible_photos = []
+        for photo in photos:
+            asset_id = self._photo_asset_id(photo)
+            if asset_id is None or asset_id not in excluded_asset_ids:
+                visible_photos.append(photo)
+        return visible_photos
+
+    def _excluded_experience_photo_asset_ids(self, experience_id: str) -> set[str]:
+        links = self.source.get_experience_photo_links(experience_id, "active")
+        asset_ids: set[str] = set()
+        for link in links:
+            if link.get("link_type") in EXCLUDED_EXPERIENCE_PHOTO_LINK_TYPES:
+                asset_id = self._photo_asset_id(link)
+                if asset_id is not None:
+                    asset_ids.add(asset_id)
+        return asset_ids
+
+    def _photo_asset_id(self, item: dict[str, Any]) -> str | None:
+        for key in ("asset_id", "photo_asset_id"):
+            value = item.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
 
     def _limit(self, value: Any) -> int:
         if value is None:

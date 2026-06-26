@@ -8,6 +8,7 @@ var currentTravelView = "list";
 var experiencePhotosPageSize = 20;
 var experiencePhotosLoading = false;
 var experiencePhotoLinkLoading = false;
+var experienceCoverSelectionMode = false;
 var experienceStatusOptions = ["planned", "completed", "skipped", "archived"];
 var experienceCreateStatusOptions = ["planned", "completed", "skipped"];
 var experienceCreateTypeOptions = ["spot", "move", "event", "memo"];
@@ -290,10 +291,7 @@ function renderTravelPhotoCard(photo, trip, options) {
   var image = document.createElement("img");
   var badges = document.createElement("div");
   var badge;
-  var actions;
-  var linkButton;
-  var coverButton;
-  var hideButton;
+  var selectButton;
   var thumbnailUrl = "";
   var previewUrl = "";
   var assetId = "";
@@ -334,6 +332,12 @@ function renderTravelPhotoCard(photo, trip, options) {
   image.src = thumbnailUrl;
 
   link.appendChild(image);
+  if (options.coverSelectionMode && assetId) {
+    link.addEventListener("click", function (event) {
+      event.preventDefault();
+      selectExperienceCoverPhoto(options.elements, options.data, assetId);
+    });
+  }
   card.appendChild(link);
 
   if (options.showExperienceState) {
@@ -343,52 +347,25 @@ function renderTravelPhotoCard(photo, trip, options) {
     if (state === "cover") {
       badge.className += " cover";
       badge.textContent = "カバー";
-    } else if (state === "linked") {
-      badge.className += " linked";
-      badge.textContent = "リンク済み";
     } else {
-      badge.textContent = "候補";
+      badge.textContent = "";
     }
-    badges.appendChild(badge);
-    card.appendChild(badges);
+    if (badge.textContent) {
+      badges.appendChild(badge);
+      card.appendChild(badges);
+    }
   }
 
-  if (options.showLinkActions && assetId) {
-    actions = document.createElement("div");
-    linkButton = document.createElement("button");
-    coverButton = document.createElement("button");
-    hideButton = document.createElement("button");
-
-    actions.className = "travel-photo-actions";
-
-    linkButton.type = "button";
-    linkButton.className = "travel-photo-action";
-    linkButton.textContent = state === "candidate" ? "採用" : "採用済み";
-    linkButton.disabled = !!options.linkBusy || state === "linked" || state === "cover";
-    linkButton.addEventListener("click", function () {
-      linkExperiencePhoto(options.elements, options.data, assetId, "linked");
+  if (options.coverSelectionMode && assetId) {
+    selectButton = document.createElement("button");
+    selectButton.type = "button";
+    selectButton.className = "travel-photo-select-button";
+    selectButton.textContent = "代表にする";
+    selectButton.disabled = !!options.linkBusy;
+    selectButton.addEventListener("click", function () {
+      selectExperienceCoverPhoto(options.elements, options.data, assetId);
     });
-    actions.appendChild(linkButton);
-
-    coverButton.type = "button";
-    coverButton.className = "travel-photo-action secondary";
-    coverButton.textContent = "カバーにする";
-    coverButton.disabled = !!options.linkBusy || state === "cover";
-    coverButton.addEventListener("click", function () {
-      linkExperiencePhoto(options.elements, options.data, assetId, "cover");
-    });
-    actions.appendChild(coverButton);
-
-    hideButton.type = "button";
-    hideButton.className = "travel-photo-action secondary";
-    hideButton.textContent = "候補から外す";
-    hideButton.disabled = !!options.linkBusy;
-    hideButton.addEventListener("click", function () {
-      hideExperiencePhotoCandidate(options.elements, options.data, assetId);
-    });
-    actions.appendChild(hideButton);
-
-    card.appendChild(actions);
+    card.appendChild(selectButton);
   }
   return card;
 }
@@ -490,8 +467,21 @@ function activeExperiencePhotoLinks(data) {
   return activeLinks;
 }
 
-function linkedPhotoAssetMap(data) {
+function visibleExperiencePhotoLinks(data) {
   var links = activeExperiencePhotoLinks(data);
+  var visibleLinks = [];
+  var index;
+
+  for (index = 0; index < links.length; index += 1) {
+    if (links[index].link_type === "linked" || links[index].link_type === "cover") {
+      visibleLinks.push(links[index]);
+    }
+  }
+  return visibleLinks;
+}
+
+function linkedPhotoAssetMap(data) {
+  var links = visibleExperiencePhotoLinks(data);
   var map = {};
   var assetId;
   var index;
@@ -506,7 +496,7 @@ function linkedPhotoAssetMap(data) {
 }
 
 function experiencePhotoLinkStateMap(data) {
-  var links = activeExperiencePhotoLinks(data);
+  var links = visibleExperiencePhotoLinks(data);
   var map = {};
   var assetId;
   var index;
@@ -542,8 +532,21 @@ function isExperiencePhotoAlreadyLinked(data, photo) {
 
 function isExperiencePhotoCandidateHidden(data, photo) {
   var assetId = photoAssetId(photo);
-  var hidden = data.hiddenExperiencePhotoCandidates || {};
-  return !!(assetId && hidden[assetId]);
+  var links = activeExperiencePhotoLinks(data);
+  var index;
+
+  if (!assetId) {
+    return false;
+  }
+  for (index = 0; index < links.length; index += 1) {
+    if (
+      photoAssetId(links[index]) === assetId &&
+      (links[index].link_type === "hidden" || links[index].link_type === "excluded")
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function mergeExperiencePhotoLink(data, link) {
@@ -576,14 +579,48 @@ function mergeExperiencePhotoLink(data, link) {
 }
 
 function hideExperiencePhotoCandidate(elements, data, assetId) {
-  if (!data.hiddenExperiencePhotoCandidates) {
-    data.hiddenExperiencePhotoCandidates = {};
+  linkExperiencePhoto(elements, data, assetId, "hidden");
+}
+
+function startExperienceCoverSelectionMode(elements, data) {
+  experienceCoverSelectionMode = true;
+  renderExperienceDetail(elements, data);
+  setTravelStatus(elements, "代表画像を選択してください", false);
+}
+
+function cancelExperienceCoverSelectionMode(elements, data) {
+  experienceCoverSelectionMode = false;
+  renderExperienceDetail(elements, data);
+  setTravelStatus(elements, "代表画像選択をキャンセルしました", false);
+}
+
+function selectExperienceCoverPhoto(elements, data, assetId) {
+  experienceCoverSelectionMode = false;
+  linkExperiencePhoto(elements, data, assetId, "cover");
+}
+
+function showOutOfRangePhotoAddMessage(elements) {
+  setTravelStatus(elements, "期間外写真追加は未実装です", false);
+}
+
+function markExperiencePhotoLinkArchived(data, link) {
+  var links;
+  var index;
+
+  if (!data || !link || typeof link !== "object") {
+    return;
   }
-  if (assetId) {
-    data.hiddenExperiencePhotoCandidates[assetId] = true;
-    renderExperienceDetail(elements, data);
-    setTravelStatus(elements, "候補から外しました", false);
+  if (!data.photoLinks) {
+    data.photoLinks = [];
   }
+  links = data.photoLinks;
+  for (index = 0; index < links.length; index += 1) {
+    if (links[index].id && link.id && links[index].id === link.id) {
+      links[index] = link;
+      return;
+    }
+  }
+  links.push(link);
 }
 
 function renderOutOfRangePhotoLinkNotice(elements, data) {
@@ -597,58 +634,18 @@ function renderOutOfRangePhotoLinkNotice(elements, data) {
   title.textContent = "期間外写真";
   button.type = "button";
   button.className = "travel-experience-photo-more";
-  button.textContent = "期間外写真を探す";
+  button.textContent = "期間外写真を追加";
   message.className = "travel-muted";
   message.hidden = true;
-  message.textContent = "期間外写真検索は未実装です。";
+  message.textContent = "期間外写真追加は未実装です。";
   button.addEventListener("click", function () {
     message.hidden = false;
-    setTravelStatus(elements, "期間外写真検索は未実装です", false);
+    showOutOfRangePhotoAddMessage(elements);
   });
 
   section.appendChild(title);
   section.appendChild(button);
   section.appendChild(message);
-  return section;
-}
-
-function renderExperienceLinkedPhotosSection(elements, data) {
-  var section = document.createElement("section");
-  var title = document.createElement("h4");
-  var empty = document.createElement("p");
-  var grid = document.createElement("div");
-  var links = activeExperiencePhotoLinks(data);
-  var experience = data.experience || data.spot || {};
-  var state;
-  var index;
-
-  section.className = "travel-photos travel-linked-photos";
-  title.className = "travel-photos-title";
-  title.textContent = "リンク済み写真・カバー写真";
-  section.appendChild(title);
-
-  if (!links.length) {
-    empty.className = "travel-empty";
-    empty.textContent = "リンク済み写真はありません";
-    section.appendChild(empty);
-    return section;
-  }
-
-  grid.className = "travel-photo-grid";
-  for (index = 0; index < links.length; index += 1) {
-    state = links[index].link_type === "cover" ? "cover" : "linked";
-    grid.appendChild(
-      renderTravelPhotoCard(
-        links[index],
-        { title: experienceTitle(experience) },
-        {
-          showExperienceState: true,
-          experiencePhotoState: state,
-        }
-      )
-    );
-  }
-  section.appendChild(grid);
   return section;
 }
 
@@ -676,9 +673,48 @@ function renderExperiencePhotoControls(elements, data) {
   return controls;
 }
 
+function renderExperiencePhotoHeaderActions(elements, data) {
+  var actions = document.createElement("div");
+  var coverButton = document.createElement("button");
+  var outOfRangeButton = document.createElement("button");
+  var cancelButton = document.createElement("button");
+
+  actions.className = "travel-experience-photo-actions";
+
+  coverButton.type = "button";
+  coverButton.className = "travel-experience-photo-action";
+  coverButton.textContent = "代表画像を選択";
+  coverButton.disabled = experienceCoverSelectionMode || experiencePhotoLinkLoading;
+  coverButton.addEventListener("click", function () {
+    startExperienceCoverSelectionMode(elements, data);
+  });
+  actions.appendChild(coverButton);
+
+  outOfRangeButton.type = "button";
+  outOfRangeButton.className = "travel-experience-photo-action";
+  outOfRangeButton.textContent = "期間外写真を追加";
+  outOfRangeButton.addEventListener("click", function () {
+    showOutOfRangePhotoAddMessage(elements);
+  });
+  actions.appendChild(outOfRangeButton);
+
+  if (experienceCoverSelectionMode) {
+    cancelButton.type = "button";
+    cancelButton.className = "travel-experience-photo-action secondary";
+    cancelButton.textContent = "キャンセル";
+    cancelButton.addEventListener("click", function () {
+      cancelExperienceCoverSelectionMode(elements, data);
+    });
+    actions.appendChild(cancelButton);
+  }
+
+  return actions;
+}
+
 function renderExperiencePhotosSection(elements, data) {
   var section = document.createElement("section");
   var title = document.createElement("h4");
+  var selectionHint = document.createElement("p");
   var empty = document.createElement("p");
   var grid = document.createElement("div");
   var photos = data.photos || [];
@@ -689,8 +725,15 @@ function renderExperiencePhotosSection(elements, data) {
 
   section.className = "travel-photos travel-experience-photos";
   title.className = "travel-photos-title";
-  title.textContent = "候補写真";
+  title.textContent = "写真";
   section.appendChild(title);
+  section.appendChild(renderExperiencePhotoHeaderActions(elements, data));
+
+  if (experienceCoverSelectionMode) {
+    selectionHint.className = "travel-muted";
+    selectionHint.textContent = "代表画像にする写真を選択してください。";
+    section.appendChild(selectionHint);
+  }
 
   if (data.photoError || data.photo_error) {
     empty.className = "travel-error";
@@ -701,7 +744,7 @@ function renderExperiencePhotosSection(elements, data) {
 
   if (!photos.length) {
     empty.className = "travel-empty";
-    empty.textContent = "候補写真はありません";
+    empty.textContent = "写真はありません";
     section.appendChild(empty);
   } else {
     grid.className = "travel-photo-grid";
@@ -713,9 +756,9 @@ function renderExperiencePhotosSection(elements, data) {
             photos[index],
             { title: experienceTitle(experience) },
             {
-              showLinkActions: true,
               showExperienceState: true,
               experiencePhotoState: photoState,
+              coverSelectionMode: experienceCoverSelectionMode,
               elements: elements,
               data: data,
               linkBusy: experiencePhotoLinkLoading,
@@ -727,7 +770,7 @@ function renderExperiencePhotosSection(elements, data) {
     }
     if (renderedCount === 0) {
       empty.className = "travel-empty";
-      empty.textContent = "表示中の候補写真はありません";
+      empty.textContent = "表示中の写真はありません";
       section.appendChild(empty);
     } else {
       section.appendChild(grid);
@@ -1173,9 +1216,7 @@ function renderExperienceDetail(elements, data) {
   var type = document.createElement("p");
   var meta = document.createElement("div");
   var memo = document.createElement("p");
-  var linkedPhotosSection;
   var photosSection;
-  var outOfRangeSection;
 
   clearNode(elements.detailContent);
   currentTravelView = "experience";
@@ -1197,17 +1238,13 @@ function renderExperienceDetail(elements, data) {
   memo.className = "travel-spot-memo";
   memo.textContent = experience.memo || "メモはありません";
 
-  linkedPhotosSection = renderExperienceLinkedPhotosSection(elements, data);
   photosSection = renderExperiencePhotosSection(elements, data);
-  outOfRangeSection = renderOutOfRangePhotoLinkNotice(elements, data);
 
   elements.detailContent.appendChild(actions);
   elements.detailContent.appendChild(type);
   elements.detailContent.appendChild(title);
   elements.detailContent.appendChild(meta);
-  elements.detailContent.appendChild(linkedPhotosSection);
   elements.detailContent.appendChild(photosSection);
-  elements.detailContent.appendChild(outOfRangeSection);
   elements.detailContent.appendChild(memo);
   showDetail(elements);
 }
@@ -1368,7 +1405,11 @@ async function linkExperiencePhoto(elements, data, assetId, linkType) {
 
   experiencePhotoLinkLoading = true;
   renderExperienceDetail(elements, data);
-  setTravelStatus(elements, "写真リンク保存中", false);
+  if (linkType === "hidden" || linkType === "excluded") {
+    setTravelStatus(elements, "候補除外を保存中", false);
+  } else {
+    setTravelStatus(elements, "写真リンク保存中", false);
+  }
 
   try {
     response = await api(
@@ -1386,9 +1427,45 @@ async function linkExperiencePhoto(elements, data, assetId, linkType) {
     );
     mergeExperiencePhotoLink(data, response.link);
     renderExperienceDetail(elements, data);
-    setTravelStatus(elements, "写真リンク保存済み", false);
+    if (linkType === "hidden" || linkType === "excluded") {
+      setTravelStatus(elements, "候補から外しました", false);
+    } else {
+      setTravelStatus(elements, "写真リンク保存済み", false);
+    }
   } catch (error) {
     setTravelStatus(elements, error.message || "写真リンクを保存できませんでした。", true);
+  } finally {
+    experiencePhotoLinkLoading = false;
+    renderExperienceDetail(elements, data);
+  }
+}
+
+async function archiveExperiencePhotoLink(elements, data, linkId, successMessage) {
+  var experienceId = experienceIdFromData(data);
+  var response;
+
+  if (!experienceId || !linkId || experiencePhotoLinkLoading) {
+    return;
+  }
+
+  experiencePhotoLinkLoading = true;
+  renderExperienceDetail(elements, data);
+  setTravelStatus(elements, "写真リンク更新中", false);
+
+  try {
+    response = await api(
+      "/api/travel/experiences/" +
+        encodeURIComponent(experienceId) +
+        "/photo-links/" +
+        encodeURIComponent(linkId) +
+        "/archive",
+      { method: "POST" }
+    );
+    markExperiencePhotoLinkArchived(data, response.link);
+    renderExperienceDetail(elements, data);
+    setTravelStatus(elements, successMessage || "写真リンク更新済み", false);
+  } catch (error) {
+    setTravelStatus(elements, error.message || "写真リンクを更新できませんでした。", true);
   } finally {
     experiencePhotoLinkLoading = false;
     renderExperienceDetail(elements, data);
