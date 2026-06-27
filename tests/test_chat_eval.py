@@ -4,10 +4,15 @@ import unittest
 from pathlib import Path
 
 from backend.chat_eval import (
+    BENCHMARK_VERSION,
     ChatEvalError,
     TravelChatEvaluator,
+    classify_failure_layer,
+    improvement_hint_for_layer,
     load_cases,
+    rank_top_improvements,
     render_markdown,
+    summarize_layers,
     write_reports,
 )
 
@@ -125,6 +130,13 @@ class TravelChatEvaluatorTest(unittest.TestCase):
         )
         self.assertEqual(summary["failure_categories"]["context_not_used"], 1)
         self.assertEqual(sum(summary["failure_categories"].values()), 17)
+        self.assertEqual(summary["benchmark_version"], "Jarvis Benchmark v0.1")
+        self.assertEqual(summary["skill_id"], "travel")
+        self.assertEqual(summary["skill_ids"], ["travel"])
+        self.assertEqual(summary["layer_summary"]["travel"]["entity_resolution"], 16)
+        self.assertEqual(summary["layer_summary"]["travel"]["context"], 1)
+        self.assertEqual(summary["top_improvements"][0]["failure_layer"], "entity_resolution")
+        self.assertEqual(summary["top_improvements"][0]["count"], 16)
         self.assertTrue(
             all("debug_steps" in record for record in summary["records"])
         )
@@ -179,6 +191,11 @@ class TravelChatEvaluatorTest(unittest.TestCase):
         self.assertEqual(
             summary["failures"][0]["category"], "entity_resolution_missing"
         )
+        self.assertEqual(summary["failures"][0]["skill_id"], "travel")
+        self.assertEqual(
+            summary["failures"][0]["failure_layer"], "entity_resolution"
+        )
+        self.assertIn("SearchDocument", summary["failures"][0]["improvement_hint"])
         self.assertEqual(summary["failure_categories"]["entity_resolution_missing"], 1)
         self.assertIn("question", summary["failures"][0])
         self.assertIn("expected", summary["failures"][0])
@@ -220,12 +237,58 @@ class TravelChatEvaluatorTest(unittest.TestCase):
             report = markdown_path.read_text(encoding="utf-8")
 
         self.assertEqual(payload["total"], 1)
+        self.assertEqual(payload["benchmark_version"], BENCHMARK_VERSION)
+        self.assertIn("layer_summary", payload)
+        self.assertIn("top_improvements", payload)
         self.assertIn("trace", payload["records"][0])
-        self.assertIn("# Travel Chat Eval Report", report)
+        self.assertIn("# Jarvis Benchmark Report", report)
+        self.assertIn("Benchmark Version: `Jarvis Benchmark v0.1`", report)
+        self.assertIn("## Layer Summary", report)
+        self.assertIn("### Travel (`travel`)", report)
         self.assertIn("## Reason Trace", report)
         self.assertIn("## Failure categories count", report)
         self.assertIn("## 改善ヒント", report)
+        self.assertIn("## Top Improvement Targets", report)
         self.assertIn("福岡旅行を開いて", render_markdown(summary))
+
+    def test_failure_layer_and_hint_rules_are_stable(self) -> None:
+        expected = {
+            "tool_selection_error": "tool_selection",
+            "entity_resolution_missing": "entity_resolution",
+            "entity_resolution_ambiguous": "entity_resolution",
+            "wrong_entity": "search",
+            "context_not_used": "context",
+            "response_not_human_friendly": "response",
+            "unsupported_expected": "planner",
+            "runtime_error": "tool_execution",
+            "security_violation": "unknown",
+        }
+
+        for category, layer in expected.items():
+            with self.subTest(category=category):
+                self.assertEqual(classify_failure_layer(category), layer)
+                self.assertTrue(improvement_hint_for_layer(layer))
+        self.assertEqual(classify_failure_layer("future_category"), "unknown")
+
+    def test_layer_summary_and_top_improvements_are_skill_aware(self) -> None:
+        records = [
+            {"skill_id": "travel", "failure_layer": "search"},
+            {"skill_id": "travel", "failure_layer": "search"},
+            {"skill_id": "travel", "failure_layer": "context"},
+            {"skill_id": "photo", "failure_layer": "response"},
+            {"skill_id": "photo", "failure_layer": None},
+        ]
+
+        layer_summary = summarize_layers(records)
+        top = rank_top_improvements(layer_summary)
+
+        self.assertEqual(layer_summary["travel"]["search"], 2)
+        self.assertEqual(layer_summary["travel"]["context"], 1)
+        self.assertEqual(layer_summary["photo"]["response"], 1)
+        self.assertEqual(layer_summary["photo"]["planner"], 0)
+        self.assertEqual(top[0]["skill_id"], "travel")
+        self.assertEqual(top[0]["failure_layer"], "search")
+        self.assertEqual(top[0]["count"], 2)
 
     def test_trace_redacts_secrets(self) -> None:
         secret = "sk-eval-secret-value"

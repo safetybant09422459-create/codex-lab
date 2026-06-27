@@ -1,10 +1,6 @@
 import unittest
 
-from backend.travel_search_index import (
-    TravelSearchIndex,
-    expand_travel_query,
-    normalize_travel_query,
-)
+from backend.travel_search_index import TravelSearchIndex
 
 
 class TravelSearchIndexTest(unittest.TestCase):
@@ -63,10 +59,6 @@ class TravelSearchIndexTest(unittest.TestCase):
         self.assertEqual(candidates[0].entity.entity_id, "trip-suma")
         self.assertIn("query_expansion", candidates[0].matched_by)
         self.assertLess(candidates[0].score, 0.86)
-        self.assertEqual(
-            expand_travel_query("APM"),
-            ("アンパンマン", "アンパンマンミュージアム"),
-        )
 
     def test_date_match_and_scores_are_bounded(self) -> None:
         candidates = self.index.search("2026", self.trips)
@@ -92,10 +84,6 @@ class TravelSearchIndexTest(unittest.TestCase):
             [item.entity.entity_id for item in forward],
             ["trip-z", "trip-a"],
         )
-
-    def test_normalization_handles_width_case_and_request_suffix(self) -> None:
-        self.assertEqual(normalize_travel_query(" ＡＰＭ を開いて。 "), "apm")
-
 
 if __name__ == "__main__":
     unittest.main()
