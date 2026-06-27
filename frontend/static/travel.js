@@ -9,6 +9,7 @@ var experiencePhotosPageSize = 20;
 var experiencePhotosLoading = false;
 var experiencePhotoLinkLoading = false;
 var experienceCoverSelectionMode = false;
+var experiencePhotoSearchLoading = false;
 var experienceStatusOptions = ["planned", "completed", "skipped", "archived"];
 var experienceCreateStatusOptions = ["planned", "completed", "skipped"];
 var experienceCreateTypeOptions = ["spot", "move", "event", "memo"];
@@ -423,13 +424,14 @@ function experiencePhotosHasMore(photos, pagination, limit) {
 
 function appendExperiencePhotos(data, pageData) {
   var photos = pageData.photos || [];
+  var pagination;
   var index;
 
   if (!data.photos) {
     data.photos = [];
   }
   for (index = 0; index < photos.length; index += 1) {
-    data.photos.push(photos[index]);
+    appendPhotoToExperience(data, photos[index]);
   }
   data.pagination = pageData.pagination || {
     limit: pageData.limit,
@@ -437,6 +439,10 @@ function appendExperiencePhotos(data, pageData) {
     count: photos.length,
     has_more: pageData.has_more,
   };
+  pagination = data.pagination;
+  data.experiencePhotosNextOffset =
+    (pagination.offset || 0) +
+    (pagination.limit || data.experiencePhotosLimit || experiencePhotosPageSize);
   data.experiencePhotosHasMore = experiencePhotosHasMore(
     photos,
     data.pagination,
@@ -599,8 +605,18 @@ function selectExperienceCoverPhoto(elements, data, assetId) {
   linkExperiencePhoto(elements, data, assetId, "cover");
 }
 
-function showOutOfRangePhotoAddMessage(elements) {
-  setTravelStatus(elements, "期間外写真追加は未実装です", false);
+function showOutOfRangePhotoSearch(elements, data) {
+  data.outOfRangePhotoSearchOpen = true;
+  if (!data.outOfRangePhotoSearchResults) {
+    data.outOfRangePhotoSearchResults = [];
+  }
+  renderExperienceDetail(elements, data);
+}
+
+function cancelOutOfRangePhotoSearch(elements, data) {
+  data.outOfRangePhotoSearchOpen = false;
+  renderExperienceDetail(elements, data);
+  setTravelStatus(elements, "期間外写真検索をキャンセルしました", false);
 }
 
 function markExperiencePhotoLinkArchived(data, link) {
@@ -623,36 +639,162 @@ function markExperiencePhotoLinkArchived(data, link) {
   links.push(link);
 }
 
-function renderOutOfRangePhotoLinkNotice(elements, data) {
+function datetimeLocalToIso(value) {
+  var match;
+
+  if (typeof value !== "string") {
+    return "";
+  }
+  match = value.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})$/);
+  if (!match) {
+    return "";
+  }
+  return match[1] + "T" + match[2] + ":" + match[3] + ":00+09:00";
+}
+
+function appendOutOfRangeSearchResults(data, pageData, append) {
+  var pagePhotos = pageData.photos || [];
+  var results = append ? data.outOfRangePhotoSearchResults || [] : [];
+  var known = {};
+  var assetId;
+  var index;
+
+  for (index = 0; index < results.length; index += 1) {
+    assetId = photoAssetId(results[index]);
+    if (assetId) {
+      known[assetId] = true;
+    }
+  }
+  for (index = 0; index < pagePhotos.length; index += 1) {
+    assetId = photoAssetId(pagePhotos[index]);
+    if (!assetId || !known[assetId]) {
+      results.push(pagePhotos[index]);
+      if (assetId) {
+        known[assetId] = true;
+      }
+    }
+  }
+  data.outOfRangePhotoSearchResults = results;
+  data.outOfRangePhotoSearchPagination = pageData.pagination || {};
+}
+
+function renderOutOfRangePhotoSearchResults(elements, data) {
   var section = document.createElement("section");
-  var title = document.createElement("h4");
-  var button = document.createElement("button");
-  var message = document.createElement("p");
+  var empty = document.createElement("p");
+  var grid = document.createElement("div");
+  var moreButton = document.createElement("button");
+  var results = data.outOfRangePhotoSearchResults || [];
+  var pagination = data.outOfRangePhotoSearchPagination || {};
+  var nextOffset = (pagination.offset || 0) + (pagination.limit || experiencePhotosPageSize);
+  var card;
+  var addButton;
+  var assetId;
+  var index;
 
-  section.className = "travel-photos travel-out-of-range-photos";
-  title.className = "travel-photos-title";
-  title.textContent = "期間外写真";
-  button.type = "button";
-  button.className = "travel-experience-photo-more";
-  button.textContent = "期間外写真を追加";
-  message.className = "travel-muted";
-  message.hidden = true;
-  message.textContent = "期間外写真追加は未実装です。";
-  button.addEventListener("click", function () {
-    message.hidden = false;
-    showOutOfRangePhotoAddMessage(elements);
+  section.className = "travel-out-of-range-results";
+  if (!results.length) {
+    empty.className = "travel-muted";
+    empty.textContent = data.outOfRangePhotoSearchSearched
+      ? "該当する写真はありません。"
+      : "日時範囲を指定して検索してください。";
+    section.appendChild(empty);
+  } else {
+    grid.className = "travel-photo-grid";
+    for (index = 0; index < results.length; index += 1) {
+      assetId = photoAssetId(results[index]);
+      card = renderTravelPhotoCard(results[index], {
+        title: experienceTitle(data.experience || data.spot || {}),
+      });
+      addButton = document.createElement("button");
+      addButton.type = "button";
+      addButton.className = "travel-photo-select-button";
+      addButton.setAttribute("data-asset-id", assetId);
+      addButton.textContent = isExperiencePhotoAlreadyLinked(data, results[index])
+        ? "追加済み"
+        : "追加";
+      addButton.disabled =
+        !assetId ||
+        isExperiencePhotoAlreadyLinked(data, results[index]) ||
+        experiencePhotoLinkLoading;
+      addButton.addEventListener("click", function () {
+        addOutOfRangeExperiencePhoto(
+          elements,
+          data,
+          this.getAttribute("data-asset-id")
+        );
+      });
+      card.appendChild(addButton);
+      grid.appendChild(card);
+    }
+    section.appendChild(grid);
+  }
+
+  moreButton.type = "button";
+  moreButton.className = "travel-experience-photo-more";
+  moreButton.textContent = "もっと見る";
+  moreButton.hidden = !pagination.has_more;
+  moreButton.disabled = experiencePhotoSearchLoading;
+  moreButton.addEventListener("click", function () {
+    loadOutOfRangePhotoSearch(
+      elements,
+      data,
+      data.outOfRangePhotoSearchFrom,
+      data.outOfRangePhotoSearchTo,
+      nextOffset,
+      true
+    );
   });
-
-  section.appendChild(title);
-  section.appendChild(button);
-  section.appendChild(message);
+  section.appendChild(moreButton);
   return section;
+}
+
+function renderOutOfRangePhotoSearchForm(elements, data) {
+  var form = document.createElement("form");
+  var fromLabel = document.createElement("label");
+  var fromInput = document.createElement("input");
+  var toLabel = document.createElement("label");
+  var toInput = document.createElement("input");
+  var actions = document.createElement("div");
+  var searchButton = document.createElement("button");
+  var cancelButton = document.createElement("button");
+
+  form.className = "travel-out-of-range-search-form";
+  fromLabel.textContent = "開始日時";
+  fromInput.type = "datetime-local";
+  fromInput.name = "from";
+  fromInput.required = true;
+  fromInput.value = data.outOfRangePhotoSearchLocalFrom || "";
+  fromLabel.appendChild(fromInput);
+  toLabel.textContent = "終了日時";
+  toInput.type = "datetime-local";
+  toInput.name = "to";
+  toInput.required = true;
+  toInput.value = data.outOfRangePhotoSearchLocalTo || "";
+  toLabel.appendChild(toInput);
+  actions.className = "travel-experience-photo-actions";
+  searchButton.type = "submit";
+  searchButton.textContent = "検索";
+  searchButton.disabled = experiencePhotoSearchLoading;
+  cancelButton.type = "button";
+  cancelButton.textContent = "キャンセル";
+  cancelButton.addEventListener("click", function () {
+    cancelOutOfRangePhotoSearch(elements, data);
+  });
+  actions.appendChild(searchButton);
+  actions.appendChild(cancelButton);
+  form.appendChild(fromLabel);
+  form.appendChild(toLabel);
+  form.appendChild(actions);
+  form.appendChild(renderOutOfRangePhotoSearchResults(elements, data));
+  form.addEventListener("submit", function (event) {
+    submitOutOfRangePhotoSearch(event, elements, data);
+  });
+  return form;
 }
 
 function renderExperiencePhotoControls(elements, data) {
   var controls = document.createElement("div");
   var moreButton = document.createElement("button");
-  var photos = data.photos || [];
 
   controls.className = "travel-experience-photo-controls";
   moreButton.type = "button";
@@ -664,7 +806,7 @@ function renderExperiencePhotoControls(elements, data) {
     loadExperiencePhotosPage(
       elements,
       data,
-      photos.length,
+      data.experiencePhotosNextOffset || 0,
       data.experiencePhotosLimit || experiencePhotosPageSize
     );
   });
@@ -694,7 +836,7 @@ function renderExperiencePhotoHeaderActions(elements, data) {
   outOfRangeButton.className = "travel-experience-photo-action";
   outOfRangeButton.textContent = "期間外写真を追加";
   outOfRangeButton.addEventListener("click", function () {
-    showOutOfRangePhotoAddMessage(elements);
+    showOutOfRangePhotoSearch(elements, data);
   });
   actions.appendChild(outOfRangeButton);
 
@@ -728,6 +870,9 @@ function renderExperiencePhotosSection(elements, data) {
   title.textContent = "写真";
   section.appendChild(title);
   section.appendChild(renderExperiencePhotoHeaderActions(elements, data));
+  if (data.outOfRangePhotoSearchOpen) {
+    section.appendChild(renderOutOfRangePhotoSearchForm(elements, data));
+  }
 
   if (experienceCoverSelectionMode) {
     selectionHint.className = "travel-muted";
@@ -1371,11 +1516,14 @@ async function loadExperienceDetail(experienceId) {
           "/photo-links"
       );
       data.photoLinks = linkData.links || [];
+      appendVisiblePhotoLinksToExperience(data);
     } catch (linkError) {
       data.photoLinks = [];
     }
     data.experiencePhotosLimit = experiencePhotosPageSize;
     pagination = experiencePhotoPagination(data);
+    data.experiencePhotosNextOffset =
+      (pagination.offset || 0) + (pagination.limit || experiencePhotosPageSize);
     data.experiencePhotosHasMore = experiencePhotosHasMore(
       data.photos || [],
       pagination,
@@ -1400,7 +1548,7 @@ async function linkExperiencePhoto(elements, data, assetId, linkType) {
   var response;
 
   if (!experienceId || !assetId || experiencePhotoLinkLoading) {
-    return;
+    return false;
   }
 
   experiencePhotoLinkLoading = true;
@@ -1432,10 +1580,113 @@ async function linkExperiencePhoto(elements, data, assetId, linkType) {
     } else {
       setTravelStatus(elements, "写真リンク保存済み", false);
     }
+    return true;
   } catch (error) {
     setTravelStatus(elements, error.message || "写真リンクを保存できませんでした。", true);
+    return false;
   } finally {
     experiencePhotoLinkLoading = false;
+    renderExperienceDetail(elements, data);
+  }
+}
+
+function appendPhotoToExperience(data, photo) {
+  var assetId = photoAssetId(photo);
+  var photos = data.photos || [];
+  var index;
+
+  for (index = 0; index < photos.length; index += 1) {
+    if (photoAssetId(photos[index]) === assetId) {
+      return;
+    }
+  }
+  photos.push(photo);
+  data.photos = photos;
+}
+
+function appendVisiblePhotoLinksToExperience(data) {
+  var links = visibleExperiencePhotoLinks(data);
+  var index;
+
+  for (index = 0; index < links.length; index += 1) {
+    appendPhotoToExperience(data, links[index]);
+  }
+}
+
+async function addOutOfRangeExperiencePhoto(elements, data, assetId) {
+  var results = data.outOfRangePhotoSearchResults || [];
+  var linked;
+  var index;
+
+  linked = await linkExperiencePhoto(elements, data, assetId, "linked");
+  if (!linked) {
+    return;
+  }
+  for (index = 0; index < results.length; index += 1) {
+    if (photoAssetId(results[index]) === assetId) {
+      appendPhotoToExperience(data, results[index]);
+      break;
+    }
+  }
+  renderExperienceDetail(elements, data);
+}
+
+function submitOutOfRangePhotoSearch(event, elements, data) {
+  var form = event.target;
+  var fromValue = form.elements.from.value;
+  var toValue = form.elements.to.value;
+  var fromAt = datetimeLocalToIso(fromValue);
+  var toAt = datetimeLocalToIso(toValue);
+
+  event.preventDefault();
+  if (!fromAt || !toAt) {
+    setTravelStatus(elements, "開始日時と終了日時を入力してください。", true);
+    return;
+  }
+  data.outOfRangePhotoSearchLocalFrom = fromValue;
+  data.outOfRangePhotoSearchLocalTo = toValue;
+  loadOutOfRangePhotoSearch(elements, data, fromAt, toAt, 0, false);
+}
+
+async function loadOutOfRangePhotoSearch(
+  elements,
+  data,
+  fromAt,
+  toAt,
+  offset,
+  append
+) {
+  var experienceId = experienceIdFromData(data);
+  var pageData;
+
+  if (!experienceId || experiencePhotoSearchLoading) {
+    return;
+  }
+  experiencePhotoSearchLoading = true;
+  data.outOfRangePhotoSearchFrom = fromAt;
+  data.outOfRangePhotoSearchTo = toAt;
+  renderExperienceDetail(elements, data);
+  setTravelStatus(elements, "期間外写真を検索中", false);
+  try {
+    pageData = await api(
+      "/api/travel/experiences/" +
+        encodeURIComponent(experienceId) +
+        "/photo-search?from=" +
+        encodeURIComponent(fromAt) +
+        "&to=" +
+        encodeURIComponent(toAt) +
+        "&limit=" +
+        experiencePhotosPageSize +
+        "&offset=" +
+        offset
+    );
+    appendOutOfRangeSearchResults(data, pageData, append);
+    data.outOfRangePhotoSearchSearched = true;
+    setTravelStatus(elements, "期間外写真を取得しました", false);
+  } catch (error) {
+    setTravelStatus(elements, error.message || "期間外写真を検索できませんでした。", true);
+  } finally {
+    experiencePhotoSearchLoading = false;
     renderExperienceDetail(elements, data);
   }
 }

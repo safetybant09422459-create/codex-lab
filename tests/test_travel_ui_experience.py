@@ -92,6 +92,7 @@ class TravelUiExperienceTest(unittest.TestCase):
         self.assertIn('moreButton.textContent = "もっと見る"', source)
         self.assertIn('"/photos?limit="', source)
         self.assertIn('"&offset="', source)
+        self.assertIn("data.experiencePhotosNextOffset || 0", source)
 
     def test_experience_photo_cards_do_not_render_persistent_action_buttons(self) -> None:
         source = TRAVEL_JS.read_text(encoding="utf-8")
@@ -122,7 +123,7 @@ class TravelUiExperienceTest(unittest.TestCase):
         self.assertIn("function renderExperiencePhotoHeaderActions(elements, data)", source)
         self.assertIn('coverButton.textContent = "代表画像を選択"', source)
         self.assertIn('outOfRangeButton.textContent = "期間外写真を追加"', source)
-        self.assertIn("function showOutOfRangePhotoAddMessage(elements)", source)
+        self.assertIn("function showOutOfRangePhotoSearch(elements, data)", source)
 
     def test_experience_cover_selection_mode_functions_exist(self) -> None:
         source = TRAVEL_JS.read_text(encoding="utf-8")
@@ -142,6 +143,8 @@ class TravelUiExperienceTest(unittest.TestCase):
         self.assertIn("mergeExperiencePhotoLink(data, response.link);", source)
         self.assertIn("markExperiencePhotoLinkArchived(data, response.link);", source)
         self.assertIn("renderExperienceDetail(elements, data);", source)
+        self.assertIn("function appendVisiblePhotoLinksToExperience(data)", source)
+        self.assertIn("appendVisiblePhotoLinksToExperience(data);", source)
         self.assertNotIn("await loadExperienceDetail(experienceId);\n    setTravelStatus(elements, \"写真リンク保存済み\"", source)
 
     def test_experience_photo_candidates_are_hidden_through_persistent_link_api(self) -> None:
@@ -160,12 +163,27 @@ class TravelUiExperienceTest(unittest.TestCase):
         self.assertIn("function archiveExperiencePhotoLink(elements, data, linkId, successMessage)", source)
         self.assertIn('encodeURIComponent(linkId) +', source)
 
-    def test_out_of_range_photo_link_entrypoint_exists(self) -> None:
+    def test_out_of_range_photo_search_form_and_add_function_exist(self) -> None:
         source = TRAVEL_JS.read_text(encoding="utf-8")
 
-        self.assertIn("function renderOutOfRangePhotoLinkNotice(elements, data)", source)
-        self.assertIn('button.textContent = "期間外写真を追加"', source)
-        self.assertIn('message.textContent = "期間外写真追加は未実装です。"', source)
+        self.assertIn("function renderOutOfRangePhotoSearchForm(elements, data)", source)
+        self.assertIn('fromInput.type = "datetime-local"', source)
+        self.assertIn('toInput.type = "datetime-local"', source)
+        self.assertIn('searchButton.textContent = "検索"', source)
+        self.assertIn('cancelButton.textContent = "キャンセル"', source)
+        self.assertIn("function loadOutOfRangePhotoSearch(", source)
+        self.assertIn('"/photo-search?from="', source)
+        self.assertIn("function addOutOfRangeExperiencePhoto(elements, data, assetId)", source)
+        self.assertIn('linkExperiencePhoto(elements, data, assetId, "linked")', source)
+        self.assertIn('addButton.textContent = isExperiencePhotoAlreadyLinked', source)
+
+    def test_out_of_range_datetime_conversion_avoids_date_parsing(self) -> None:
+        source = TRAVEL_JS.read_text(encoding="utf-8")
+
+        self.assertIn("function datetimeLocalToIso(value)", source)
+        self.assertIn('":00+09:00"', source)
+        self.assertNotIn("Date.parse", source)
+        self.assertNotIn("new Date(", source)
 
     def test_travel_js_avoids_safari_unfriendly_syntax(self) -> None:
         source = TRAVEL_JS.read_text(encoding="utf-8")

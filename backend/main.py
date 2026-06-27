@@ -1,6 +1,6 @@
 import json
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -389,6 +389,95 @@ async def travel_get_experience_photos(
     pagination["limit"] = pagination_limit
     pagination["offset"] = pagination_offset
     pagination["count"] = pagination_count
+    return TravelExperiencePhotosResponse(
+        experience_id=str(result.get("experience_id") or experience_id),
+        experience_type=result.get("experience_type"),
+        timeline_item_id=result.get("timeline_item_id") or result.get("experience_id"),
+        trip_id=result.get("trip_id"),
+        photos=photos,
+        limit=pagination_limit,
+        offset=pagination_offset,
+        count=pagination_count,
+        has_more=pagination.get("has_more"),
+        pagination=pagination,
+        source=result.get("source") or "photo_skill",
+        execution_mode="local_travel_read",
+    )
+
+
+@app.get(
+    "/api/travel/experiences/{experience_id}/photo-search",
+    response_model=TravelExperiencePhotosResponse,
+)
+async def travel_search_experience_photos(
+    experience_id: str,
+    from_at: str = Query(alias="from"),
+    to_at: str = Query(alias="to"),
+    limit: int = 20,
+    offset: int = 0,
+) -> TravelExperiencePhotosResponse:
+    bounded_limit = min(max(limit, 1), 20)
+    bounded_offset = max(offset, 0)
+    try:
+        response = runtime_service.execute_stub(
+            "get_experience_photo_search",
+            params={
+                "experience_id": experience_id,
+                "from": from_at,
+                "to": to_at,
+                "limit": bounded_limit,
+                "offset": bounded_offset,
+            },
+            confirmed=False,
+            role="admin",
+        )
+    except ToolNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except ValueError as exc:
+        if str(exc) == "timeline item not found":
+            raise HTTPException(
+                status_code=404, detail="Travel experience not found"
+            ) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ImmichConfigurationError as exc:
+        raise HTTPException(
+            status_code=503, detail="Immich connection is not configured"
+        ) from exc
+    except ImmichAPIError as exc:
+        raise HTTPException(
+            status_code=502, detail="Immich photo search request failed"
+        ) from exc
+
+    if not response.get("success"):
+        if response.get("permission_denied"):
+            raise HTTPException(
+                status_code=403,
+                detail=response.get("reason") or "Travel photos permission denied",
+            )
+        raise HTTPException(
+            status_code=500,
+            detail=response.get("reason") or "Travel photo search request failed",
+        )
+
+    result = response.get("result") or {}
+    photos = result.get("photos") or []
+    pagination = dict(result.get("pagination") or {})
+    pagination_limit = pagination.get("limit") or bounded_limit
+    pagination_offset = pagination.get("offset") or bounded_offset
+    pagination_count = pagination.get("count")
+    if pagination_count is None:
+        pagination_count = len(photos)
+    if "has_more" not in pagination:
+        pagination["has_more"] = pagination_count == pagination_limit
+    pagination.update(
+        {
+            "limit": pagination_limit,
+            "offset": pagination_offset,
+            "count": pagination_count,
+        }
+    )
     return TravelExperiencePhotosResponse(
         experience_id=str(result.get("experience_id") or experience_id),
         experience_type=result.get("experience_type"),

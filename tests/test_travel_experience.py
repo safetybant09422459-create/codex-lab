@@ -260,6 +260,99 @@ class ExperienceRepositoryTest(unittest.TestCase):
             {"limit": 10, "offset": 2, "count": 1, "has_more": False},
         )
 
+    def test_photo_search_passes_explicit_range_limit_and_offset_to_provider(self) -> None:
+        provider = FakePhotoProvider(
+            photos=[
+                {"asset_id": "asset_visible"},
+                {"asset_id": "asset_hidden"},
+                {"asset_id": "asset_cover"},
+            ]
+        )
+        source = FakeTravelSource(
+            {
+                "id": "item_1",
+                "trip_id": "trip_1",
+                "item_type": "move",
+                "display_title": "移動開始",
+                "start_at": "2026-04-02T10:00:00+09:00",
+            }
+        )
+        source.photo_links = [
+            {
+                "id": "link_hidden_visible_conflict",
+                "experience_id": "item_1",
+                "photo_asset_id": "asset_hidden",
+                "link_type": "linked",
+                "status": "active",
+            },
+            {
+                "id": "link_hidden",
+                "experience_id": "item_1",
+                "photo_asset_id": "asset_hidden",
+                "link_type": "hidden",
+                "status": "active",
+            },
+            {
+                "id": "link_cover",
+                "experience_id": "item_1",
+                "photo_asset_id": "asset_cover",
+                "link_type": "cover",
+                "status": "active",
+            },
+        ]
+        repository = TravelRepository(source=source, photo_provider=provider)
+
+        result = repository.search_experience_photos(
+            "item_1",
+            from_at="2026-04-01T18:30:00+09:00",
+            to_at="2026-04-02T09:30:00+09:00",
+            limit=12,
+            offset=24,
+        )
+
+        self.assertEqual(
+            provider.calls,
+            [
+                {
+                    "from_at": "2026-04-01T18:30:00+09:00",
+                    "to_at": "2026-04-02T09:30:00+09:00",
+                    "limit": 12,
+                    "offset": 24,
+                }
+            ],
+        )
+        self.assertEqual(
+            [photo["asset_id"] for photo in result["photos"]],
+            ["asset_visible", "asset_cover"],
+        )
+        self.assertFalse(result["photos"][0]["linked"])
+        self.assertEqual(result["photos"][1]["link_state"], "cover")
+        self.assertTrue(result["photos"][1]["cover"])
+
+    def test_photo_search_requires_ordered_timezone_aware_range(self) -> None:
+        repository = TravelRepository(
+            source=FakeTravelSource(
+                {
+                    "id": "item_1",
+                    "trip_id": "trip_1",
+                    "item_type": "spot",
+                    "display_title": "水族館",
+                }
+            ),
+            photo_provider=FakePhotoProvider(),
+        )
+
+        with self.assertRaisesRegex(ValueError, "must include timezone"):
+            repository.search_experience_photos(
+                "item_1", "2026-04-01T10:00", "2026-04-01T11:00"
+            )
+        with self.assertRaisesRegex(ValueError, "to must be after from"):
+            repository.search_experience_photos(
+                "item_1",
+                "2026-04-01T11:00:00+09:00",
+                "2026-04-01T10:00:00+09:00",
+            )
+
     def test_legacy_spot_aliases_delegate_to_experience_boundary(self) -> None:
         repository = TravelRepository(
             source=FakeTravelSource(
@@ -628,10 +721,22 @@ class ExperienceExecutorTest(unittest.TestCase):
             SimpleNamespace(id="get_experience_photos"),
             {"experience_id": "item_1", "limit": 5, "offset": 0},
         )
+        search_result = executor.execute(
+            SimpleNamespace(id="get_experience_photo_search"),
+            {
+                "experience_id": "item_1",
+                "from": "2026-04-02T07:00:00+09:00",
+                "to": "2026-04-02T09:00:00+09:00",
+                "limit": 5,
+                "offset": 10,
+            },
+        )
 
         self.assertEqual(get_result["experience"]["experience_id"], "item_1")
         self.assertEqual(photos_result["experience_id"], "item_1")
         self.assertEqual(photos_result["timeline_item_id"], "item_1")
+        self.assertEqual(search_result["experience_id"], "item_1")
+        self.assertEqual(search_result["source"], "photo_skill")
 
     def test_executes_update_and_archive_experience_tools(self) -> None:
         repository = TravelRepository(
@@ -926,6 +1031,66 @@ class TravelExperienceApiTest(unittest.IsolatedAsyncioTestCase):
                     "confirmed": False,
                     "role": "admin",
                 },
+            ],
+        )
+
+    async def test_photo_search_api_accepts_range_limit_and_offset(self) -> None:
+        runtime_service = FakeRuntimeService(
+            [
+                {
+                    "success": True,
+                    "result": {
+                        "experience_id": "item_1",
+                        "timeline_item_id": "item_1",
+                        "experience_type": "move",
+                        "trip_id": "trip_1",
+                        "photos": [
+                            {
+                                "asset_id": "asset_21",
+                                "linked": False,
+                                "cover": False,
+                                "link_state": None,
+                            }
+                        ],
+                        "pagination": {
+                            "limit": 20,
+                            "offset": 20,
+                            "count": 1,
+                            "has_more": False,
+                        },
+                        "source": "photo_skill",
+                    },
+                }
+            ]
+        )
+        main.runtime_service = runtime_service
+
+        response = await main.travel_search_experience_photos(
+            "item_1",
+            from_at="2026-04-01T18:00:00+09:00",
+            to_at="2026-04-02T09:00:00+09:00",
+            limit=50,
+            offset=20,
+        )
+
+        self.assertEqual(response.photos[0]["asset_id"], "asset_21")
+        self.assertEqual(response.limit, 20)
+        self.assertEqual(response.offset, 20)
+        self.assertEqual(
+            runtime_service.calls,
+            [
+                {
+                    "tool_id": "get_experience_photo_search",
+                    "params": {
+                        "experience_id": "item_1",
+                        "from": "2026-04-01T18:00:00+09:00",
+                        "to": "2026-04-02T09:00:00+09:00",
+                        "limit": 20,
+                        "offset": 20,
+                    },
+                    "confirmed": False,
+                    "role": "admin",
+                }
             ],
         )
 

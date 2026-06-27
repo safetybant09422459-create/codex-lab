@@ -215,6 +215,82 @@ class TravelRepository:
             },
         }
 
+    def search_experience_photos(
+        self,
+        experience_id: str,
+        from_at: str,
+        to_at: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        normalized_experience_id = self._required_text(
+            experience_id, "experience_id"
+        )
+        normalized_limit = self._limit(limit)
+        normalized_offset = self._offset(offset)
+        normalized_from = self._minute_aligned_datetime(
+            self._required_text(from_at, "from"), "from"
+        )
+        normalized_to = self._minute_aligned_datetime(
+            self._required_text(to_at, "to"), "to"
+        )
+        if normalized_to <= normalized_from:
+            raise ValueError("to must be after from")
+
+        item = self.get_experience(normalized_experience_id)
+        if item is None:
+            raise ValueError("timeline item not found")
+
+        photos = self.photo_provider.get_photos(
+            from_at=normalized_from.isoformat(),
+            to_at=normalized_to.isoformat(),
+            limit=normalized_limit,
+            offset=normalized_offset,
+        )
+        active_links = self.source.get_experience_photo_links(
+            normalized_experience_id, "active"
+        )
+        link_states: dict[str, str] = {}
+        excluded_asset_ids: set[str] = set()
+        for link in active_links:
+            asset_id = self._photo_asset_id(link)
+            link_type = link.get("link_type")
+            if asset_id is not None and isinstance(link_type, str):
+                if link_type in EXCLUDED_EXPERIENCE_PHOTO_LINK_TYPES:
+                    excluded_asset_ids.add(asset_id)
+                elif link_type == "cover" or asset_id not in link_states:
+                    link_states[asset_id] = link_type
+
+        visible_photos = []
+        for photo in photos:
+            normalized_photo = dict(photo)
+            asset_id = self._photo_asset_id(normalized_photo)
+            if asset_id in excluded_asset_ids:
+                continue
+            link_state = link_states.get(asset_id or "")
+            normalized_photo["linked"] = link_state in {"linked", "cover"}
+            normalized_photo["cover"] = link_state == "cover"
+            normalized_photo["link_state"] = link_state
+            visible_photos.append(normalized_photo)
+
+        return {
+            "experience_id": normalized_experience_id,
+            "experience_type": self._required_text(
+                item.get("experience_type"), "experience_type"
+            ),
+            "timeline_item_id": normalized_experience_id,
+            "trip_id": self._required_text(item.get("trip_id"), "trip_id"),
+            "from": normalized_from.isoformat(),
+            "to": normalized_to.isoformat(),
+            "photos": visible_photos,
+            "pagination": {
+                "limit": normalized_limit,
+                "offset": normalized_offset,
+                "count": len(visible_photos),
+                "has_more": len(photos) == normalized_limit,
+            },
+        }
+
     def create_trip(
         self,
         *,

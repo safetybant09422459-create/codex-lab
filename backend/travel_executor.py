@@ -92,6 +92,20 @@ class TravelExecutor(BaseExecutor):
                 "source": "photo_skill",
             }
 
+        if tool.id == "get_experience_photo_search":
+            experience_id = self._experience_id(params)
+            return {
+                "tool_id": tool.id,
+                **self.repository.search_experience_photos(
+                    experience_id,
+                    from_at=params.get("from"),
+                    to_at=params.get("to"),
+                    limit=params.get("limit", 50),
+                    offset=params.get("offset", 0),
+                ),
+                "source": "photo_skill",
+            }
+
         if tool.id == "get_experience_photo_links":
             experience_id = self._experience_id(params)
             return {
