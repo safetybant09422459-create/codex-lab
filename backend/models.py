@@ -11,6 +11,21 @@ class RunResponse(BaseModel):
     status: Literal["started"]
 
 
+class ChatRequest(BaseModel):
+    message: str
+    role: str = "admin"
+    debug: bool = False
+
+
+class ChatResponse(BaseModel):
+    action: str
+    reply: str
+    tool_id: str | None = None
+    arguments: dict[str, Any] | None = None
+    result: dict[str, Any] | None = None
+    debug: dict[str, Any] | None = None
+
+
 class ProjectResponse(BaseModel):
     name: str
     local_path: str

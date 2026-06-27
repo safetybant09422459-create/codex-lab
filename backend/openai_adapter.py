@@ -211,7 +211,7 @@ def _safe_exception_message(exc: Exception) -> str:
 def _redact_secrets(message: str) -> str:
     if OPENAI_API_KEY:
         message = message.replace(OPENAI_API_KEY, "[REDACTED]")
-    message = re.sub(r"(?i)bearer\s+\S+", "Bearer [REDACTED]", message)
+    message = re.sub(r"(?i)bearer\s+\S+", "[REDACTED]", message)
     message = re.sub(r"\bsk-[A-Za-z0-9_-]+", "[REDACTED]", message)
     return message
 

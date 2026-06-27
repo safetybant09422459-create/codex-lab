@@ -5,10 +5,13 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import codex_api
+from .chat_orchestrator import handle_travel_chat
 from .config import FRONTEND_DIR, ROOT_DIR, SKILLS_DIR, TOOLS_DIR
 from .git_api import file_diff, git, git_changes
 from .models import (
     AuditResponse,
+    ChatRequest,
+    ChatResponse,
     ChangesResponse,
     CommitRequest,
     DiffResponse,
@@ -67,6 +70,20 @@ Jarvis Principle Check:
 @app.get("/")
 async def index() -> FileResponse:
     return FileResponse(FRONTEND_DIR / "index.html")
+
+
+@app.post(
+    "/api/chat",
+    response_model=ChatResponse,
+    response_model_exclude_none=True,
+)
+async def chat(request: ChatRequest) -> ChatResponse:
+    result = handle_travel_chat(
+        request.message,
+        role=request.role,
+        debug=request.debug,
+    )
+    return ChatResponse(**result)
 
 
 @app.post("/api/run", response_model=RunResponse)

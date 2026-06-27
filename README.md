@@ -54,7 +54,8 @@ Implemented:
 - Permission Engine v0.1
 - Weather Executor v0.1 (`execution_mode: local_weather_stub`)
 - Travel Runtime Read v0.1 (`execution_mode: local_travel_read`)
-- Chat Orchestrator v0.1（Travel Tool提案のみ、Tool実行なし）
+- Chat Orchestrator v0.1（Travel read-only Tool実行、writeは提案のみ）
+- FastAPI Chat API v0.1 (`POST /api/chat`)
 
 Not Yet Implemented:
 
@@ -127,6 +128,45 @@ Runtime API:
 - `POST /api/runtime/dry-run`
 - `POST /api/runtime/execute`
 - `GET /api/audit`
+
+Chat API:
+
+- `POST /api/chat`
+
+`POST /api/chat` はBrowserから受け取った自然文をserver-sideの
+`backend.chat_orchestrator.handle_travel_chat()` へ渡す。BrowserへOpenAI API Keyを
+渡さず、BrowserからOpenAI APIへ直接接続しない。read-only ToolはChat Orchestratorの
+検証後にRuntime経由で実行し、write proposalは実行しない。
+
+Request:
+
+```json
+{
+  "message": "旅行一覧を見せて",
+  "role": "admin",
+  "debug": false
+}
+```
+
+- `message`: ユーザーの発話
+- `role`: 省略時は `admin`。これは認証未実装期間の仮実装であり、将来は認証済み
+  セッションからserver-sideで決定する
+- `debug`: 省略時は `false`。`true` の場合だけresponseへtimingを含める
+
+成功Response例:
+
+```json
+{
+  "action": "tool_result",
+  "tool_id": "get_trips",
+  "arguments": {},
+  "reply": "旅行一覧を取得しました。",
+  "result": {
+    "tool_id": "get_trips",
+    "trips": []
+  }
+}
+```
 
 `POST /api/runtime/execute` は Runtime v0.1 の安全境界を通してToolを実行する。Weather は `local_weather_stub`、Travel read は `local_travel_read`、その他の未実装Toolは必要に応じて `stub` または planned として扱う。Travel read の成功実行もAudit Log対象で、現在の `event_type` は `runtime.execute_stub` のままだが、`execution_mode` には `local_travel_read` が記録される。
 
@@ -238,6 +278,15 @@ EOF
 期待結果は `action: "tool_result"`、`tool_id: "get_trips"` となり、`result` に
 Travel一覧が入る。debug timingには `proposal_total`、`runtime_execute`、`total` が
 含まれる。
+
+FastAPI Chat APIの手動確認（起動中のserviceへコード変更を反映してから実行）:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8001/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"旅行一覧を見せて","role":"admin","debug":true}' \
+  | python -m json.tool
+```
 
 通常の返却形式を変えずに処理時間を確認する場合は `debug=True` を指定する。
 `build_prompt`、`llm_call`、`json_parse`、`policy_validation`、`fallback`、
