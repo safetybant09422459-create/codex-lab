@@ -16,25 +16,65 @@ class FakeRuntimeService:
     def __init__(self) -> None:
         self.trips = [
             {
+                "id": "trip-yui",
+                "title": "ゆい初旅行",
+                "start_date": "2024-07-12",
+                "end_date": "2024-07-12",
+                "prefectures": "香川県",
+                "outing_type": "day_trip",
+                "memo": "おためし香川日帰り",
+            },
+            {
                 "id": "trip-suma",
                 "title": "須磨シーワールド",
+                "start_date": "2026-05-08",
+                "end_date": "2026-05-09",
                 "prefectures": "兵庫県",
-                "memo": "神戸の水族館",
+                "outing_type": "overnight",
+                "memo": "須磨シーワールド満喫🐬",
             },
             {
                 "id": "trip-mai",
                 "title": "まい初旅行",
+                "start_date": "2026-01-28",
+                "end_date": "2026-01-30",
                 "prefectures": "兵庫県",
+                "outing_type": "overnight",
+                "memo": "ゆいは初APM",
             },
             {
                 "id": "trip-beiju",
                 "title": "ひいばあ米寿祝い",
+                "start_date": "2025-03-29",
+                "end_date": "2025-03-30",
                 "prefectures": "兵庫県",
+                "outing_type": "overnight",
             },
             {
                 "id": "trip-fukuoka",
                 "title": "福岡旅行",
-                "prefectures": "福岡県",
+                "start_date": "2026-04-02",
+                "end_date": "2026-04-04",
+                "prefectures": "福岡",
+                "outing_type": "overnight",
+                "memo": "おじちゃんの家に泊まって2回目APM",
+            },
+            {
+                "id": "trip-apm-german-forest",
+                "title": "APM &ドイツの森",
+                "start_date": "2026-05-06",
+                "end_date": "2026-05-06",
+                "prefectures": "岡山県",
+                "outing_type": "day_trip",
+                "memo": "結婚記念日雨でネモフィラ見れなかったのでリベンジ",
+            },
+            {
+                "id": "trip-osaka",
+                "title": "大阪旅行",
+                "start_date": "2026-05-13",
+                "end_date": "2026-05-15",
+                "prefectures": "大阪府",
+                "outing_type": "overnight",
             },
         ]
         self.calls = []
@@ -77,17 +117,22 @@ class TravelChatEvaluatorTest(unittest.TestCase):
             self.cases, mode="mock"
         )
 
-        self.assertEqual(summary["total"], 10)
-        self.assertEqual(summary["passed"], 10)
-        self.assertEqual(summary["failed"], 0)
-        self.assertEqual(summary["failures"], [])
-        self.assertEqual(sum(summary["failure_categories"].values()), 0)
+        self.assertEqual(summary["total"], 50)
+        self.assertEqual(summary["passed"], 33)
+        self.assertEqual(summary["failed"], 17)
+        self.assertEqual(
+            summary["failure_categories"]["entity_resolution_missing"], 16
+        )
+        self.assertEqual(summary["failure_categories"]["context_not_used"], 1)
+        self.assertEqual(sum(summary["failure_categories"].values()), 17)
         self.assertTrue(
             all("debug_steps" in record for record in summary["records"])
         )
         self.assertTrue(all("trace" in record for record in summary["records"]))
         trace = next(
-            record["trace"] for record in summary["records"] if record["id"] == "open_kobe"
+            record["trace"]
+            for record in summary["records"]
+            if record["id"] == "location_kobe_candidates"
         )
         self.assertEqual(trace["planner"]["proposed_tool"], "get_trips")
         self.assertTrue(trace["runtime_steps"])
@@ -106,8 +151,27 @@ class TravelChatEvaluatorTest(unittest.TestCase):
         )
         self.assertTrue(all(call["confirmed"] is False for call in self.runtime.calls))
 
+    def test_cases_cover_requested_classifications(self) -> None:
+        counts = {}
+        for case in self.cases:
+            classification = case.get("expected_classification")
+            counts[classification] = counts.get(classification, 0) + 1
+
+        self.assertEqual(
+            counts,
+            {
+                "trip_title_or_partial_title": 10,
+                "prefecture_or_location": 8,
+                "memo_derived": 8,
+                "date_year_or_duration": 8,
+                "context_follow_up": 7,
+                "ambiguous_query": 5,
+                "unsupported_or_needs_experience_context": 4,
+            },
+        )
+
     def test_failure_summary_classifies_entity_resolution(self) -> None:
-        cases = [dict(self.cases[1], expected_trip_title="別の旅行")]
+        cases = [dict(self.cases[0], expected_trip_title="別の旅行")]
 
         summary = TravelChatEvaluator(runtime=self.runtime).run(cases, mode="mock")
 
@@ -161,7 +225,7 @@ class TravelChatEvaluatorTest(unittest.TestCase):
         self.assertIn("## Reason Trace", report)
         self.assertIn("## Failure categories count", report)
         self.assertIn("## 改善ヒント", report)
-        self.assertIn("旅行一覧を見せて", render_markdown(summary))
+        self.assertIn("福岡旅行を開いて", render_markdown(summary))
 
     def test_trace_redacts_secrets(self) -> None:
         secret = "sk-eval-secret-value"
