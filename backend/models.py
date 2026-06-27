@@ -23,6 +23,8 @@ class ChatResponse(BaseModel):
     tool_id: str | None = None
     arguments: dict[str, Any] | None = None
     result: dict[str, Any] | None = None
+    candidates: list[dict[str, Any]] | None = None
+    navigation: dict[str, Any] | None = None
     debug: dict[str, Any] | None = None
 
 

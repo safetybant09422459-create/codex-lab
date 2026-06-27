@@ -138,6 +138,17 @@ Chat API:
 渡さず、BrowserからOpenAI APIへ直接接続しない。read-only ToolはChat Orchestratorの
 検証後にRuntime経由で実行し、write proposalは実行しない。
 
+Travel名解決のmulti-step v0.1では、LLMは最初のToolを提案するだけで、server-side
+Orchestratorが最大3回のbounded loopを管理する。`福岡旅行を開いて` のような入力で
+LLMが`get_trips`を提案した場合、Chat Tool Policyを通してRuntimeで一覧を取得し、
+タイトル部分一致で候補を解決する。一致が1件なら、再度Policyを確認してRuntimeで
+`get_trip`を実行する。0件は安全なnot-found応答、複数件は自動選択せず
+`candidates`を返す。各Runtime呼び出しは従来通りPermission、Audit、
+ExecutorRegistryを通る。
+
+名前の比較は空白を除去し、Unicode NFKCで全角・半角を正規化して、英字を小文字化
+する。fuzzy検索やExperience名解決は行わない。
+
 Request:
 
 ```json
@@ -167,6 +178,43 @@ Request:
   }
 }
 ```
+
+旅行名を開く場合のResponse例:
+
+```json
+{
+  "action": "tool_result",
+  "tool_id": "get_trip",
+  "arguments": {"trip_id": "trip-fukuoka"},
+  "reply": "福岡旅行を開きます。",
+  "result": {
+    "tool_id": "get_trip",
+    "trip": {"id": "trip-fukuoka", "title": "福岡旅行"}
+  },
+  "navigation": {
+    "type": "travel_trip",
+    "target": "#travel",
+    "trip_id": "trip-fukuoka",
+    "label": "Travelで開く"
+  }
+}
+```
+
+Jarvis Homeは`navigation`を受け取ると「Travelで開く」導線を表示する。現時点の遷移先
+はTravel画面の`#travel`までで、`trip_id`は将来用のdata属性として保持する。
+`trip_id`付きdeep linkとTravel画面での該当Trip自動選択は次フェーズで実装する。
+
+multi-step名解決の手動確認（起動中プロセスへの反映後）:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8001/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"福岡旅行を開いて","role":"admin","debug":true}' \
+  | python -m json.tool
+```
+
+`action: tool_result`、`tool_id: get_trip`、Trip詳細、`navigation`、および
+`debug.steps`内の`get_trips`と`get_trip`を確認する。
 
 `POST /api/runtime/execute` は Runtime v0.1 の安全境界を通してToolを実行する。Weather は `local_weather_stub`、Travel read は `local_travel_read`、その他の未実装Toolは必要に応じて `stub` または planned として扱う。Travel read の成功実行もAudit Log対象で、現在の `event_type` は `runtime.execute_stub` のままだが、`execution_mode` には `local_travel_read` が記録される。
 

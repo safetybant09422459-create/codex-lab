@@ -108,6 +108,24 @@ function showDetail(elements) {
   }
 }
 
+function travelTripIdFromHash() {
+  var hash = window.location.hash.replace("#", "");
+  var queryIndex = hash.indexOf("?");
+  var params;
+
+  if (queryIndex === -1 || hash.slice(0, queryIndex) !== "travel") {
+    return "";
+  }
+  params = new URLSearchParams(hash.slice(queryIndex + 1));
+  return params.get("trip_id") || "";
+}
+
+function clearTravelDeepLink() {
+  if (travelTripIdFromHash()) {
+    window.history.replaceState(null, "", "#travel");
+  }
+}
+
 function experienceTitle(experience) {
   experience = experience || {};
   return experience.display_title || experience.place_name || experience.memo || "無題";
@@ -1445,7 +1463,7 @@ async function loadTravelTrips(force) {
   }
 }
 
-async function loadTravelDetail(tripId) {
+async function loadTravelDetail(tripId, fallbackToList) {
   var elements = getElements();
   var data;
   var photoData;
@@ -1472,12 +1490,18 @@ async function loadTravelDetail(tripId) {
     renderTravelDetail(elements, data);
     setTravelStatus(elements, "詳細取得済み", false);
   } catch (error) {
-    if (error.message === "Travel trip not found") {
+    if (error.message === "Travel trip not found" && fallbackToList) {
+      clearTravelDeepLink();
+      await loadTravelTrips(false);
+      showList(elements);
+      setTravelStatus(elements, "旅行が見つかりませんでした。", true);
+    } else if (error.message === "Travel trip not found") {
       renderDetailError(elements, "旅行が見つかりませんでした。");
+      setTravelStatus(elements, error.message, true);
     } else {
       renderDetailError(elements, "旅行詳細を取得できませんでした。");
+      setTravelStatus(elements, error.message, true);
     }
-    setTravelStatus(elements, error.message, true);
   } finally {
     detailLoading = false;
   }
@@ -1760,12 +1784,23 @@ async function loadSpotDetail(spotId) {
   return loadExperienceDetail(spotId);
 }
 
-function maybeLoadTravelTrips(force) {
+function handleTravelRoute() {
   var elements = getElements();
+  var tripId;
+
   if (!elements.screen || elements.screen.hidden) {
     return;
   }
-  loadTravelTrips(force);
+  tripId = travelTripIdFromHash();
+  if (tripId) {
+    loadTravelDetail(tripId, true);
+    return;
+  }
+  showList(elements);
+  if (loaded) {
+    setTravelStatus(elements, "取得済み", false);
+  }
+  loadTravelTrips(false);
 }
 
 function bindTravelScreen() {
@@ -1791,27 +1826,32 @@ function bindTravelScreen() {
         setTravelStatus(nextElements, "詳細取得済み", false);
         return;
       }
+      clearTravelDeepLink();
       showList(nextElements);
-      setTravelStatus(nextElements, "取得済み", false);
+      if (loaded) {
+        setTravelStatus(nextElements, "取得済み", false);
+      } else {
+        loadTravelTrips(false);
+      }
     });
   }
 
   if (travelButton) {
     travelButton.addEventListener("click", function () {
       window.setTimeout(function () {
-        maybeLoadTravelTrips(false);
+        handleTravelRoute();
       }, 0);
     });
   }
 
   window.addEventListener("hashchange", function () {
     window.setTimeout(function () {
-      maybeLoadTravelTrips(false);
+      handleTravelRoute();
     }, 0);
   });
 
   window.setTimeout(function () {
-    maybeLoadTravelTrips(false);
+    handleTravelRoute();
   }, 0);
 }
 

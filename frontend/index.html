@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Jarvis Shell v0.3</title>
+    <title>Jarvis Home</title>
     <link rel="stylesheet" href="/static/style.css" />
 
   </head>
@@ -12,7 +12,7 @@
       <header class="shell-header">
         <div>
           <h1>Jarvis</h1>
-          <p class="muted">Jarvis Shell v0.3</p>
+          <p class="muted">おかえりなさい。何をしますか？</p>
         </div>
         <span class="pill">Web UI Shell</span>
       </header>
@@ -28,22 +28,41 @@
       </nav>
 
       <section id="jarvis-screen" class="shell-screen active" data-screen-name="Jarvis">
-        <div class="shell-screen-head">
-          <div>
-            <h2>Jarvis</h2>
-            <p class="muted">Jarvis Core が将来選んだ要約、提案、確認入口を表示するトップ画面。</p>
+        <section class="jarvis-home" aria-labelledby="jarvis-home-title">
+          <header class="jarvis-home-head">
+            <h2 id="jarvis-home-title">何をしますか？</h2>
+          </header>
+
+          <div
+            id="chat-history"
+            class="chat-history"
+            aria-live="polite"
+            aria-label="会話履歴"
+          >
+            <div class="chat-empty" id="chat-empty">
+              <p>旅行の確認など、自然な言葉で話しかけてください。</p>
+            </div>
           </div>
-        </div>
-        <div class="placeholder-grid">
-          <section class="placeholder-panel">
-            <h3>Today</h3>
-            <p>予定、天気、注意事項などを将来ここに表示します。</p>
-          </section>
-          <section class="placeholder-panel">
-            <h3>Suggestions</h3>
-            <p>Jarvis Core / Skill Router から受け取る提案の表示枠です。</p>
-          </section>
-        </div>
+
+          <div id="chat-suggestions" class="chat-suggestions" aria-label="入力例">
+            <button class="chat-chip" type="button" data-chat-prompt="旅行一覧を見せて">旅行一覧を見せて</button>
+            <button class="chat-chip" type="button" data-chat-prompt="福岡旅行を開いて">福岡旅行を開いて</button>
+            <button class="chat-chip" type="button" data-chat-prompt="アンパンマンミュージアムの写真見せて">アンパンマンミュージアムの写真見せて</button>
+          </div>
+
+          <form id="chat-form" class="chat-form">
+            <label class="visually-hidden" for="chat-input">Jarvisへのメッセージ</label>
+            <textarea
+              id="chat-input"
+              rows="1"
+              maxlength="4000"
+              placeholder="例: 旅行一覧を見せて"
+              autocomplete="off"
+            ></textarea>
+            <button id="chat-submit" class="chat-submit" type="submit">送信</button>
+          </form>
+          <p id="chat-status" class="chat-status" role="status"></p>
+        </section>
       </section>
 
       <section id="travel-screen" class="shell-screen" data-screen-name="Travel" hidden>
@@ -292,6 +311,7 @@
     </main>
 
     <script type="module" src="/static/shell.js"></script>
+    <script type="module" src="/static/chat.js"></script>
     <script type="module" src="/static/travel.js"></script>
     <script type="module" src="/static/app.js"></script>
 

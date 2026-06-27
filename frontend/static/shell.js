@@ -20,6 +20,11 @@ screens.forEach(function (screen) {
 
 function resolveScreenId() {
   var hash = window.location.hash.replace("#", "");
+  var queryIndex = hash.indexOf("?");
+
+  if (queryIndex !== -1) {
+    hash = hash.slice(0, queryIndex);
+  }
   return hashScreenMap[hash] || "jarvis-screen";
 }
 

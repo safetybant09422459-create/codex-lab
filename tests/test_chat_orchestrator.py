@@ -35,6 +35,8 @@ class FakeRuntimeService:
         )
         if self.error is not None:
             raise self.error
+        if isinstance(self.response, list):
+            return self.response[len(self.calls) - 1]
         return self.response
 
 
@@ -344,6 +346,176 @@ class ChatOrchestratorTest(unittest.TestCase):
             )
         )
 
+    def test_named_trip_executes_get_trips_then_get_trip(self) -> None:
+        trip = {"id": "trip-fukuoka", "title": "福岡旅行"}
+        runtime = FakeRuntimeService(
+            response=[
+                {"success": True, "result": {"trips": [trip]}},
+                {"success": True, "result": {"trip": trip}},
+            ]
+        )
+        proposal = {
+            "action": "tool_proposal",
+            "tool_id": "get_trips",
+            "arguments": {},
+            "confidence": "medium",
+            "reply": "福岡旅行を探します。",
+        }
+
+        with (
+            patch.object(
+                chat_orchestrator,
+                "generate_text_with_timings",
+                return_value=(json.dumps(proposal), None),
+            ),
+            patch.object(chat_orchestrator, "runtime_service", runtime),
+        ):
+            result = chat_orchestrator.handle_travel_chat(
+                "福岡旅行を開いて", role="family", debug=True
+            )
+
+        self.assertEqual(result["action"], "tool_result")
+        self.assertEqual(result["tool_id"], "get_trip")
+        self.assertEqual(result["arguments"], {"trip_id": "trip-fukuoka"})
+        self.assertEqual(result["reply"], "福岡旅行を開きます。")
+        self.assertEqual(result["result"], {"trip": trip})
+        self.assertEqual(
+            result["navigation"],
+            {
+                "type": "travel_trip",
+                "target": "#travel?trip_id=trip-fukuoka",
+                "trip_id": "trip-fukuoka",
+                "label": "Travelで開く",
+            },
+        )
+        self.assertEqual(
+            [call["tool_id"] for call in runtime.calls],
+            ["get_trips", "get_trip"],
+        )
+        self.assertEqual(
+            [step["tool_id"] for step in result["debug"]["steps"]],
+            ["get_trips", "get_trip"],
+        )
+        self.assertTrue(
+            all(call["confirmed"] is False for call in runtime.calls)
+        )
+
+    def test_named_trip_not_found_returns_safe_response(self) -> None:
+        runtime = FakeRuntimeService(
+            response={
+                "success": True,
+                "result": {"trips": [{"id": "trip-osaka", "title": "大阪旅行"}]},
+            }
+        )
+        proposal = {
+            "action": "tool_proposal",
+            "tool_id": "get_trips",
+            "arguments": {},
+            "confidence": "medium",
+            "reply": "旅行を探します。",
+        }
+
+        with (
+            patch.object(
+                chat_orchestrator,
+                "generate_text_with_timings",
+                return_value=(json.dumps(proposal), None),
+            ),
+            patch.object(chat_orchestrator, "runtime_service", runtime),
+        ):
+            result = chat_orchestrator.handle_travel_chat("福岡旅行を開いて")
+
+        self.assertEqual(
+            result,
+            {
+                "action": "needs_context",
+                "reply": "該当する旅行が見つかりませんでした。",
+            },
+        )
+        self.assertEqual(len(runtime.calls), 1)
+
+    def test_trip_navigation_url_encodes_resolved_id(self) -> None:
+        result = chat_orchestrator._runtime_success_result(
+            "get_trip",
+            {"trip_id": "trip/fukuoka 2026?draft"},
+            {"trip": {"id": "trip/fukuoka 2026?draft", "title": "福岡旅行"}},
+        )
+
+        self.assertEqual(
+            result["navigation"]["target"],
+            "#travel?trip_id=trip%2Ffukuoka%202026%3Fdraft",
+        )
+        self.assertEqual(
+            result["navigation"]["trip_id"], "trip/fukuoka 2026?draft"
+        )
+
+    def test_multiple_named_trip_candidates_are_not_auto_selected(self) -> None:
+        trips = [
+            {"id": "trip-1", "title": "大阪旅行 2025"},
+            {"id": "trip-2", "title": "大阪旅行 2026"},
+        ]
+        runtime = FakeRuntimeService(
+            response={"success": True, "result": {"trips": trips}}
+        )
+        proposal = {
+            "action": "tool_proposal",
+            "tool_id": "get_trips",
+            "arguments": {},
+            "confidence": "medium",
+            "reply": "大阪旅行を探します。",
+        }
+
+        with (
+            patch.object(
+                chat_orchestrator,
+                "generate_text_with_timings",
+                return_value=(json.dumps(proposal), None),
+            ),
+            patch.object(chat_orchestrator, "runtime_service", runtime),
+        ):
+            result = chat_orchestrator.handle_travel_chat("大阪旅行を開いて")
+
+        self.assertEqual(result["action"], "needs_context")
+        self.assertEqual(result["reply"], "候補が複数あります。")
+        self.assertEqual(result["candidates"], trips)
+        self.assertEqual(len(runtime.calls), 1)
+
+    def test_max_steps_stops_before_follow_up_runtime_call(self) -> None:
+        trip = {"id": "trip-fukuoka", "title": "福岡旅行"}
+        runtime = FakeRuntimeService(
+            response={"success": True, "result": {"trips": [trip]}}
+        )
+        proposal = {
+            "action": "tool_proposal",
+            "tool_id": "get_trips",
+            "arguments": {},
+            "confidence": "medium",
+            "reply": "福岡旅行を探します。",
+        }
+
+        with (
+            patch.object(
+                chat_orchestrator,
+                "generate_text_with_timings",
+                return_value=(json.dumps(proposal), None),
+            ),
+            patch.object(chat_orchestrator, "runtime_service", runtime),
+            patch.object(chat_orchestrator, "MAX_TRAVEL_STEPS", 1),
+        ):
+            result = chat_orchestrator.handle_travel_chat("福岡旅行を開いて")
+
+        self.assertEqual(result["action"], "needs_context")
+        self.assertIn("安全のため", result["reply"])
+        self.assertEqual(len(runtime.calls), 1)
+
+    def test_trip_name_normalization_supports_width_case_and_spaces(self) -> None:
+        result = chat_orchestrator._find_trip_candidates(
+            {"trips": [{"id": "trip-1", "title": "ＦＵＫＵＯＫＡ 旅行"}]},
+            chat_orchestrator._extract_trip_name("fukuokaを開いて"),
+        )
+
+        self.assertEqual([trip["id"] for trip in result], ["trip-1"])
+
     def test_read_tool_outside_allowlist_is_not_executed(self) -> None:
         runtime = FakeRuntimeService()
         invalid_proposal = {
@@ -401,6 +573,7 @@ class ChatOrchestratorTest(unittest.TestCase):
             "role": "admin",
             "confirmed": True,
             "user_id": "user-1",
+            "navigation": {"target": "https://example.invalid"},
         }
 
         with (
@@ -472,6 +645,35 @@ class ChatOrchestratorTest(unittest.TestCase):
         self.assertEqual(error_result["action"], "runtime_error")
         self.assertNotIn(secret, json.dumps(error_result))
         self.assertNotIn(secret, json.dumps(success_result))
+
+    def test_resolved_trip_id_secret_is_redacted_from_arguments_and_navigation(self) -> None:
+        secret = "sk-resolved-trip-secret"
+        trip = {"id": f"Bearer {secret}", "title": "福岡旅行"}
+        runtime = FakeRuntimeService(
+            response=[
+                {"success": True, "result": {"trips": [trip]}},
+                {"success": True, "result": {"trip": trip}},
+            ]
+        )
+        proposal = {
+            "action": "tool_proposal",
+            "tool_id": "get_trips",
+            "arguments": {},
+            "confidence": "medium",
+            "reply": "福岡旅行を探します。",
+        }
+
+        with (
+            patch.object(
+                chat_orchestrator,
+                "generate_text_with_timings",
+                return_value=(json.dumps(proposal), None),
+            ),
+            patch.object(chat_orchestrator, "runtime_service", runtime),
+        ):
+            result = chat_orchestrator.handle_travel_chat("福岡旅行を開いて")
+
+        self.assertNotIn(secret, json.dumps(result, ensure_ascii=False))
 
     def test_chat_tool_policy_separates_read_and_write(self) -> None:
         self.assertEqual(

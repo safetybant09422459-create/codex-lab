@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import unicodedata
 from collections.abc import Callable
 from time import perf_counter
 from typing import Any
+from urllib.parse import quote
 
 from .chat_tool_policy import (
     CHAT_TOOL_ARGUMENTS,
@@ -27,6 +29,11 @@ _FALLBACK = {
 _RUNTIME_ERROR_REPLY = "Toolの実行に失敗しました。時間をおいて再度お試しください。"
 _PERMISSION_DENIED_REPLY = "この操作を実行する権限がありません。"
 _WRITE_NOT_IMPLEMENTED_REPLY = "更新操作には確認が必要です。現在は提案のみ対応しています。"
+_TRIP_NOT_FOUND_REPLY = "該当する旅行が見つかりませんでした。"
+_MULTIPLE_TRIPS_REPLY = "候補が複数あります。"
+_MAX_STEPS_REPLY = "安全のため処理を中断しました。対象の旅行をもう少し具体的に指定してください。"
+
+MAX_TRAVEL_STEPS = 3
 
 _SUCCESS_REPLIES = {
     "get_trips": "旅行一覧を取得しました。",
@@ -164,14 +171,14 @@ def handle_travel_chat(
     role: str = "admin",
     debug: bool = False,
 ) -> dict[str, Any]:
-    """Propose a Travel tool and execute validated read-only tools via Runtime."""
+    """Execute a bounded server-side Travel read plan proposed by the LLM."""
     total_started = perf_counter()
     proposal_started = perf_counter()
     proposal = propose_travel_tool(message, debug=debug)
     proposal_total = _elapsed_ms(proposal_started)
 
     proposal_debug = proposal.pop("debug", None)
-    runtime_execute_ms = 0.0
+    runtime_steps: list[dict[str, Any]] = []
 
     if proposal.get("action") != "tool_proposal":
         result = proposal
@@ -188,47 +195,74 @@ def handle_travel_chat(
                 "reply": _WRITE_NOT_IMPLEMENTED_REPLY,
             }
         else:
-            runtime_started = perf_counter()
-            try:
-                # role and confirmed are server-owned values, never model output.
-                runtime_response = runtime_service.execute_stub(
-                    tool_id,
-                    params=arguments,
-                    confirmed=False,
+            pending_steps = [(tool_id, arguments)]
+            result = None
+            trip_query = _extract_trip_name(message) if tool_id == "get_trips" else None
+
+            while pending_steps and len(runtime_steps) < MAX_TRAVEL_STEPS:
+                current_tool_id, current_arguments = pending_steps.pop(0)
+                runtime_response, runtime_ms = _execute_runtime_read(
+                    current_tool_id,
+                    current_arguments,
                     role=role,
                 )
-                if runtime_response.get("success"):
-                    result = {
-                        "action": "tool_result",
-                        "tool_id": tool_id,
-                        "arguments": arguments,
-                        "reply": _SUCCESS_REPLIES[tool_id],
-                        "result": _redact_value(runtime_response.get("result")),
+                runtime_steps.append(
+                    {
+                        "step": len(runtime_steps) + 1,
+                        "tool_id": current_tool_id,
+                        "runtime_ms": runtime_ms,
                     }
-                elif runtime_response.get("permission_denied"):
-                    result = {
-                        "action": "permission_denied",
-                        "tool_id": tool_id,
-                        "arguments": arguments,
-                        "reply": _PERMISSION_DENIED_REPLY,
-                    }
-                else:
-                    result = {
-                        "action": "runtime_error",
-                        "tool_id": tool_id,
-                        "arguments": arguments,
-                        "reply": _RUNTIME_ERROR_REPLY,
-                    }
-            except Exception:
-                # Runtime exception details can contain backend or credential data.
+                )
+
+                if not runtime_response.get("success"):
+                    result = _runtime_failure_result(
+                        current_tool_id,
+                        current_arguments,
+                        runtime_response,
+                    )
+                    break
+
+                runtime_result = runtime_response.get("result")
+                if current_tool_id == "get_trips" and trip_query is not None:
+                    candidates = _find_trip_candidates(runtime_result, trip_query)
+                    if not candidates:
+                        result = {
+                            "action": "needs_context",
+                            "reply": _TRIP_NOT_FOUND_REPLY,
+                        }
+                        break
+                    if len(candidates) > 1:
+                        result = {
+                            "action": "needs_context",
+                            "reply": _MULTIPLE_TRIPS_REPLY,
+                            "candidates": _redact_value(candidates),
+                        }
+                        break
+
+                    trip_id = candidates[0].get("id")
+                    if not isinstance(trip_id, str) or not trip_id.strip():
+                        result = {
+                            "action": "runtime_error",
+                            "tool_id": current_tool_id,
+                            "arguments": current_arguments,
+                            "reply": _RUNTIME_ERROR_REPLY,
+                        }
+                        break
+                    pending_steps.append(("get_trip", {"trip_id": trip_id.strip()}))
+                    continue
+
+                result = _runtime_success_result(
+                    current_tool_id,
+                    current_arguments,
+                    runtime_result,
+                )
+                break
+
+            if result is None:
                 result = {
-                    "action": "runtime_error",
-                    "tool_id": tool_id,
-                    "arguments": arguments,
-                    "reply": _RUNTIME_ERROR_REPLY,
+                    "action": "needs_context",
+                    "reply": _MAX_STEPS_REPLY,
                 }
-            finally:
-                runtime_execute_ms = _elapsed_ms(runtime_started)
 
     if debug:
         timings_ms = {}
@@ -245,14 +279,167 @@ def handle_travel_chat(
         timings_ms.update(
             {
                 "proposal_total": proposal_total,
-                "runtime_execute": runtime_execute_ms,
+                "runtime_execute": round(
+                    sum(step["runtime_ms"] for step in runtime_steps), 3
+                ),
                 "total": _elapsed_ms(total_started),
             }
         )
-        result["debug"] = {"timings_ms": timings_ms}
+        result["debug"] = {
+            "timings_ms": timings_ms,
+            "steps": runtime_steps,
+            "max_steps": MAX_TRAVEL_STEPS,
+        }
         if isinstance(proposal_debug, dict) and "openai_adapter" in proposal_debug:
             result["debug"]["openai_adapter"] = proposal_debug["openai_adapter"]
     return result
+
+
+def _execute_runtime_read(
+    tool_id: str,
+    arguments: dict[str, Any],
+    *,
+    role: str,
+) -> tuple[dict[str, Any], float]:
+    """Apply Chat policy immediately before every Runtime execution."""
+    runtime_started = perf_counter()
+    try:
+        validated_call = validate_chat_proposal(
+            {
+                "action": "tool_proposal",
+                "tool_id": tool_id,
+                "arguments": arguments,
+                "confidence": "high",
+                "reply": "server-side runtime step",
+            }
+        )
+        execution_policy = get_chat_tool_execution_policy(validated_call["tool_id"])
+        if execution_policy != "read_executable":
+            return {"success": False}, _elapsed_ms(runtime_started)
+        # role and confirmed are server-owned values, never model output.
+        return (
+            runtime_service.execute_stub(
+                validated_call["tool_id"],
+                params=validated_call["arguments"],
+                confirmed=False,
+                role=role,
+            ),
+            _elapsed_ms(runtime_started),
+        )
+    except Exception:
+        # Runtime exception details can contain backend or credential data.
+        return {"success": False}, _elapsed_ms(runtime_started)
+
+
+def _runtime_failure_result(
+    tool_id: str,
+    arguments: dict[str, Any],
+    runtime_response: dict[str, Any],
+) -> dict[str, Any]:
+    if runtime_response.get("permission_denied"):
+        action = "permission_denied"
+        reply = _PERMISSION_DENIED_REPLY
+    else:
+        action = "runtime_error"
+        reply = _RUNTIME_ERROR_REPLY
+    return {
+        "action": action,
+        "tool_id": tool_id,
+        "arguments": _redact_value(arguments),
+        "reply": reply,
+    }
+
+
+def _runtime_success_result(
+    tool_id: str,
+    arguments: dict[str, Any],
+    runtime_result: Any,
+) -> dict[str, Any]:
+    safe_arguments = _redact_value(arguments)
+    result = {
+        "action": "tool_result",
+        "tool_id": tool_id,
+        "arguments": safe_arguments,
+        "reply": _SUCCESS_REPLIES[tool_id],
+        "result": _redact_value(runtime_result),
+    }
+    if tool_id == "get_trip":
+        trip = runtime_result.get("trip") if isinstance(runtime_result, dict) else None
+        if not isinstance(trip, dict):
+            return {
+                "action": "needs_context",
+                "reply": _TRIP_NOT_FOUND_REPLY,
+            }
+        title = trip.get("title") if isinstance(trip, dict) else None
+        result["reply"] = (
+            f"{redact_sensitive_text(title)}を開きます。"
+            if isinstance(title, str) and title.strip()
+            else "旅行を開きます。"
+        )
+        result["navigation"] = {
+            "type": "travel_trip",
+            "target": f"#travel?trip_id={quote(safe_arguments['trip_id'], safe='')}",
+            "trip_id": safe_arguments["trip_id"],
+            "label": "Travelで開く",
+        }
+    return result
+
+
+def _extract_trip_name(message: str) -> str | None:
+    """Extract a conservative trip-name query from a get_trips utterance."""
+    if not isinstance(message, str):
+        return None
+    value = unicodedata.normalize("NFKC", message).strip()
+    value = "".join(character for character in value if not character.isspace())
+    value = value.rstrip("。.!！?？")
+    for suffix in (
+        "を開いてください",
+        "開いてください",
+        "を表示してください",
+        "表示してください",
+        "を見せてください",
+        "見せてください",
+        "を開いて",
+        "開いて",
+        "を表示して",
+        "表示して",
+        "を見せて",
+        "見せて",
+        "を開く",
+        "開く",
+    ):
+        if value.endswith(suffix):
+            value = value[: -len(suffix)]
+            break
+    value = value.strip("「」『』\"'")
+    normalized = _normalize_trip_text(value)
+    if normalized in {"", "旅行", "旅", "旅行一覧", "旅一覧", "trip", "trips"}:
+        return None
+    return normalized
+
+
+def _find_trip_candidates(
+    runtime_result: Any,
+    normalized_query: str,
+) -> list[dict[str, Any]]:
+    if not isinstance(runtime_result, dict):
+        return []
+    trips = runtime_result.get("trips")
+    if not isinstance(trips, list):
+        return []
+    candidates = []
+    for trip in trips:
+        if not isinstance(trip, dict):
+            continue
+        title = trip.get("title")
+        if isinstance(title, str) and normalized_query in _normalize_trip_text(title):
+            candidates.append(trip)
+    return candidates
+
+
+def _normalize_trip_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).lower()
+    return "".join(character for character in normalized if not character.isspace())
 
 
 def _redact_proposal(proposal: dict[str, Any]) -> dict[str, Any]:

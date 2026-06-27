@@ -9,7 +9,7 @@ from backend import chat_orchestrator, main
 
 
 class FakeRuntimeService:
-    def __init__(self, response: dict[str, Any]) -> None:
+    def __init__(self, response: dict[str, Any] | list[dict[str, Any]]) -> None:
         self.response = response
         self.calls: list[dict[str, Any]] = []
 
@@ -28,6 +28,8 @@ class FakeRuntimeService:
                 "role": role,
             }
         )
+        if isinstance(self.response, list):
+            return self.response[len(self.calls) - 1]
         return self.response
 
 
@@ -115,6 +117,49 @@ class ChatApiTest(unittest.IsolatedAsyncioTestCase):
         handle.assert_called_once_with(
             "旅行を見せて", role="family", debug=True
         )
+
+    async def test_named_trip_response_keeps_navigation_and_two_runtime_steps(self) -> None:
+        trip = {"id": "trip-fukuoka", "title": "福岡旅行"}
+        runtime = FakeRuntimeService(
+            response=[
+                {"success": True, "result": {"trips": [trip]}},
+                {"success": True, "result": {"trip": trip}},
+            ]
+        )
+        proposal = {
+            "action": "tool_proposal",
+            "tool_id": "get_trips",
+            "arguments": {},
+            "confidence": "medium",
+            "reply": "福岡旅行を探します。",
+        }
+
+        with (
+            patch.object(
+                chat_orchestrator,
+                "generate_text_with_timings",
+                return_value=(json.dumps(proposal), None),
+            ),
+            patch.object(chat_orchestrator, "runtime_service", runtime),
+        ):
+            response = await self.post_chat(
+                {"message": "福岡旅行を開いて", "role": "admin", "debug": True}
+            )
+
+        payload = response.json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["tool_id"], "get_trip")
+        self.assertEqual(payload["result"]["trip"], trip)
+        self.assertEqual(
+            payload["navigation"]["target"],
+            "#travel?trip_id=trip-fukuoka",
+        )
+        self.assertEqual(payload["navigation"]["trip_id"], "trip-fukuoka")
+        self.assertEqual(
+            [step["tool_id"] for step in payload["debug"]["steps"]],
+            ["get_trips", "get_trip"],
+        )
+        self.assertEqual(len(runtime.calls), 2)
 
     async def test_write_proposal_is_not_executed(self) -> None:
         runtime = FakeRuntimeService(response={"success": True, "result": {}})
