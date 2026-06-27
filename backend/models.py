@@ -13,7 +13,14 @@ class RunResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
-    role: str = "admin"
+    role: str | None = Field(
+        default=None,
+        deprecated=True,
+        description=(
+            "Ignored compatibility input. Chat authorization is server-owned; "
+            "Browser and LLM values never select the Runtime role."
+        ),
+    )
     debug: bool = False
     context: dict[str, Any] | None = None
 

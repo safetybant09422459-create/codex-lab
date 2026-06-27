@@ -96,7 +96,7 @@ class ChatApiTest(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
-    async def test_debug_true_returns_timing(self) -> None:
+    async def test_client_role_is_ignored_and_server_role_is_used(self) -> None:
         expected = {
             "action": "needs_context",
             "reply": "対象を指定してください。",
@@ -115,7 +115,7 @@ class ChatApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["debug"]["timings_ms"]["total"], 1.25)
         handle.assert_called_once_with(
-            "旅行を見せて", role="family", debug=True, context=None
+            "旅行を見せて", role="admin", debug=True, context=None
         )
 
     async def test_named_trip_response_keeps_navigation_and_two_runtime_steps(self) -> None:

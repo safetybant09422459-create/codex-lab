@@ -14,12 +14,19 @@ from .chat_tool_policy import (
     get_chat_tool_execution_policy,
     validate_chat_proposal,
 )
+from .chat_core import ConversationState
 from .openai_adapter import (
     OpenAIRequestError,
     generate_text_with_timings,
     redact_sensitive_text,
 )
 from .runtime import RuntimeService
+from .travel_chat_adapter import (
+    conversation_state_from_legacy_context,
+    conversation_state_from_runtime_trip,
+    legacy_context_from_conversation_state,
+    selected_trip_entity,
+)
 
 
 _FALLBACK = {
@@ -125,7 +132,11 @@ def propose_travel_tool(
             if not isinstance(user_message, str) or not user_message.strip():
                 raise ValueError("user message must be a non-empty string")
             safe_message = redact_sensitive_text(user_message.strip())
-            safe_context = _redact_value(_sanitize_context(context))
+            safe_context = _redact_value(
+                legacy_context_from_conversation_state(
+                    conversation_state_from_legacy_context(context)
+                )
+            )
             context_text = json.dumps(
                 safe_context,
                 ensure_ascii=False,
@@ -197,7 +208,8 @@ def handle_travel_chat(
     total_started = perf_counter()
     proposal_started = perf_counter()
     context_was_provided = context is not None
-    updated_context = _sanitize_context(context)
+    conversation_state = conversation_state_from_legacy_context(context)
+    updated_context = legacy_context_from_conversation_state(conversation_state)
     proposal = propose_travel_tool(
         message,
         context=updated_context,
@@ -214,7 +226,7 @@ def handle_travel_chat(
         proposal, used_selected_trip = _apply_selected_trip_context(
             message,
             proposal,
-            updated_context,
+            conversation_state,
         )
         tool_id = proposal["tool_id"]
         arguments = proposal["arguments"]
@@ -265,13 +277,19 @@ def handle_travel_chat(
                 if step_purpose == "validation":
                     trip = _extract_runtime_trip(runtime_result)
                     if trip is None:
-                        updated_context = {}
+                        conversation_state = conversation_state_from_legacy_context(None)
+                        updated_context = legacy_context_from_conversation_state(
+                            conversation_state
+                        )
                         result = {
                             "action": "needs_context",
                             "reply": _TRIP_NOT_FOUND_REPLY,
                         }
                         break
-                    updated_context = _context_from_trip(trip)
+                    conversation_state = conversation_state_from_runtime_trip(trip)
+                    updated_context = legacy_context_from_conversation_state(
+                        conversation_state
+                    )
                     continue
 
                 if current_tool_id == "get_trips" and trip_query is not None:
@@ -312,9 +330,15 @@ def handle_travel_chat(
                 if current_tool_id == "get_trip":
                     trip = _extract_runtime_trip(runtime_result)
                     if trip is None and used_selected_trip:
-                        updated_context = {}
+                        conversation_state = conversation_state_from_legacy_context(None)
+                        updated_context = legacy_context_from_conversation_state(
+                            conversation_state
+                        )
                     elif trip is not None:
-                        updated_context = _context_from_trip(trip)
+                        conversation_state = conversation_state_from_runtime_trip(trip)
+                        updated_context = legacy_context_from_conversation_state(
+                            conversation_state
+                        )
                 break
 
             if result is None:
@@ -357,34 +381,20 @@ def handle_travel_chat(
     return result
 
 
-def _sanitize_context(context: Any) -> dict[str, Any]:
-    """Keep only bounded conversation fields owned by the server orchestrator."""
-    if not isinstance(context, dict):
-        return {}
-    trip_id = context.get("selected_trip_id")
-    if not isinstance(trip_id, str) or not trip_id.strip() or len(trip_id) > 256:
-        return {}
-    sanitized = {"selected_trip_id": trip_id.strip()}
-    title = context.get("selected_trip_title")
-    if isinstance(title, str) and title.strip() and len(title) <= 500:
-        sanitized["selected_trip_title"] = title.strip()
-    return sanitized
-
-
 def _apply_selected_trip_context(
     message: str,
     proposal: dict[str, Any],
-    context: dict[str, Any],
+    conversation_state: ConversationState,
 ) -> tuple[dict[str, Any], bool]:
     """Resolve explicit selected-trip references without accepting LLM context writes."""
-    trip_id = context.get("selected_trip_id")
+    entity = selected_trip_entity(conversation_state)
     intent = _selected_trip_intent(message)
-    if not isinstance(trip_id, str) or intent is None:
+    if entity is None or intent is None:
         return proposal, False
     return {
         "action": "tool_proposal",
         "tool_id": intent,
-        "arguments": {"trip_id": trip_id},
+        "arguments": {"trip_id": entity.entity_id},
         "confidence": proposal["confidence"],
         "reply": proposal["reply"],
     }, True
@@ -414,14 +424,6 @@ def _extract_runtime_trip(runtime_result: Any) -> dict[str, Any] | None:
     if not isinstance(trip_id, str) or not trip_id.strip():
         return None
     return trip
-
-
-def _context_from_trip(trip: dict[str, Any]) -> dict[str, Any]:
-    context = {"selected_trip_id": trip["id"].strip()}
-    title = trip.get("title")
-    if isinstance(title, str) and title.strip():
-        context["selected_trip_title"] = title.strip()
-    return context
 
 
 def _execute_runtime_read(

@@ -51,6 +51,7 @@ app = FastAPI(title="Jarvis Dev v0.3")
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR / "static"), name="static")
 runtime_service = RuntimeService()
 photo_repository = PhotoRepository()
+CHAT_SERVER_ROLE = "admin"
 
 JARVIS_PRINCIPLE_CHECK = """\
 
@@ -80,7 +81,9 @@ async def index() -> FileResponse:
 async def chat(request: ChatRequest) -> ChatResponse:
     result = handle_travel_chat(
         request.message,
-        role=request.role,
+        # Authentication is not implemented yet. Keep this temporary role on
+        # the trusted server side; request/Browser/LLM role values are ignored.
+        role=CHAT_SERVER_ROLE,
         debug=request.debug,
         context=request.context,
     )
