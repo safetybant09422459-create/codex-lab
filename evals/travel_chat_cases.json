@@ -1,0 +1,91 @@
+[
+  {
+    "id": "list_trips",
+    "question": "旅行一覧を見せて",
+    "expected_intent": "list_trips",
+    "expected_entity": "trip_collection",
+    "expected_tool": "get_trips",
+    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trips", "arguments": {}, "confidence": "high", "reply": "旅行一覧を取得します。"}
+  },
+  {
+    "id": "open_fukuoka",
+    "question": "福岡旅行を開いて",
+    "expected_intent": "open_trip",
+    "expected_entity": "trip",
+    "expected_tool": "get_trip",
+    "expected_trip_title": "福岡旅行",
+    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trips", "arguments": {}, "confidence": "medium", "reply": "福岡旅行を探します。"}
+  },
+  {
+    "id": "open_kobe",
+    "question": "神戸旅行を開いて",
+    "expected_intent": "open_trip",
+    "expected_entity": "trip",
+    "expected_tool": "get_trip",
+    "expected_trip_title": "須磨シーワールド",
+    "allow_candidate_if_ambiguous": true,
+    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trips", "arguments": {}, "confidence": "medium", "reply": "神戸旅行を探します。"}
+  },
+  {
+    "id": "open_suma",
+    "question": "須磨を開いて",
+    "expected_intent": "open_trip",
+    "expected_entity": "trip",
+    "expected_tool": "get_trip",
+    "expected_trip_title": "須磨シーワールド",
+    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trips", "arguments": {}, "confidence": "medium", "reply": "須磨を探します。"}
+  },
+  {
+    "id": "open_seaworld",
+    "question": "シーワールドを開いて",
+    "expected_intent": "open_trip",
+    "expected_entity": "trip",
+    "expected_tool": "get_trip",
+    "expected_trip_title": "須磨シーワールド",
+    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trips", "arguments": {}, "confidence": "medium", "reply": "シーワールドを探します。"}
+  },
+  {
+    "id": "hyogo_candidates",
+    "question": "兵庫の旅行見せて",
+    "expected_intent": "search_trips",
+    "expected_entity": "trip_collection",
+    "expected_outcome": "candidates",
+    "expected_contains_titles": ["須磨シーワールド", "まい初旅行", "ひいばあ米寿祝い"],
+    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trips", "arguments": {}, "confidence": "medium", "reply": "兵庫の旅行を探します。"}
+  },
+  {
+    "id": "context_trip_detail",
+    "question": "この旅行の詳細見せて",
+    "expected_intent": "show_selected_trip",
+    "expected_entity": "selected_trip",
+    "requires_context": "福岡旅行",
+    "expected_tool": "get_trip",
+    "expected_trip_title": "福岡旅行",
+    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trip", "arguments": {"trip_id": "mock-context-id"}, "confidence": "high", "reply": "選択中の旅行を取得します。"}
+  },
+  {
+    "id": "context_day_two",
+    "question": "2日目は？",
+    "expected_intent": "show_trip_timeline",
+    "expected_entity": "selected_trip",
+    "requires_context": "福岡旅行",
+    "expected_tool": "get_trip_timeline",
+    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trip_timeline", "arguments": {"trip_id": "mock-context-id"}, "confidence": "high", "reply": "選択中の旅行の日程を取得します。"}
+  },
+  {
+    "id": "unsupported_experience_photos",
+    "question": "アンパンマンの写真見せて",
+    "expected_intent": "show_experience_photos",
+    "expected_entity": "experience",
+    "expected_classification": "unsupported_or_needs_experience_context",
+    "mock_proposal": {"action": "needs_context", "reply": "どの旅行の体験か確認するため、旅行または体験を先に選んでください。"}
+  },
+  {
+    "id": "missing_trip",
+    "question": "存在しない旅行を開いて",
+    "expected_intent": "open_trip",
+    "expected_entity": "trip",
+    "expected_outcome": "not_found_or_needs_context",
+    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trips", "arguments": {}, "confidence": "medium", "reply": "旅行を探します。"}
+  }
+]

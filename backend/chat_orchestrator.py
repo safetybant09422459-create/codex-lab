@@ -210,6 +210,9 @@ def handle_travel_chat(
     role: str = "admin",
     debug: bool = False,
     context: dict[str, Any] | None = None,
+    *,
+    text_generator: Callable[..., str] | None = None,
+    runtime: RuntimeService | None = None,
 ) -> dict[str, Any]:
     """Execute a bounded server-side Travel read plan proposed by the LLM."""
     total_started = perf_counter()
@@ -220,6 +223,7 @@ def handle_travel_chat(
     proposal = propose_travel_tool(
         message,
         context=updated_context,
+        text_generator=text_generator,
         debug=debug,
     )
     proposal_total = _elapsed_ms(proposal_started)
@@ -263,6 +267,7 @@ def handle_travel_chat(
                     current_tool_id,
                     current_arguments,
                     role=role,
+                    runtime=runtime,
                 )
                 runtime_steps.append(
                     {
@@ -438,6 +443,7 @@ def _execute_runtime_read(
     arguments: dict[str, Any],
     *,
     role: str,
+    runtime: RuntimeService | None = None,
 ) -> tuple[dict[str, Any], float]:
     """Apply Chat policy immediately before every Runtime execution."""
     runtime_started = perf_counter()
@@ -455,8 +461,9 @@ def _execute_runtime_read(
         if execution_policy != "read_executable":
             return {"success": False}, _elapsed_ms(runtime_started)
         # role and confirmed are server-owned values, never model output.
+        service = runtime or runtime_service
         return (
-            runtime_service.execute_stub(
+            service.execute_stub(
                 validated_call["tool_id"],
                 params=validated_call["arguments"],
                 confirmed=False,
