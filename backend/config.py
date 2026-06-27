@@ -63,6 +63,11 @@ CODEX_ARGS = shlex.split(os.environ.get("CODEX_ARGS", "exec"))
 MAX_LOG_LINES = int(os.environ.get("JARVIS_DEV_MAX_LOG_LINES", "2000"))
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.4-nano").strip()
+OPENAI_REASONING_EFFORT = os.environ.get("OPENAI_REASONING_EFFORT", "").strip()
+OPENAI_VERBOSITY = os.environ.get("OPENAI_VERBOSITY", "").strip()
+OPENAI_MAX_OUTPUT_TOKENS = os.environ.get(
+    "OPENAI_MAX_OUTPUT_TOKENS", "256"
+).strip()
 
 GUARD_PROMPT = """\
 You are running from Jarvis Dev v0.3.
