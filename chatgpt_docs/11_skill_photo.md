@@ -1,5 +1,7 @@
 # Photo Skill
 
+> 2026-06-27実装同期: ChatGPT Projectへの新規アップロードでは `04_photo_skill_current.md` を正とする。このファイルは背景・詳細設計版として残す。Travel側のExperience Photo Link、cover、期間外検索は実装済みである。
+
 ## 目的
 
 Photo Skillは、家族の写真を扱うSkillである。

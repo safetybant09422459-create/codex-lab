@@ -1,5 +1,7 @@
 # Jarvis Constitution
 
+> 2026-06-27: ChatGPT Projectへの新規アップロードでは、実装同期済みの `01_principles_and_constitution.md` を正とする。このファイルは従来の詳細版として残す。
+
 ## 目的
 
 この文書は、ChatGPTプロジェクトへアップロードするためのJarvis設計憲法である。

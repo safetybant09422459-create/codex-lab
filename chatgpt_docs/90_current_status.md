@@ -1,5 +1,9 @@
 # Current Status
 
+更新日: 2026-06-27
+
+> ChatGPT Projectへの新規アップロードでは `00_project_overview.md` と `99_handoff_summary.md` を入口にし、Travel / Photo / Chatの詳細は `03`〜`06` を参照する。
+
 ## 目的
 
 この文書は、ChatGPTがJarvisの現在地を判断するための実装状態まとめである。
@@ -128,6 +132,15 @@ Repository / Adapter / Storage
 * `GET /api/travel/trips/{trip_id}`
 * `GET /api/travel/trips/{trip_id}/photos`
 * `GET /api/travel/spots/{spot_id}`
+* `GET /api/travel/experiences/{experience_id}`
+* `GET /api/travel/experiences/{experience_id}/photos`
+* `GET /api/travel/experiences/{experience_id}/photo-search`
+* `GET /api/travel/experiences/{experience_id}/photo-links`
+* `POST /api/travel/experiences/{experience_id}/photo-links`
+* `POST /api/travel/experiences/{experience_id}/photo-links/{link_id}/archive`
+* `PATCH /api/travel/experiences/{experience_id}`
+* `POST /api/travel/trips/{trip_id}/experiences`
+* `POST /api/travel/experiences/{experience_id}/archive`
 
 これらはRuntime safety layer経由でTravel Tool / Photo連携を利用する。
 
@@ -189,6 +202,10 @@ Read Tools:
 * `get_spot`
 * `get_trip_photos`
 * `get_spot_photos`
+* `get_experience`
+* `get_experience_photos`
+* `get_experience_photo_links`
+* `get_experience_photo_search`
 
 Write Tools:
 
@@ -196,6 +213,11 @@ Write Tools:
 * `create_timeline_item`
 * `set_trip_cover_image`
 * `set_spot_cover_image`
+* `create_experience`
+* `update_experience`
+* `archive_experience`
+* `link_experience_photo`
+* `archive_experience_photo_link`
 
 実装:
 
@@ -384,9 +406,17 @@ File:
 * MCP Tool化
 * Google Places Adapter実装
 * Place Skill
-* Travelの全CRUD
-* Memory独立Entity
+* 独立Memory Entity / 専用Memory Tool
 * Photo共有・Album更新系
+* Jarvis Chat / OpenAI API連携
+* 一般ユーザー向けConfirmation UI
+
+実装上の注意:
+
+* Skill JSONの`status`はTool単位の実装状態を表さない。
+* Runtime共通Validationはrequired field確認のみである。
+* `family` / `guest`はlow-risk readだけ許可され、写真系medium-risk readは現状`admin`が必要である。
+* `get_spots`はTool定義があるがTravelExecutorに専用分岐がない。
 
 ## Tool JSON注意
 
@@ -419,9 +449,10 @@ Phase:
 現在地:
 
 * Jarvis Core / Runtime / Tool Registryのv0.1が進行中
-* TravelはDB-backed read/writeの一部まで実装済み
-* PhotoはImmich Adapter方向で読み取り系が進行中
+* TravelはExperience CRUD、Photo Link、代表画像、期間外写真検索まで実装済み
+* PhotoはImmich Adapterを通したAsset検索・取得・thumbnail / previewまで実装済み
 * Calendar / Garden / Home / DeveloperはTool候補とUI導線が中心
+* 次フェーズはJarvis Chat v0.1
 
 ## Jarvis Principle Check
 

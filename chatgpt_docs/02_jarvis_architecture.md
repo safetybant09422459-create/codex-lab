@@ -1,5 +1,7 @@
 # Jarvis Architecture
 
+> 2026-06-27: Runtime / Registry / Permission / Confirmation / Auditの実装同期情報は `02_runtime_and_tools.md` を正とする。このファイルは全体Architectureの従来詳細版として残す。
+
 ## 目的
 
 この文書は、Jarvis Core、Runtime、Skill、Tool、Web UIの責務境界をまとめる。

@@ -1,5 +1,7 @@
 # Travel Skill
 
+> 2026-06-27実装同期: ChatGPT Projectへの新規アップロードでは `03_travel_skill_current.md` を正とする。このファイルは背景・詳細設計版として残す。
+
 ## 目的
 
 Travel Skillは、家族旅行、日帰りのおでかけ、近場イベントを含む「家族のおでかけ記憶」を扱うSkillである。
@@ -299,6 +301,10 @@ Aliasは本流ではない。内部では`experience_type`を指定したCanonic
 * `get_spot`
 * `get_trip_photos`
 * `get_spot_photos`
+* `get_experience`
+* `get_experience_photos`
+* `get_experience_photo_links`
+* `get_experience_photo_search`
 
 更新:
 
@@ -306,6 +312,13 @@ Aliasは本流ではない。内部では`experience_type`を指定したCanonic
 * `create_timeline_item`
 * `set_trip_cover_image`
 * `set_spot_cover_image`
+* `create_experience`
+* `update_experience`
+* `archive_experience`
+* `link_experience_photo`
+* `archive_experience_photo_link`
+
+`get_spots` Tool定義も存在するが、TravelExecutorに専用分岐がないため、実行可能なChat Toolとしては扱わない。
 
 Travel writeは原則:
 
