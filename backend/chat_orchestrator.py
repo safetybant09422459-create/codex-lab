@@ -27,6 +27,7 @@ from .travel_chat_adapter import (
     legacy_context_from_conversation_state,
     selected_trip_entity,
 )
+from .travel_search_index import TravelSearchIndex
 
 
 _FALLBACK = {
@@ -55,6 +56,7 @@ _SUCCESS_REPLIES = {
 
 # Reused within the process. Runtime remains the only path to executors/repositories.
 runtime_service = RuntimeService()
+travel_search_index = TravelSearchIndex()
 
 _INSTRUCTIONS = """\
 You are the proposal-only Chat Orchestrator for Jarvis Travel Chat v0.1.
@@ -74,7 +76,8 @@ Rules:
   selected_trip_id for references to the selected trip, but never return or update
   context yourself.
 - Use only an allowed tool and only its listed arguments.
-- A trip name is not a trip_id. To find a named trip, propose get_trips with empty arguments.
+- A trip title, area, prefecture, or memo keyword is not a trip_id. To find a
+  matching trip, propose get_trips with empty arguments.
 - A place or experience name is not an experience_id. If photos or details need an
   experience_id and no actual ID is available, return needs_context.
 - update_experience is proposal-only and accepts exactly experience_id and memo.
@@ -87,6 +90,10 @@ User: 旅行一覧を見せて
 {{"action":"tool_proposal","tool_id":"get_trips","arguments":{{}},"confidence":"high","reply":"旅行一覧を取得します。"}}
 User: 福岡旅行を開いて
 {{"action":"tool_proposal","tool_id":"get_trips","arguments":{{}},"confidence":"medium","reply":"福岡旅行を探します。"}}
+User: 須磨を開いて
+{{"action":"tool_proposal","tool_id":"get_trips","arguments":{{}},"confidence":"medium","reply":"須磨に合う旅行を探します。"}}
+User: 兵庫の旅行見せて
+{{"action":"tool_proposal","tool_id":"get_trips","arguments":{{}},"confidence":"medium","reply":"兵庫に合う旅行を探します。"}}
 Context: selected_trip_id=trip_fukuoka, selected_trip_title=福岡旅行
 User: この旅行の詳細見せて
 {{"action":"tool_proposal","tool_id":"get_trip","arguments":{{"trip_id":"trip_fukuoka"}},"confidence":"high","reply":"選択中の旅行を取得します。"}}
@@ -558,14 +565,17 @@ def _find_trip_candidates(
     trips = runtime_result.get("trips")
     if not isinstance(trips, list):
         return []
-    candidates = []
-    for trip in trips:
-        if not isinstance(trip, dict):
-            continue
-        title = trip.get("title")
-        if isinstance(title, str) and normalized_query in _normalize_trip_text(title):
-            candidates.append(trip)
-    return candidates
+    candidates = travel_search_index.search(normalized_query, trips)
+    trips_by_id = {
+        trip.get("id"): trip
+        for trip in trips
+        if isinstance(trip, dict) and isinstance(trip.get("id"), str)
+    }
+    return [
+        trips_by_id[candidate.entity.entity_id]
+        for candidate in candidates
+        if candidate.entity.entity_id in trips_by_id
+    ]
 
 
 def _normalize_trip_text(value: str) -> str:
