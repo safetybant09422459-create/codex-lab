@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 
 CHAT_TRAVEL_TOOL_ALLOWLIST = frozenset(
@@ -15,6 +15,22 @@ CHAT_TRAVEL_TOOL_ALLOWLIST = frozenset(
         "update_experience",
     }
 )
+
+CHAT_READ_EXECUTABLE_TOOLS = frozenset(
+    {
+        "get_trips",
+        "get_trip",
+        "get_trip_timeline",
+        "get_experience",
+        "get_experience_photos",
+        "get_experience_photo_links",
+        "get_experience_photo_search",
+    }
+)
+
+CHAT_WRITE_PENDING_TOOLS = frozenset({"update_experience"})
+
+ChatToolExecutionPolicy = Literal["read_executable", "write_requires_pending_action"]
 
 CHAT_TOOL_ARGUMENTS: dict[str, frozenset[str]] = {
     "get_trips": frozenset(),
@@ -49,6 +65,15 @@ _CONFIDENCE_VALUES = frozenset({"high", "medium", "low"})
 
 class ProposalValidationError(ValueError):
     pass
+
+
+def get_chat_tool_execution_policy(tool_id: str) -> ChatToolExecutionPolicy:
+    """Classify a validated Chat tool without consulting untrusted LLM fields."""
+    if tool_id in CHAT_READ_EXECUTABLE_TOOLS:
+        return "read_executable"
+    if tool_id in CHAT_WRITE_PENDING_TOOLS:
+        return "write_requires_pending_action"
+    raise ProposalValidationError("tool has no chat execution policy")
 
 
 def validate_chat_proposal(value: Any) -> dict[str, Any]:
