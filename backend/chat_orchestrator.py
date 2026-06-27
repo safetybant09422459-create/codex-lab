@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import unicodedata
 from collections.abc import Callable
 from time import perf_counter
@@ -62,6 +63,9 @@ Allowed tool IDs and arguments:
 
 Rules:
 - Never invent or decide role, confirmed, user_id, permission, or authorization.
+- Server-owned conversation context may be included with the utterance. Use its
+  selected_trip_id for references to the selected trip, but never return or update
+  context yourself.
 - Use only an allowed tool and only its listed arguments.
 - A trip name is not a trip_id. To find a named trip, propose get_trips with empty arguments.
 - A place or experience name is not an experience_id. If photos or details need an
@@ -76,6 +80,12 @@ User: 旅行一覧を見せて
 {{"action":"tool_proposal","tool_id":"get_trips","arguments":{{}},"confidence":"high","reply":"旅行一覧を取得します。"}}
 User: 福岡旅行を開いて
 {{"action":"tool_proposal","tool_id":"get_trips","arguments":{{}},"confidence":"medium","reply":"福岡旅行を探します。"}}
+Context: selected_trip_id=trip_fukuoka, selected_trip_title=福岡旅行
+User: この旅行の詳細見せて
+{{"action":"tool_proposal","tool_id":"get_trip","arguments":{{"trip_id":"trip_fukuoka"}},"confidence":"high","reply":"選択中の旅行を取得します。"}}
+Context: selected_trip_id=trip_fukuoka, selected_trip_title=福岡旅行
+User: 2日目は？
+{{"action":"tool_proposal","tool_id":"get_trip_timeline","arguments":{{"trip_id":"trip_fukuoka"}},"confidence":"high","reply":"選択中の旅行の日程を取得します。"}}
 User: アンパンマンミュージアムの写真見せて
 {{"action":"needs_context","reply":"どの旅行の体験か確認するため、旅行または体験を先に選んでください。"}}
 """.format(
@@ -93,6 +103,7 @@ User: アンパンマンミュージアムの写真見せて
 def propose_travel_tool(
     user_message: str,
     *,
+    context: dict[str, Any] | None = None,
     text_generator: Callable[..., str] | None = None,
     debug: bool = False,
 ) -> dict[str, Any]:
@@ -114,7 +125,17 @@ def propose_travel_tool(
             if not isinstance(user_message, str) or not user_message.strip():
                 raise ValueError("user message must be a non-empty string")
             safe_message = redact_sensitive_text(user_message.strip())
-            input_text = f"User utterance:\n{safe_message}"
+            safe_context = _redact_value(_sanitize_context(context))
+            context_text = json.dumps(
+                safe_context,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            input_text = (
+                "Server-normalized conversation context candidate (read-only):\n"
+                f"{context_text}\n"
+                f"User utterance:\n{safe_message}"
+            )
         finally:
             timings_ms["build_prompt"] = _elapsed_ms(prompt_started)
 
@@ -170,11 +191,18 @@ def handle_travel_chat(
     message: str,
     role: str = "admin",
     debug: bool = False,
+    context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Execute a bounded server-side Travel read plan proposed by the LLM."""
     total_started = perf_counter()
     proposal_started = perf_counter()
-    proposal = propose_travel_tool(message, debug=debug)
+    context_was_provided = context is not None
+    updated_context = _sanitize_context(context)
+    proposal = propose_travel_tool(
+        message,
+        context=updated_context,
+        debug=debug,
+    )
     proposal_total = _elapsed_ms(proposal_started)
 
     proposal_debug = proposal.pop("debug", None)
@@ -183,6 +211,11 @@ def handle_travel_chat(
     if proposal.get("action") != "tool_proposal":
         result = proposal
     else:
+        proposal, used_selected_trip = _apply_selected_trip_context(
+            message,
+            proposal,
+            updated_context,
+        )
         tool_id = proposal["tool_id"]
         arguments = proposal["arguments"]
         execution_policy = get_chat_tool_execution_policy(tool_id)
@@ -195,12 +228,18 @@ def handle_travel_chat(
                 "reply": _WRITE_NOT_IMPLEMENTED_REPLY,
             }
         else:
-            pending_steps = [(tool_id, arguments)]
+            pending_steps = [(tool_id, arguments, "result")]
             result = None
             trip_query = _extract_trip_name(message) if tool_id == "get_trips" else None
 
+            if used_selected_trip and tool_id == "get_trip_timeline":
+                pending_steps.insert(
+                    0,
+                    ("get_trip", {"trip_id": arguments["trip_id"]}, "validation"),
+                )
+
             while pending_steps and len(runtime_steps) < MAX_TRAVEL_STEPS:
-                current_tool_id, current_arguments = pending_steps.pop(0)
+                current_tool_id, current_arguments, step_purpose = pending_steps.pop(0)
                 runtime_response, runtime_ms = _execute_runtime_read(
                     current_tool_id,
                     current_arguments,
@@ -223,6 +262,18 @@ def handle_travel_chat(
                     break
 
                 runtime_result = runtime_response.get("result")
+                if step_purpose == "validation":
+                    trip = _extract_runtime_trip(runtime_result)
+                    if trip is None:
+                        updated_context = {}
+                        result = {
+                            "action": "needs_context",
+                            "reply": _TRIP_NOT_FOUND_REPLY,
+                        }
+                        break
+                    updated_context = _context_from_trip(trip)
+                    continue
+
                 if current_tool_id == "get_trips" and trip_query is not None:
                     candidates = _find_trip_candidates(runtime_result, trip_query)
                     if not candidates:
@@ -248,7 +299,9 @@ def handle_travel_chat(
                             "reply": _RUNTIME_ERROR_REPLY,
                         }
                         break
-                    pending_steps.append(("get_trip", {"trip_id": trip_id.strip()}))
+                    pending_steps.append(
+                        ("get_trip", {"trip_id": trip_id.strip()}, "result")
+                    )
                     continue
 
                 result = _runtime_success_result(
@@ -256,6 +309,12 @@ def handle_travel_chat(
                     current_arguments,
                     runtime_result,
                 )
+                if current_tool_id == "get_trip":
+                    trip = _extract_runtime_trip(runtime_result)
+                    if trip is None and used_selected_trip:
+                        updated_context = {}
+                    elif trip is not None:
+                        updated_context = _context_from_trip(trip)
                 break
 
             if result is None:
@@ -263,6 +322,9 @@ def handle_travel_chat(
                     "action": "needs_context",
                     "reply": _MAX_STEPS_REPLY,
                 }
+
+    if updated_context or context_was_provided:
+        result["updated_context"] = _redact_value(updated_context)
 
     if debug:
         timings_ms = {}
@@ -293,6 +355,73 @@ def handle_travel_chat(
         if isinstance(proposal_debug, dict) and "openai_adapter" in proposal_debug:
             result["debug"]["openai_adapter"] = proposal_debug["openai_adapter"]
     return result
+
+
+def _sanitize_context(context: Any) -> dict[str, Any]:
+    """Keep only bounded conversation fields owned by the server orchestrator."""
+    if not isinstance(context, dict):
+        return {}
+    trip_id = context.get("selected_trip_id")
+    if not isinstance(trip_id, str) or not trip_id.strip() or len(trip_id) > 256:
+        return {}
+    sanitized = {"selected_trip_id": trip_id.strip()}
+    title = context.get("selected_trip_title")
+    if isinstance(title, str) and title.strip() and len(title) <= 500:
+        sanitized["selected_trip_title"] = title.strip()
+    return sanitized
+
+
+def _apply_selected_trip_context(
+    message: str,
+    proposal: dict[str, Any],
+    context: dict[str, Any],
+) -> tuple[dict[str, Any], bool]:
+    """Resolve explicit selected-trip references without accepting LLM context writes."""
+    trip_id = context.get("selected_trip_id")
+    intent = _selected_trip_intent(message)
+    if not isinstance(trip_id, str) or intent is None:
+        return proposal, False
+    return {
+        "action": "tool_proposal",
+        "tool_id": intent,
+        "arguments": {"trip_id": trip_id},
+        "confidence": proposal["confidence"],
+        "reply": proposal["reply"],
+    }, True
+
+
+def _selected_trip_intent(message: Any) -> str | None:
+    if not isinstance(message, str):
+        return None
+    normalized = unicodedata.normalize("NFKC", message)
+    compact = "".join(character for character in normalized if not character.isspace())
+    if re.search(r"(?:[0-9]+|[一二三四五六七八九十]+)日目", compact):
+        return "get_trip_timeline"
+    if "この旅行" in compact and any(
+        token in compact for token in ("詳細", "メモ", "情報", "見せ", "教えて", "開いて")
+    ):
+        return "get_trip"
+    return None
+
+
+def _extract_runtime_trip(runtime_result: Any) -> dict[str, Any] | None:
+    if not isinstance(runtime_result, dict):
+        return None
+    trip = runtime_result.get("trip")
+    if not isinstance(trip, dict):
+        return None
+    trip_id = trip.get("id")
+    if not isinstance(trip_id, str) or not trip_id.strip():
+        return None
+    return trip
+
+
+def _context_from_trip(trip: dict[str, Any]) -> dict[str, Any]:
+    context = {"selected_trip_id": trip["id"].strip()}
+    title = trip.get("title")
+    if isinstance(title, str) and title.strip():
+        context["selected_trip_title"] = title.strip()
+    return context
 
 
 def _execute_runtime_read(

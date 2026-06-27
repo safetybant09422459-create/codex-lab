@@ -2,6 +2,7 @@ import { api } from "./api.js";
 
 var chatSending = false;
 var chatComposing = false;
+var currentContext = null;
 
 function chatElements() {
   return {
@@ -187,8 +188,14 @@ async function sendChat(elements, message) {
     data = await api("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: message }),
+      body: JSON.stringify({ message: message, context: currentContext }),
     });
+    if (Object.prototype.hasOwnProperty.call(data, "updated_context")) {
+      currentContext =
+        data.updated_context && typeof data.updated_context === "object"
+          ? data.updated_context
+          : null;
+    }
     appendMessage(
       elements.history,
       "assistant",

@@ -15,6 +15,7 @@ class ChatRequest(BaseModel):
     message: str
     role: str = "admin"
     debug: bool = False
+    context: dict[str, Any] | None = None
 
 
 class ChatResponse(BaseModel):
@@ -25,6 +26,7 @@ class ChatResponse(BaseModel):
     result: dict[str, Any] | None = None
     candidates: list[dict[str, Any]] | None = None
     navigation: dict[str, Any] | None = None
+    updated_context: dict[str, Any] | None = None
     debug: dict[str, Any] | None = None
 
 

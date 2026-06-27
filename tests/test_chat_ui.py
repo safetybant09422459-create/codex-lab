@@ -16,6 +16,8 @@ class ChatUiTest(unittest.TestCase):
 
     def test_chat_uses_server_chat_api_only(self) -> None:
         self.assertIn('api("/api/chat"', CHAT_JS)
+        self.assertIn("context: currentContext", CHAT_JS)
+        self.assertIn('hasOwnProperty.call(data, "updated_context")', CHAT_JS)
         self.assertNotIn("api.openai.com", CHAT_JS)
         self.assertNotIn("/api/runtime", CHAT_JS)
 
