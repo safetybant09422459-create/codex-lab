@@ -54,7 +54,7 @@ Implemented:
 - Permission Engine v0.1
 - Weather Executor v0.1 (`execution_mode: local_weather_stub`)
 - Travel Runtime Read v0.1 (`execution_mode: local_travel_read`)
-- Chat Core v0.2 Foundation（責務分離の内部契約、既存Chat API互換）
+- Chat Core v0.2 Foundation（[設計原則と責務](docs/chat_core.md)、既存Chat API互換）
 - Chat Orchestrator v0.1（Travel read-only Tool実行、writeは提案のみ）
 - FastAPI Chat API v0.1 (`POST /api/chat`)
 
@@ -285,7 +285,10 @@ Uvicornを複数workerで起動した場合は、workerごとにclientが1つ作
 Chat Core v0.2 Foundationの責務、型、contextとroleの信頼境界は
 [docs/chat_core.md](docs/chat_core.md)を参照する。Conversation State / Entity Resolution /
 Plan Execute / Response Composerの4層を定義したが、公開APIは移行期間中のため従来形式を
-維持している。
+維持している。Skill接続ではなくSkill連携を目標とし、Skill固有処理をChat Skill Adapterへ
+委譲する判断は
+[Chat Core Skill Adapter Architecture](docs/decisions/2026-06-chat-core-skill-adapter-architecture.md)
+に記録している。
 
 `backend.chat_orchestrator.propose_travel_tool` は、ユーザーの自然文を
 サーバー側からOpenAI Responses APIへ送り、Travel Toolの提案JSONを返す。
