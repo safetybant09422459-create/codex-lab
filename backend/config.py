@@ -61,6 +61,8 @@ TOOLS_DIR = ROOT_DIR / "tools"
 CODEX_BIN = os.environ.get("CODEX_BIN", "codex")
 CODEX_ARGS = shlex.split(os.environ.get("CODEX_ARGS", "exec"))
 MAX_LOG_LINES = int(os.environ.get("JARVIS_DEV_MAX_LOG_LINES", "2000"))
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.4-nano").strip()
 
 GUARD_PROMPT = """\
 You are running from Jarvis Dev v0.3.
