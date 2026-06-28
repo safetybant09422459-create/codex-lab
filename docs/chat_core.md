@@ -1,4 +1,142 @@
-# Chat Core v0.3 Foundation / Planner v2
+# Jarvis Chat Core / Orchestrator v2
+
+## Status and priority
+
+本書は、既存のChat Core v0.3 Foundation / Travel Planner v2を残しながら、Jarvis全体の
+会話入口を立て直すための上位方針を定める。今回の変更は設計docsと現状レビューのみであり、
+Orchestrator v2、Memory RAG、Capability Catalog、Knowledge Enrichmentは未実装である。
+
+最優先はBasic Chatの復元である。成長順は次を守る。
+
+1. 普通の会話が成立する
+2. Working ContextとMemoryを踏まえた会話ができる
+3. 単一Capabilityを使った会話ができる
+4. 複数Capabilityを連携した会話ができる
+
+Jarvisは旅行アプリのチャット機能ではない。Jarvisは通常の挨拶、時刻、自己説明、一般的な
+質問へ自然に答えられるAIであり、Skillは会話を助ける部品である。Travelの精度向上がBasic
+Chatを退化させる構成は採用しない。
+
+## Core principles
+
+### LLM is the brain; Python is the execution substrate
+
+LLMは、通常知識だけで答えるか、ユーザー固有データが必要か、どのCapabilityを使うか、
+Evidenceが十分かを判断する。PythonはPrompt / Context Assembly、Catalog生成、出力検証、
+Runtime Gate、Permission、Confirmation、Audit、Tool実行、Evidence整形、会話ログと学習イベントの
+記録を担当する。
+
+Pythonに「ご飯」「写真」「何した」のような自然言語キーワード分岐を足して知能を作らない。
+決定的なschema検証、安全Policy、日付計算、正規化はPythonの責務だが、発話の意味判断はLLMの
+責務とする。Skill固有の決定的fallbackが必要な場合もCoreではなくAdapter内に閉じ、評価ケースと
+廃止条件を持たせる。
+
+### Expose capabilities, not implementation units
+
+内部のSkill、Tool、ExecutorをそのままLLMの世界モデルにしない。LLMへは「家族の旅行記録を
+扱える」「写真を検索できる」「過去の思い出を参照できる」のようなCapability Catalogを渡す。
+当面は全Capabilityの概要を毎Turn提示し、Pythonが発話から候補Skillを先に絞らない。
+
+Capabilityが増えたら、第一段階で全Capabilityの存在と選択条件を提示し、LLMが選んだCapabilityだけ
+第二段階でTool schemaと制約を追加する。選択後のTool実行は必ずRuntime Gateを通す。詳細は
+[Context Assembly](context_assembly.md)を参照する。
+
+## Orchestrator v2 target flow
+
+```text
+Receive User Message
+  -> Context Assembly
+       System / Personality / User Profile / Working Context
+       Memory RAG / Capability Catalog / Current World / User Message
+  -> LLM Turn
+       direct_answer | need_capability_detail | tool_call | clarification
+  -> Capability Detail on Demand
+  -> Runtime Gate
+       validation | permission | confirmation | audit | execution
+  -> Evidence Assembly
+  -> Final LLM Answer
+  -> Learning Event
+       conversation | failure | correction | ambiguity | enrichment candidate
+```
+
+通常会話は`direct_answer`としてToolなしで完結できる。時刻などCurrent Worldで回答できる質問も、
+Travel Plannerへ入れない。Capability詳細の要求とTool callは別段階とし、LLMがCapabilityを選んでも
+Pythonがそのまま実行を許可するわけではない。Evidence取得後の最終回答はEvidenceに基づき、
+不足時は推測せず質問する。
+
+中心部品はPlannerではなくContext Assemblyである。Planner / Goal-aware Planningは、複数stepや
+Skill固有の探索が必要なTurnで使う任意部品へ下げる。全TurnへPlan作成を強制しない。
+
+## Core and adapter boundary
+
+Chat Coreが所有するもの:
+
+* Context Assemblyと入力予算
+* LLM Turnの共通出力契約
+* Capability Catalogと詳細取得の調停
+* Runtime Gateへの唯一の実行経路
+* Skill非依存のEvidence Assembly
+* Final AnswerとLearning Eventのライフサイクル
+
+Travel Skill Adapterへ置くもの:
+
+* Travel Capabilityの説明と詳細Tool定義
+* Travel Entity Resolution、Search / Enrichment接続
+* Travel固有のEvidence変換
+* 必要な場合だけ使うTravel Planner / Goal契約 / Plan Executor
+* Travel Answer Generatorの決定的fallbackとTravel固有表示支援
+
+既存のTravel Planner、Goal-aware Planning、Travel Answer Generator、Travel Plan Executor、Travel
+Search Index、Entity Resolverは無駄ではない。ただしChat入口の主役ではなく、Travel Capabilityを
+選択した後に呼ばれるAdapter実装へ位置づけ直す。
+
+## Current code risk review (2026-06-29)
+
+* **TravelがChat Coreを占有している: confirmed / critical.** `POST /api/chat`は無条件で
+  `handle_travel_chat()`を呼び、OrchestratorもTravel Planner、Resolver、Executor、Answer
+  Generator、Composerを直接生成・参照している。Skill非依存の会話入口はまだない。
+* **通常会話がTravel Plannerへ流れる: confirmed / critical.** Planner出力は
+  `tool_proposal`または`needs_context`だけで、`direct_answer`がない。「おはよう」「今何時？」
+  「あなたのバージョンは？」もTravelの不足文脈として処理され得る。
+* **Pythonが自然言語理解を持ちすぎている: confirmed / medium.** Planner本体は意味判断をLLMへ
+  寄せている一方、`travel_plan_executor.py`と`travel_answer_generator.py`には「何した」
+  「何食べた」「食事は」、日数、食事語彙による再分類・抽出が残る。これはTravel Adapterの
+  bounded fallbackとしては利用可能だが、Core判断へ昇格させない。
+* **Capability Catalogが未整備: confirmed / high.** `skills/*/skill.json`と`tools/*/*.json`は
+  Registry / Runtime用の実装メタデータであり、LLM向けCapabilityの要約、利用条件、Evidence種別、
+  privacy分類、詳細取得IDという契約がない。Travel PlannerにはTravel Tool allowlistだけが渡る。
+* **Memory RAGがない: confirmed / high.** Working Contextは最大5件のclient-provided履歴だけで、
+  Memory検索、ranking、ownership / visibility filter、候補注記がない。過去の訂正、好み、思い出を
+  通常Turnで想起できない。
+* **Knowledge Enrichmentがない: confirmed / high.** Search Expansionは固定辞書、Search Indexは
+  現在データからのrule-based索引である。Trip、Experience、Location、Photo、会話訂正を横断した
+  意味リンクや、出所・confidence付き派生情報を蓄積できない。
+* **Goal-aware PlanningはAdapterへ移せる: feasible with boundary work.** `Plan`型自体はSkill-neutral
+  だが、公開Orchestratorの配線、Planner prompt、Tool policy、Executor、Answer modeはTravel固有で
+  ある。Travel Capability選択後のAdapterへFacadeごと移し、Coreは共通Turn契約だけを扱える。
+* **Registryは実行と表示には使えるが選択モデルではない: confirmed / medium.** Skill JSON、Tool
+  JSON、ExecutorRegistry、RuntimeServiceは存在し、安全な実行基盤になる。一方、Catalog生成、
+  Adapter登録、CapabilityからTool詳細への解決は未実装である。
+
+## Phased implementation plan
+
+1. Basic Chat regression casesを先に固定する。「おはよう」「今何時？」「あなたのバージョンは？」と
+   Travel代表ケースを、live APIに依存しないcontract test / evalへ追加する。
+2. Context Assemblyと共通LLM Turn schemaを最小実装し、`direct_answer`と`clarification`をToolなしで
+   返せる入口を作る。Current Worldにはserver-side現在日時とtimezoneを含める。
+3. 既存Skill metadataから手書きの小さなCapability Catalogを分離し、全概要提示から始める。
+4. Travel配線をTravel Skill Adapterへ包み、選択後だけ既存Planner / Executorを呼ぶ。既存API互換は
+   Facadeで維持する。
+5. 権限filter済みMemory RAGをread-onlyで追加し、毎Turn上位3〜5件を参考候補として渡す。
+6. Capability detail on demandと複数Capability Evidence Assemblyを追加する。実行はRuntime以外を
+   通さない。
+7. Learning Eventを記録し、その後にKnowledge Enrichment候補生成を別worker / 境界で追加する。
+   DB schema、自動適用、Memory化はそれぞれ別設計・別変更とする。
+
+## Non-goals for this review
+
+Orchestrator v2実装、DB / Memory / Enrichment実装、OpenAI live eval、既存コード削除、大規模
+リファクタ、service restartは今回行わない。
 
 > 次フェーズのChat Core v0.3 Response IntelligenceとTravel Answer Generator v0.1の
 > 設計・Effort Policy・実装準備は
@@ -314,9 +452,10 @@ ChatのroleはBrowserやLLMが所有しない。互換性のためrequestの`rol
 * 「今作れるか」ではなく「Skillが増えても同じ境界で育つか」で採否を判断する。
 * v0.2で未実装の能力を実装済みとして扱わず、Foundationと次フェーズを明記する。
 
-## 次の抽出候補
+## Legacy foundation extraction candidates
 
-優先順は次のとおりとする。
+以下は既存Foundationの候補であり、Orchestrator v2のBasic Chat復元より優先しない。
+実施順は上記のPhased implementation planに従う。
 
 1. Travel Search Indexのranking実装を、評価データを用意したうえでBM25 / FTS / Embeddingへ差し替え可能にする。
 2. `response_v1`のcontent block／suggested actionを利用する内部consumerを追加し、legacy公開形式からの段階移行を検証する。

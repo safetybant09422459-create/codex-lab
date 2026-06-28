@@ -6,6 +6,11 @@
 Planner v2 Goal-aware Planningは、既存APIとRuntime境界を保ったままTravelの読み取り質問を
 縦に通している。
 
+ただし、この実装はTravel Capability内のResponse Intelligenceであり、Jarvis全体の会話入口ではない。
+Orchestrator v2では、Basic ChatとCapability選択の後にTravelが選ばれた場合だけ本フローを使う。
+全TurnをGoal-aware Planningへ通さず、Travel Planner / Answer GeneratorはTravel Skill Adapter側へ
+位置づける。上位方針は[Jarvis Chat Core / Orchestrator v2](chat_core.md)を参照する。
+
 ## 原則
 
 Jarvisの目的はToolを実行することではなく、ユーザーの質問に答えることである。

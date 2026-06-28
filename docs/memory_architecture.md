@@ -33,6 +33,16 @@ Coreの必須基盤であることと、Coreが保存方式や検索アルゴリ
 CoreはMemoryの利用方針と安全境界を所有し、Memory Skillの公開Tool / API境界を利用する。
 Memory SkillやMemory Storeが未実装でも、この責務分離を将来実装の前提とする。
 
+Memoryは、必要時だけ明示的に呼ぶCapabilityでもあり、毎TurnのContext Assemblyを支えるCore基盤でも
+ある。LLMがMemoryの必要性に気付くことだけへ依存しない。将来は現在発話とWorking Contextをqueryに、
+認可filter後の上位3〜5件を毎Turn薄く検索し、「関連する可能性がある候補」としてPromptへ渡す。
+さらに深い探索や特定Memoryの取得が必要な場合はMemory Capabilityを選択し、Runtime経由のread Toolを
+使う。この二段構えの詳細は[Context Assembly](context_assembly.md)を参照する。
+
+Memory RAG候補は事実の保証ではない。owner、visibility、confidence、source、更新時刻、Evidence参照を
+保ち、矛盾・失効・Forgetを反映する。子ども、健康、位置情報、家族写真、予定などを外部Providerへ
+渡す場合は、回答目的に必要な最小限へ縮約する。
+
 ## CoreとMemory Skillの責務
 
 | 領域 | Jarvis Core | Memory Skill |
@@ -69,6 +79,11 @@ Evidenceへのリンクを持つ。参照先が削除、非公開、訂正され
 Travel文書で使う「Memory」や「Family Outing Memory Skill」は、Trip / Outing内の思い出文脈を
 表すドメイン上の名称であり、Jarvis全体のMemory Skillを意味しない。Travel Memory Entityは
 Travelが所有するEvidenceであり、必要なものだけがCoreの判断を経てJarvis Memoryになる。
+
+検索用alias、tag、inferred location、entity linkなどはMemoryへ混ぜず、
+[Knowledge Enrichment](knowledge_enrichment.md)が派生候補として扱う。EnrichmentはEntityの発見性を
+高める基盤、Memoryは人との継続性と意味を扱う基盤であり、同じ会話から候補が生まれても別の
+lifecycle、権限、承認状態を持つ。
 
 ## 会話記録とMemory候補
 
