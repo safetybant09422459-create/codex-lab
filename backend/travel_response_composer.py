@@ -124,6 +124,11 @@ class TravelResponseComposer:
             "reply": SUCCESS_REPLIES[tool_id],
             "result": request.runtime_result,
         }
+        if (
+            request.answer_result is not None
+            and request.answer_result.answer_type != "not_applicable"
+        ):
+            response["reply"] = request.answer_result.answer
         if tool_id != "get_trip":
             return response, state
 

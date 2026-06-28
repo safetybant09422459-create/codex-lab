@@ -359,8 +359,41 @@
     "expected_intent": "show_trip_timeline",
     "expected_entity": "selected_trip",
     "expected_tool": "get_trip_timeline",
+    "expected_reply_contains": "2日目は、屋台",
     "requires_context": "福岡旅行",
     "expected_classification": "context_follow_up",
+    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trip_timeline", "arguments": {"trip_id": "mock-context-id"}, "confidence": "high", "reply": "選択中の旅行の日程を取得します。"}
+  },
+  {
+    "id": "answer_named_trip_activities",
+    "question": "福岡旅行で何した？",
+    "expected_intent": "answer_trip_activities",
+    "expected_entity": "trip",
+    "expected_tool": "get_trip_timeline",
+    "expected_reply_contains": "屋台",
+    "expected_classification": "travel_answer_generation",
+    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trips", "arguments": {}, "confidence": "medium", "reply": "福岡旅行を探します。"}
+  },
+  {
+    "id": "answer_selected_trip_activities",
+    "question": "何した？",
+    "expected_intent": "answer_trip_activities",
+    "expected_entity": "selected_trip",
+    "expected_tool": "get_trip_timeline",
+    "expected_reply_contains": "屋台",
+    "requires_context": "福岡旅行",
+    "expected_classification": "travel_answer_generation",
+    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trip_timeline", "arguments": {"trip_id": "mock-context-id"}, "confidence": "high", "reply": "選択中の旅行の日程を取得します。"}
+  },
+  {
+    "id": "answer_selected_trip_food_missing",
+    "question": "何食べた？",
+    "expected_intent": "answer_trip_food",
+    "expected_entity": "selected_trip",
+    "expected_tool": "get_trip_timeline",
+    "expected_reply_contains": "食事内容は含まれていません",
+    "requires_context": "福岡旅行",
+    "expected_classification": "travel_answer_generation",
     "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trip_timeline", "arguments": {"trip_id": "mock-context-id"}, "confidence": "high", "reply": "選択中の旅行の日程を取得します。"}
   },
   {

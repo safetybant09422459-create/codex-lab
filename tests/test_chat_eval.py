@@ -154,8 +154,8 @@ class TravelChatEvaluatorTest(unittest.TestCase):
             self.cases, mode="mock"
         )
 
-        self.assertEqual(summary["total"], 50)
-        self.assertEqual(summary["passed"], 48)
+        self.assertEqual(summary["total"], 53)
+        self.assertEqual(summary["passed"], 51)
         self.assertEqual(summary["failed"], 2)
         self.assertEqual(
             summary["failure_categories"]["entity_resolution_missing"], 1
@@ -190,7 +190,7 @@ class TravelChatEvaluatorTest(unittest.TestCase):
             1,
         )
         opportunity = summary["improvement_opportunities"][0]
-        self.assertEqual(opportunity["percentage"], 2.0)
+        self.assertEqual(opportunity["percentage"], 1.9)
         self.assertEqual(opportunity["priority"], "Low")
         self.assertIn("SearchDocument", opportunity["improvement_candidate"])
         self.assertTrue(opportunity["expected_effect"])
@@ -241,6 +241,7 @@ class TravelChatEvaluatorTest(unittest.TestCase):
                 "memo_derived": 8,
                 "date_year_or_duration": 8,
                 "context_follow_up": 7,
+                "travel_answer_generation": 3,
                 "ambiguous_query": 5,
                 "unsupported_or_needs_experience_context": 4,
             },

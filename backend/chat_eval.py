@@ -660,6 +660,12 @@ def _compare(
 
     if expected_tool and action != "tool_result":
         return False, "runtime_error"
+    expected_reply_contains = case.get("expected_reply_contains")
+    if (
+        isinstance(expected_reply_contains, str)
+        and expected_reply_contains not in reply
+    ):
+        return False, "response_not_human_friendly"
     return True, "pass"
 
 

@@ -62,6 +62,10 @@ Rules:
 - Use only an allowed tool and only its listed arguments.
 - A trip title, area, prefecture, or memo keyword is not a trip_id. To find a
   matching trip, propose get_trips with empty arguments.
+- Questions asking what someone did or ate on a named trip also use get_trips;
+  the Executor resolves the trip and obtains its existing timeline Evidence.
+- With selected_trip_id, questions asking what happened, what was eaten, or what
+  happened on a numbered day use get_trip_timeline.
 - A place or experience name is not an experience_id. If photos or details need an
   experience_id and no actual ID is available, return needs_context.
 - update_experience is proposal-only and accepts exactly experience_id and memo.
@@ -74,6 +78,8 @@ User: 旅行一覧を見せて
 {{"action":"tool_proposal","tool_id":"get_trips","arguments":{{}},"confidence":"high","reply":"旅行一覧を取得します。"}}
 User: 福岡旅行を開いて
 {{"action":"tool_proposal","tool_id":"get_trips","arguments":{{}},"confidence":"medium","reply":"福岡旅行を探します。"}}
+User: 神戸旅行で何した？
+{{"action":"tool_proposal","tool_id":"get_trips","arguments":{{}},"confidence":"medium","reply":"神戸旅行を探します。"}}
 User: 須磨を開いて
 {{"action":"tool_proposal","tool_id":"get_trips","arguments":{{}},"confidence":"medium","reply":"須磨に合う旅行を探します。"}}
 User: 兵庫の旅行見せて
@@ -83,6 +89,9 @@ User: この旅行の詳細見せて
 {{"action":"tool_proposal","tool_id":"get_trip","arguments":{{"trip_id":"trip_fukuoka"}},"confidence":"high","reply":"選択中の旅行を取得します。"}}
 Context: selected_trip_id=trip_fukuoka, selected_trip_title=福岡旅行
 User: 2日目は？
+{{"action":"tool_proposal","tool_id":"get_trip_timeline","arguments":{{"trip_id":"trip_fukuoka"}},"confidence":"high","reply":"選択中の旅行の日程を取得します。"}}
+Context: selected_trip_id=trip_fukuoka, selected_trip_title=福岡旅行
+User: 何食べた？
 {{"action":"tool_proposal","tool_id":"get_trip_timeline","arguments":{{"trip_id":"trip_fukuoka"}},"confidence":"high","reply":"選択中の旅行の日程を取得します。"}}
 User: アンパンマンミュージアムの写真見せて
 {{"action":"needs_context","reply":"どの旅行の体験か確認するため、旅行または体験を先に選んでください。"}}

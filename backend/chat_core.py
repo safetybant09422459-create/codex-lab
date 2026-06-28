@@ -89,6 +89,14 @@ class ExecutionStep(ChatCoreModel):
     runtime_ms: float = Field(ge=0.0)
 
 
+class ExecutionEvidence(ChatCoreModel):
+    """One successful Runtime result already obtained by a PlanExecutor."""
+
+    tool_id: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    result: Any = None
+
+
 class ExecutionRequest(ChatCoreModel):
     """Server-owned inputs required to execute a descriptive Plan."""
 
@@ -120,10 +128,29 @@ class ExecutionResult(ChatCoreModel):
     tool_id: str | None = None
     arguments: dict[str, Any] = Field(default_factory=dict)
     steps: list[ExecutionStep] = Field(default_factory=list)
+    evidence: list[ExecutionEvidence] = Field(default_factory=list)
     conversation_state: ConversationState | None = None
     candidates: list[dict[str, Any]] = Field(default_factory=list)
     clear_context_on_not_found: bool = False
     diagnostics: dict[str, Any] | None = None
+
+
+class AnswerRequest(ChatCoreModel):
+    """Read-only facts available to an AnswerGenerator after execution."""
+
+    user_question: str
+    execution_result: ExecutionResult
+    conversation_state: ConversationState
+    evidence: list[ExecutionEvidence] = Field(default_factory=list)
+
+
+class AnswerResult(ChatCoreModel):
+    """A direct answer grounded only in already acquired Evidence."""
+
+    answer: str
+    confidence: Literal["high", "medium", "low"]
+    answer_type: Literal["activities", "food", "day", "not_applicable"]
+    used_evidence: list[ExecutionEvidence] = Field(default_factory=list)
 
 
 class ContentBlock(ChatCoreModel):
@@ -185,6 +212,7 @@ class ComposeRequest(ChatCoreModel):
     navigation_hint: dict[str, Any] | None = None
     diagnostics: dict[str, Any] | None = None
     clear_context_on_not_found: bool = False
+    answer_result: AnswerResult | None = None
 
 
 class ComposeResult(ChatCoreModel):
@@ -218,6 +246,12 @@ class PlanExecutor(Protocol):
     """Common boundary for bounded Plan execution through Runtime."""
 
     def execute(self, request: ExecutionRequest) -> ExecutionResult: ...
+
+
+class AnswerGenerator(Protocol):
+    """Common boundary for answering from existing Evidence without I/O."""
+
+    def generate(self, request: AnswerRequest) -> AnswerResult: ...
 
 
 class ResponseComposer(Protocol):

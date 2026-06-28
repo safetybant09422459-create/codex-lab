@@ -1022,6 +1022,61 @@ class ChatOrchestratorTest(unittest.TestCase):
             "write_requires_pending_action",
         )
 
+    def test_named_trip_activity_question_returns_answer_from_acquired_evidence(self) -> None:
+        trip = {
+            "id": "trip-kobe",
+            "title": "神戸旅行",
+            "start_date": "2026-06-01",
+        }
+        runtime = FakeRuntimeService(
+            response=[
+                {"success": True, "result": {"trips": [trip]}},
+                {
+                    "success": True,
+                    "result": {
+                        "trip_id": "trip-kobe",
+                        "items": [
+                            {"display_title": "須磨シーワールド"},
+                            {"display_title": "ホテル"},
+                        ],
+                    },
+                },
+            ]
+        )
+        proposal = {
+            "action": "tool_proposal",
+            "tool_id": "get_trips",
+            "arguments": {},
+            "confidence": "medium",
+            "reply": "神戸旅行を探します。",
+        }
+
+        result = chat_orchestrator.handle_travel_chat(
+            "神戸旅行で何した？",
+            debug=True,
+            text_generator=json_generator(proposal),
+            runtime=runtime,
+        )
+
+        self.assertEqual(result["action"], "tool_result")
+        self.assertEqual(result["tool_id"], "get_trip_timeline")
+        self.assertEqual(
+            result["reply"],
+            "神戸旅行では、須磨シーワールド、その後ホテルの記録があります。",
+        )
+        self.assertEqual(
+            [call["tool_id"] for call in runtime.calls],
+            ["get_trips", "get_trip_timeline"],
+        )
+        self.assertEqual(
+            result["debug"]["answer_generation"],
+            {
+                "answer_type": "activities",
+                "confidence": "high",
+                "used_evidence_count": 2,
+            },
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

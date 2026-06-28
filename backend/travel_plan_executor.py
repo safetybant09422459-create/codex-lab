@@ -11,6 +11,7 @@ from .chat_core import (
     EntityResolutionResult,
     ExecutionRequest,
     ExecutionResult,
+    ExecutionEvidence,
     ExecutionStep,
 )
 from .chat_tool_policy import get_chat_tool_execution_policy, validate_chat_proposal
@@ -56,6 +57,7 @@ class TravelPlanExecutor:
 
         pending_steps = [(tool_id, arguments, "result")]
         runtime_steps: list[ExecutionStep] = []
+        evidence: list[ExecutionEvidence] = []
         trip_query = _extract_trip_name(request.user_message) if tool_id == "get_trips" else None
         resolution_result: EntityResolutionResult | None = None
 
@@ -94,9 +96,17 @@ class TravelPlanExecutor:
                     arguments=current_arguments,
                     steps=runtime_steps,
                     state=state,
+                    evidence=evidence,
                 )
 
             runtime_result = runtime_response.get("result")
+            evidence.append(
+                ExecutionEvidence(
+                    tool_id=current_tool_id,
+                    arguments=current_arguments,
+                    result=runtime_result,
+                )
+            )
             if purpose == "validation":
                 trip = _extract_runtime_trip(runtime_result)
                 if trip is None:
@@ -107,6 +117,7 @@ class TravelPlanExecutor:
                         arguments=current_arguments,
                         steps=runtime_steps,
                         state=state,
+                        evidence=evidence,
                         clear_context_on_not_found=True,
                     )
                 state = conversation_state_from_runtime_trip(trip)
@@ -127,6 +138,7 @@ class TravelPlanExecutor:
                         arguments=current_arguments,
                         steps=runtime_steps,
                         state=state,
+                        evidence=evidence,
                     )
                 if resolution_result.status == "ambiguous":
                     return self._result(
@@ -138,6 +150,7 @@ class TravelPlanExecutor:
                         steps=runtime_steps,
                         state=state,
                         candidates=candidates,
+                        evidence=evidence,
                     )
 
                 trip_id = candidates[0].get("id") if candidates else None
@@ -148,10 +161,22 @@ class TravelPlanExecutor:
                         arguments=current_arguments,
                         steps=runtime_steps,
                         state=state,
+                        evidence=evidence,
                     )
-                pending_steps.append(
-                    ("get_trip", {"trip_id": trip_id.strip()}, "result")
-                )
+                trip = candidates[0]
+                state = conversation_state_from_runtime_trip(trip)
+                if _is_answer_question(request.user_message):
+                    pending_steps.append(
+                        (
+                            "get_trip_timeline",
+                            {"trip_id": trip_id.strip()},
+                            "result",
+                        )
+                    )
+                else:
+                    pending_steps.append(
+                        ("get_trip", {"trip_id": trip_id.strip()}, "result")
+                    )
                 continue
 
             return self._result(
@@ -162,6 +187,7 @@ class TravelPlanExecutor:
                 arguments=current_arguments,
                 steps=runtime_steps,
                 state=state,
+                evidence=evidence,
                 clear_context_on_not_found=used_selected_trip,
             )
 
@@ -170,6 +196,7 @@ class TravelPlanExecutor:
             resolution_result=resolution_result,
             steps=runtime_steps,
             state=state,
+            evidence=evidence,
         )
 
     def _result(
@@ -183,6 +210,7 @@ class TravelPlanExecutor:
         steps: list[ExecutionStep],
         state: ConversationState,
         candidates: list[dict[str, Any]] | None = None,
+        evidence: list[ExecutionEvidence] | None = None,
         clear_context_on_not_found: bool = False,
     ) -> ExecutionResult:
         diagnostics: dict[str, Any] = {"executor": self.executor_id}
@@ -204,6 +232,7 @@ class TravelPlanExecutor:
             tool_id=tool_id,
             arguments=arguments or {},
             steps=steps,
+            evidence=evidence or [],
             conversation_state=state,
             candidates=candidates or [],
             clear_context_on_not_found=clear_context_on_not_found,
@@ -232,11 +261,24 @@ def _selected_trip_intent(message: Any) -> str | None:
     compact = "".join(character for character in normalized if not character.isspace())
     if re.search(r"(?:[0-9]+|[一二三四五六七八九十]+)日目", compact):
         return "get_trip_timeline"
+    if _is_answer_question(compact):
+        return "get_trip_timeline"
     if "この旅行" in compact and any(
         token in compact for token in ("詳細", "メモ", "情報", "見せ", "教えて", "開いて")
     ):
         return "get_trip"
     return None
+
+
+def _is_answer_question(message: Any) -> bool:
+    if not isinstance(message, str):
+        return False
+    normalized = unicodedata.normalize("NFKC", message)
+    compact = "".join(character for character in normalized if not character.isspace())
+    return any(
+        token in compact
+        for token in ("何した", "何をした", "何食べた", "何を食べた", "何食べ", "食事は")
+    )
 
 
 def _extract_runtime_trip(runtime_result: Any) -> dict[str, Any] | None:
@@ -294,6 +336,14 @@ def _extract_trip_name(message: str) -> str | None:
     value = "".join(character for character in value if not character.isspace())
     value = value.rstrip("。.!！?？")
     for suffix in (
+        "って何を食べた",
+        "って何食べた",
+        "で何を食べた",
+        "で何食べた",
+        "って何をした",
+        "って何した",
+        "で何をした",
+        "で何した",
         "を開いてください",
         "開いてください",
         "を表示してください",

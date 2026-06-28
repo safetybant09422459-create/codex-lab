@@ -4,7 +4,7 @@ from collections.abc import Callable
 from time import perf_counter
 from typing import Any
 
-from .chat_core import ComposeRequest, ExecutionRequest
+from .chat_core import AnswerRequest, ComposeRequest, ExecutionRequest
 from .openai_adapter import generate_text_with_timings, redact_sensitive_text
 from .runtime import RuntimeService
 from .travel_chat_adapter import (
@@ -19,6 +19,7 @@ from .travel_plan_executor import (
 )
 from .travel_planner import TravelPlanner, legacy_proposal_from_plan
 from .travel_response_composer import TravelResponseComposer
+from .travel_answer_generator import TravelAnswerGenerator
 
 
 MAX_TRAVEL_STEPS = 3
@@ -28,6 +29,7 @@ runtime_service = RuntimeService()
 travel_entity_resolver = TravelEntityResolver()
 travel_plan_executor = TravelPlanExecutor(resolver=travel_entity_resolver)
 travel_response_composer = TravelResponseComposer()
+travel_answer_generator = TravelAnswerGenerator()
 
 
 def propose_travel_tool(
@@ -86,6 +88,14 @@ def handle_travel_chat(
         )
     )
     execution_state = execution.conversation_state or conversation_state
+    answer = travel_answer_generator.generate(
+        AnswerRequest(
+            user_question=message,
+            execution_result=execution,
+            conversation_state=execution_state,
+            evidence=execution.evidence,
+        )
+    )
     composed = travel_response_composer.compose(
         ComposeRequest(
             outcome=execution.execution_status,
@@ -99,6 +109,7 @@ def handle_travel_chat(
             candidates=execution.candidates,
             diagnostics=execution.diagnostics,
             clear_context_on_not_found=execution.clear_context_on_not_found,
+            answer_result=answer,
         )
     )
     result = composed.response
@@ -134,6 +145,11 @@ def handle_travel_chat(
             "timings_ms": timings_ms,
             "steps": runtime_steps,
             "max_steps": MAX_TRAVEL_STEPS,
+            "answer_generation": {
+                "answer_type": answer.answer_type,
+                "confidence": answer.confidence,
+                "used_evidence_count": len(answer.used_evidence),
+            },
         }
         diagnostics = execution.diagnostics or {}
         if "entity_resolution" in diagnostics:
