@@ -184,6 +184,10 @@ class TravelChatEvaluatorTest(unittest.TestCase):
         self.assertTrue(trace["search_candidates"])
         self.assertIn("score", trace["search_candidates"][0])
         self.assertIn("matched_by", trace["search_candidates"][0])
+        self.assertEqual(trace["resolver"], "travel_entity_resolver")
+        self.assertEqual(trace["resolution_status"], "ambiguous")
+        self.assertGreater(trace["candidate_count"], 1)
+        self.assertIsInstance(trace["top_candidate_score"], float)
         self.assertIn("decision", trace)
         self.assertIn("response_summary", trace)
         timeline_record = next(

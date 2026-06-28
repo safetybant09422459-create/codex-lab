@@ -14,7 +14,11 @@ from .chat_tool_policy import (
     get_chat_tool_execution_policy,
     validate_chat_proposal,
 )
-from .chat_core import ConversationState
+from .chat_core import (
+    ConversationState,
+    EntityResolutionRequest,
+    EntityResolutionResult,
+)
 from .openai_adapter import (
     OpenAIRequestError,
     generate_text_with_timings,
@@ -27,7 +31,7 @@ from .travel_chat_adapter import (
     legacy_context_from_conversation_state,
     selected_trip_entity,
 )
-from .travel_search_index import TravelSearchIndex
+from .travel_entity_resolver import TravelEntityResolver
 
 
 _FALLBACK = {
@@ -56,7 +60,7 @@ _SUCCESS_REPLIES = {
 
 # Reused within the process. Runtime remains the only path to executors/repositories.
 runtime_service = RuntimeService()
-travel_search_index = TravelSearchIndex()
+travel_entity_resolver = TravelEntityResolver()
 
 _INSTRUCTIONS = """\
 You are the proposal-only Chat Orchestrator for Jarvis Travel Chat v0.1.
@@ -230,6 +234,7 @@ def handle_travel_chat(
 
     proposal_debug = proposal.pop("debug", None)
     runtime_steps: list[dict[str, Any]] = []
+    resolution_diagnostics: dict[str, Any] | None = None
 
     if proposal.get("action") != "tool_proposal":
         result = proposal
@@ -305,14 +310,26 @@ def handle_travel_chat(
                     continue
 
                 if current_tool_id == "get_trips" and trip_query is not None:
-                    candidates = _find_trip_candidates(runtime_result, trip_query)
-                    if not candidates:
+                    resolution, candidates = _resolve_trip_candidates(
+                        runtime_result, trip_query
+                    )
+                    resolution_diagnostics = {
+                        "resolver": (resolution.diagnostics or {}).get("resolver"),
+                        "resolution_status": resolution.status,
+                        "candidate_count": len(resolution.candidates),
+                        "top_candidate_score": (
+                            resolution.candidates[0].score
+                            if resolution.candidates
+                            else None
+                        ),
+                    }
+                    if resolution.status == "not_found":
                         result = {
                             "action": "needs_context",
                             "reply": _TRIP_NOT_FOUND_REPLY,
                         }
                         break
-                    if len(candidates) > 1:
+                    if resolution.status == "ambiguous":
                         result = {
                             "action": "needs_context",
                             "reply": _MULTIPLE_TRIPS_REPLY,
@@ -388,6 +405,8 @@ def handle_travel_chat(
             "steps": runtime_steps,
             "max_steps": MAX_TRAVEL_STEPS,
         }
+        if resolution_diagnostics is not None:
+            result["debug"]["entity_resolution"] = resolution_diagnostics
         if isinstance(proposal_debug, dict) and "openai_adapter" in proposal_debug:
             result["debug"]["openai_adapter"] = proposal_debug["openai_adapter"]
     return result
@@ -563,26 +582,43 @@ def _extract_trip_name(message: str) -> str | None:
     return normalized
 
 
-def _find_trip_candidates(
+def _resolve_trip_candidates(
     runtime_result: Any,
     normalized_query: str,
-) -> list[dict[str, Any]]:
+) -> tuple[EntityResolutionResult, list[dict[str, Any]]]:
     if not isinstance(runtime_result, dict):
-        return []
-    trips = runtime_result.get("trips")
-    if not isinstance(trips, list):
-        return []
-    candidates = travel_search_index.search(normalized_query, trips)
+        trips = []
+    else:
+        raw_trips = runtime_result.get("trips")
+        trips = raw_trips if isinstance(raw_trips, list) else []
+    resolution = travel_entity_resolver.resolve(
+        EntityResolutionRequest(
+            query=normalized_query,
+            skill_id="travel",
+            entity_types=("trip",),
+            limit=max(1, len(trips)),
+        ),
+        runtime_result=runtime_result,
+    )
     trips_by_id = {
         trip.get("id"): trip
         for trip in trips
         if isinstance(trip, dict) and isinstance(trip.get("id"), str)
     }
-    return [
+    return resolution, [
         trips_by_id[candidate.entity.entity_id]
-        for candidate in candidates
+        for candidate in resolution.candidates
         if candidate.entity.entity_id in trips_by_id
     ]
+
+
+def _find_trip_candidates(
+    runtime_result: Any,
+    normalized_query: str,
+) -> list[dict[str, Any]]:
+    """Compatibility facade for callers that only need the matched Trip values."""
+    _, candidates = _resolve_trip_candidates(runtime_result, normalized_query)
+    return candidates
 
 
 def _normalize_trip_text(value: str) -> str:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,6 +25,26 @@ class EntityCandidate(ChatCoreModel):
     entity: EntityRef
     score: float = Field(ge=0.0, le=1.0)
     matched_by: str
+
+
+class EntityResolutionRequest(ChatCoreModel):
+    """Skill-neutral request passed to an EntityResolver."""
+
+    query: str = Field(min_length=1)
+    skill_id: str | None = None
+    entity_types: tuple[str, ...] | None = None
+    context: dict[str, Any] | None = None
+    limit: int = Field(default=20, ge=1)
+
+
+class EntityResolutionResult(ChatCoreModel):
+    """Skill-neutral resolution state produced from ranked candidates."""
+
+    status: Literal["resolved", "ambiguous", "not_found", "needs_context"]
+    candidates: list[EntityCandidate] = Field(default_factory=list)
+    resolved_entity: EntityRef | None = None
+    reason: str | None = None
+    diagnostics: dict[str, Any] | None = None
 
 
 class ConversationState(ChatCoreModel):
@@ -55,14 +75,9 @@ class ChatResponseV1(ChatCoreModel):
 
 
 class EntityResolver(Protocol):
-    """Common future boundary for skill-specific entity candidate discovery."""
+    """Common boundary for converting a query into an entity resolution state."""
 
-    def resolve(
-        self,
-        query: str,
-        *,
-        conversation_state: ConversationState,
-    ) -> list[EntityCandidate]: ...
+    def resolve(self, request: EntityResolutionRequest) -> EntityResolutionResult: ...
 
 
 def legacy_chat_response_to_v1(

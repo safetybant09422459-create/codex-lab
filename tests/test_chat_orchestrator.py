@@ -397,6 +397,15 @@ class ChatOrchestratorTest(unittest.TestCase):
             ["get_trips", "get_trip"],
         )
         self.assertEqual(
+            result["debug"]["entity_resolution"],
+            {
+                "resolver": "travel_entity_resolver",
+                "resolution_status": "resolved",
+                "candidate_count": 1,
+                "top_candidate_score": 1.0,
+            },
+        )
+        self.assertEqual(
             result["updated_context"],
             {
                 "selected_trip_id": "trip-fukuoka",

@@ -545,6 +545,11 @@ def _build_trace(
     search_candidates = _trace_search_candidates(question, trips)
     visible_candidates = actual.get("candidates")
     decision = _trace_decision(actual, search_candidates)
+    debug = actual.get("debug")
+    resolution = (
+        debug.get("entity_resolution") if isinstance(debug, dict) else None
+    )
+    resolution = resolution if isinstance(resolution, dict) else {}
     return _redact_value(
         {
             "question": question,
@@ -555,6 +560,10 @@ def _build_trace(
             },
             "runtime_steps": _trace_runtime_steps(actual, trips),
             "search_candidates": search_candidates,
+            "resolver": resolution.get("resolver"),
+            "resolution_status": resolution.get("resolution_status"),
+            "candidate_count": resolution.get("candidate_count"),
+            "top_candidate_score": resolution.get("top_candidate_score"),
             "decision": decision,
             "response_summary": {
                 "action": actual.get("action"),
