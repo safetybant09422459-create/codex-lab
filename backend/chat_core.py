@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any, Literal, Protocol
 
@@ -53,6 +54,33 @@ class ConversationState(ChatCoreModel):
     skill_slots: dict[str, Any] = Field(default_factory=dict)
 
 
+class PlanToolCandidate(ChatCoreModel):
+    """One validated Tool option proposed for a Plan."""
+
+    tool_id: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    priority: int = Field(default=0, ge=0)
+
+
+class Plan(ChatCoreModel):
+    """Skill-neutral description of what Chat intends to do.
+
+    A Plan is descriptive only. It does not resolve entities, execute Tools,
+    generate responses, or mutate conversation state.
+    """
+
+    intent: str
+    target_skill: str | None = None
+    target_entity_type: str | None = None
+    tool_candidates: list[PlanToolCandidate] = Field(default_factory=list)
+    requires_resolution: bool = False
+    requires_context: bool = False
+    requires_confirmation: bool = False
+    reason: str | None = None
+    confidence: Literal["high", "medium", "low"] | None = None
+    diagnostics: dict[str, Any] | None = None
+
+
 class ContentBlock(ChatCoreModel):
     type: str
     data: dict[str, Any] = Field(default_factory=dict)
@@ -78,6 +106,19 @@ class EntityResolver(Protocol):
     """Common boundary for converting a query into an entity resolution state."""
 
     def resolve(self, request: EntityResolutionRequest) -> EntityResolutionResult: ...
+
+
+class Planner(Protocol):
+    """Common boundary for turning an LLM proposal into a descriptive Plan."""
+
+    def create_plan(
+        self,
+        user_message: str,
+        *,
+        context: dict[str, Any] | None = None,
+        text_generator: Callable[..., str] | None = None,
+        debug: bool = False,
+    ) -> Plan: ...
 
 
 def legacy_chat_response_to_v1(
