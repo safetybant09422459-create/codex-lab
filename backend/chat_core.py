@@ -81,6 +81,51 @@ class Plan(ChatCoreModel):
     diagnostics: dict[str, Any] | None = None
 
 
+class ExecutionStep(ChatCoreModel):
+    """One Runtime attempt made while executing a bounded Plan."""
+
+    step: int = Field(ge=1)
+    tool_id: str
+    runtime_ms: float = Field(ge=0.0)
+
+
+class ExecutionRequest(ChatCoreModel):
+    """Server-owned inputs required to execute a descriptive Plan."""
+
+    plan: Plan
+    user_message: str
+    conversation_state: ConversationState
+    role: str
+    debug: bool = False
+    runtime_service: Any
+    resolver: Any = None
+    max_steps: int = Field(default=3, ge=1)
+
+
+class ExecutionResult(ChatCoreModel):
+    """Execution facts for a ResponseComposer; never a user-facing response."""
+
+    execution_status: Literal[
+        "success",
+        "needs_context",
+        "pending_write",
+        "candidates",
+        "not_found",
+        "runtime_error",
+        "permission_denied",
+        "max_steps",
+    ]
+    runtime_result: Any = None
+    resolution_result: EntityResolutionResult | None = None
+    tool_id: str | None = None
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    steps: list[ExecutionStep] = Field(default_factory=list)
+    conversation_state: ConversationState | None = None
+    candidates: list[dict[str, Any]] = Field(default_factory=list)
+    clear_context_on_not_found: bool = False
+    diagnostics: dict[str, Any] | None = None
+
+
 class ContentBlock(ChatCoreModel):
     type: str
     data: dict[str, Any] = Field(default_factory=dict)
@@ -147,6 +192,12 @@ class Planner(Protocol):
         text_generator: Callable[..., str] | None = None,
         debug: bool = False,
     ) -> Plan: ...
+
+
+class PlanExecutor(Protocol):
+    """Common boundary for bounded Plan execution through Runtime."""
+
+    def execute(self, request: ExecutionRequest) -> ExecutionResult: ...
 
 
 class ResponseComposer(Protocol):

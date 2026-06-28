@@ -16,6 +16,9 @@ MULTIPLE_TRIPS_REPLY = "候補が複数あります。"
 WRITE_NOT_IMPLEMENTED_REPLY = (
     "更新操作には確認が必要です。現在は提案のみ対応しています。"
 )
+RUNTIME_ERROR_REPLY = "Toolの実行に失敗しました。時間をおいて再度お試しください。"
+PERMISSION_DENIED_REPLY = "この操作を実行する権限がありません。"
+MAX_STEPS_REPLY = "安全のため処理を中断しました。対象の旅行をもう少し具体的に指定してください。"
 
 SUCCESS_REPLIES = {
     "get_trips": "旅行一覧を取得しました。",
@@ -54,6 +57,27 @@ class TravelResponseComposer:
                 "tool_id": request.tool_id,
                 "arguments": request.arguments,
                 "reply": WRITE_NOT_IMPLEMENTED_REPLY,
+            }
+        elif request.outcome == "needs_context":
+            response = {
+                "action": "needs_context",
+                "reply": request.plan.reason if request.plan else "対象を指定してください。",
+            }
+        elif request.outcome in {"runtime_error", "permission_denied"}:
+            response = {
+                "action": request.outcome,
+                "tool_id": request.tool_id,
+                "arguments": request.arguments,
+                "reply": (
+                    PERMISSION_DENIED_REPLY
+                    if request.outcome == "permission_denied"
+                    else RUNTIME_ERROR_REPLY
+                ),
+            }
+        elif request.outcome == "max_steps":
+            response = {
+                "action": "needs_context",
+                "reply": MAX_STEPS_REPLY,
             }
         else:
             raise ValueError(f"unsupported Travel compose outcome: {request.outcome}")
