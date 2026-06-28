@@ -308,6 +308,11 @@ Cover Imageの状態:
 
 旅行後の価値は、単なるReviewではなくMemoryである。
 
+ここでいうMemoryはTravelが所有するTrip / Outing内の思い出文脈であり、Jarvis全体の長期Memoryや
+Memory Skillそのものではない。TravelはJarvis Memoryから参照されるEvidenceを提供し、何を
+長期MemoryにするかはJarvis Coreが判断する。境界の詳細は
+[Jarvis Memory Architecture](memory_architecture.md)を参照する。
+
 Memoryは以下をまとめる。
 
 * 思い出メモ

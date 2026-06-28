@@ -5,6 +5,8 @@ AI開発練習用
 
 スマホブラウザから、このリポジトリ上の Jarvis Core / MCP / アプリ開発を進めるための AI 開発 PM ツールのプロトタイプ。
 
+設計文書: [Jarvis Memory Architecture](docs/memory_architecture.md)
+
 対象ディレクトリは固定で `/mnt/nas/projects/codex-lab`。
 本番旅行アプリ `/mnt/nas/projects/project` は対象外。
 
