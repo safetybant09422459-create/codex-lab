@@ -5,10 +5,10 @@ import unicodedata
 from collections.abc import Callable
 from time import perf_counter
 from typing import Any
-from urllib.parse import quote
 
 from .chat_tool_policy import get_chat_tool_execution_policy, validate_chat_proposal
 from .chat_core import (
+    ComposeRequest,
     ConversationState,
     EntityResolutionRequest,
     EntityResolutionResult,
@@ -23,30 +23,19 @@ from .travel_chat_adapter import (
 )
 from .travel_entity_resolver import TravelEntityResolver
 from .travel_planner import TravelPlanner, legacy_proposal_from_plan
+from .travel_response_composer import TravelResponseComposer
 
 
 _RUNTIME_ERROR_REPLY = "Toolの実行に失敗しました。時間をおいて再度お試しください。"
 _PERMISSION_DENIED_REPLY = "この操作を実行する権限がありません。"
-_WRITE_NOT_IMPLEMENTED_REPLY = "更新操作には確認が必要です。現在は提案のみ対応しています。"
-_TRIP_NOT_FOUND_REPLY = "該当する旅行が見つかりませんでした。"
-_MULTIPLE_TRIPS_REPLY = "候補が複数あります。"
 _MAX_STEPS_REPLY = "安全のため処理を中断しました。対象の旅行をもう少し具体的に指定してください。"
 
 MAX_TRAVEL_STEPS = 3
 
-_SUCCESS_REPLIES = {
-    "get_trips": "旅行一覧を取得しました。",
-    "get_trip": "旅行情報を取得しました。",
-    "get_trip_timeline": "旅行タイムラインを取得しました。",
-    "get_experience": "体験情報を取得しました。",
-    "get_experience_photos": "体験写真を取得しました。",
-    "get_experience_photo_links": "体験写真リンクを取得しました。",
-    "get_experience_photo_search": "体験写真の検索結果を取得しました。",
-}
-
 # Reused within the process. Runtime remains the only path to executors/repositories.
 runtime_service = RuntimeService()
 travel_entity_resolver = TravelEntityResolver()
+travel_response_composer = TravelResponseComposer()
 
 
 def propose_travel_tool(
@@ -109,12 +98,15 @@ def handle_travel_chat(
         execution_policy = get_chat_tool_execution_policy(tool_id)
 
         if execution_policy == "write_requires_pending_action":
-            result = {
-                "action": "pending_write_not_implemented",
-                "tool_id": tool_id,
-                "arguments": arguments,
-                "reply": _WRITE_NOT_IMPLEMENTED_REPLY,
-            }
+            result = travel_response_composer.compose(
+                ComposeRequest(
+                    outcome="pending_write",
+                    plan=plan,
+                    conversation_state=conversation_state,
+                    tool_id=tool_id,
+                    arguments=arguments,
+                )
+            ).response
         else:
             pending_steps = [(tool_id, arguments, "result")]
             result = None
@@ -154,14 +146,24 @@ def handle_travel_chat(
                 if step_purpose == "validation":
                     trip = _extract_runtime_trip(runtime_result)
                     if trip is None:
-                        conversation_state = conversation_state_from_legacy_context(None)
+                        composed = travel_response_composer.compose(
+                            ComposeRequest(
+                                outcome="not_found",
+                                plan=plan,
+                                runtime_result=runtime_result,
+                                conversation_state=conversation_state,
+                                tool_id=current_tool_id,
+                                arguments=current_arguments,
+                                clear_context_on_not_found=True,
+                            )
+                        )
+                        conversation_state = composed.conversation_state or (
+                            conversation_state_from_legacy_context(None)
+                        )
                         updated_context = legacy_context_from_conversation_state(
                             conversation_state
                         )
-                        result = {
-                            "action": "needs_context",
-                            "reply": _TRIP_NOT_FOUND_REPLY,
-                        }
+                        result = composed.response
                         break
                     conversation_state = conversation_state_from_runtime_trip(trip)
                     updated_context = legacy_context_from_conversation_state(
@@ -184,17 +186,31 @@ def handle_travel_chat(
                         ),
                     }
                     if resolution.status == "not_found":
-                        result = {
-                            "action": "needs_context",
-                            "reply": _TRIP_NOT_FOUND_REPLY,
-                        }
+                        result = travel_response_composer.compose(
+                            ComposeRequest(
+                                outcome="not_found",
+                                plan=plan,
+                                resolution_result=resolution,
+                                runtime_result=runtime_result,
+                                conversation_state=conversation_state,
+                                tool_id=current_tool_id,
+                                arguments=current_arguments,
+                            )
+                        ).response
                         break
                     if resolution.status == "ambiguous":
-                        result = {
-                            "action": "needs_context",
-                            "reply": _MULTIPLE_TRIPS_REPLY,
-                            "candidates": _redact_value(candidates),
-                        }
+                        result = travel_response_composer.compose(
+                            ComposeRequest(
+                                outcome="candidates",
+                                plan=plan,
+                                resolution_result=resolution,
+                                runtime_result=runtime_result,
+                                conversation_state=conversation_state,
+                                tool_id=current_tool_id,
+                                arguments=current_arguments,
+                                candidates=candidates,
+                            )
+                        ).response
                         break
 
                     trip_id = candidates[0].get("id")
@@ -211,23 +227,23 @@ def handle_travel_chat(
                     )
                     continue
 
-                result = _runtime_success_result(
-                    current_tool_id,
-                    current_arguments,
-                    runtime_result,
+                composed = travel_response_composer.compose(
+                    ComposeRequest(
+                        outcome="success",
+                        plan=plan,
+                        runtime_result=runtime_result,
+                        conversation_state=conversation_state,
+                        tool_id=current_tool_id,
+                        arguments=current_arguments,
+                        clear_context_on_not_found=used_selected_trip,
+                    )
                 )
-                if current_tool_id == "get_trip":
-                    trip = _extract_runtime_trip(runtime_result)
-                    if trip is None and used_selected_trip:
-                        conversation_state = conversation_state_from_legacy_context(None)
-                        updated_context = legacy_context_from_conversation_state(
-                            conversation_state
-                        )
-                    elif trip is not None:
-                        conversation_state = conversation_state_from_runtime_trip(trip)
-                        updated_context = legacy_context_from_conversation_state(
-                            conversation_state
-                        )
+                result = composed.response
+                if composed.conversation_state is not None:
+                    conversation_state = composed.conversation_state
+                    updated_context = legacy_context_from_conversation_state(
+                        conversation_state
+                    )
                 break
 
             if result is None:
@@ -269,7 +285,8 @@ def handle_travel_chat(
             result["debug"]["entity_resolution"] = resolution_diagnostics
         if isinstance(proposal_debug, dict) and "openai_adapter" in proposal_debug:
             result["debug"]["openai_adapter"] = proposal_debug["openai_adapter"]
-    return result
+    # Final defense: every public field is redacted after Composer and debug assembly.
+    return _redact_value(result)
 
 
 def _apply_selected_trip_context(
@@ -379,34 +396,16 @@ def _runtime_success_result(
     arguments: dict[str, Any],
     runtime_result: Any,
 ) -> dict[str, Any]:
-    safe_arguments = _redact_value(arguments)
-    result = {
-        "action": "tool_result",
-        "tool_id": tool_id,
-        "arguments": safe_arguments,
-        "reply": _SUCCESS_REPLIES[tool_id],
-        "result": _redact_value(runtime_result),
-    }
-    if tool_id == "get_trip":
-        trip = runtime_result.get("trip") if isinstance(runtime_result, dict) else None
-        if not isinstance(trip, dict):
-            return {
-                "action": "needs_context",
-                "reply": _TRIP_NOT_FOUND_REPLY,
-            }
-        title = trip.get("title") if isinstance(trip, dict) else None
-        result["reply"] = (
-            f"{redact_sensitive_text(title)}を開きます。"
-            if isinstance(title, str) and title.strip()
-            else "旅行を開きます。"
+    """Compatibility facade; response assembly belongs to the Composer."""
+    composed = travel_response_composer.compose(
+        ComposeRequest(
+            outcome="success",
+            runtime_result=runtime_result,
+            tool_id=tool_id,
+            arguments=arguments,
         )
-        result["navigation"] = {
-            "type": "travel_trip",
-            "target": f"#travel?trip_id={quote(safe_arguments['trip_id'], safe='')}",
-            "trip_id": safe_arguments["trip_id"],
-            "label": "Travelで開く",
-        }
-    return result
+    )
+    return _redact_value(composed.response)
 
 
 def _extract_trip_name(message: str) -> str | None:

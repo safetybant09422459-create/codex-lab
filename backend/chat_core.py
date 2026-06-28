@@ -102,6 +102,34 @@ class ChatResponseV1(ChatCoreModel):
     diagnostics: dict[str, Any] | None = None
 
 
+class ComposeRequest(ChatCoreModel):
+    """Facts available to a ResponseComposer after orchestration.
+
+    The request is descriptive only. A Composer must not execute a Plan, resolve
+    an Entity, or call Runtime while converting these facts into a response.
+    """
+
+    outcome: str
+    plan: Plan | None = None
+    resolution_result: EntityResolutionResult | None = None
+    runtime_result: Any = None
+    conversation_state: ConversationState | None = None
+    tool_id: str | None = None
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    candidates: list[dict[str, Any]] = Field(default_factory=list)
+    navigation_hint: dict[str, Any] | None = None
+    diagnostics: dict[str, Any] | None = None
+    clear_context_on_not_found: bool = False
+
+
+class ComposeResult(ChatCoreModel):
+    """Legacy-compatible output plus the incremental internal V1 contract."""
+
+    response: dict[str, Any]
+    response_v1: ChatResponseV1
+    conversation_state: ConversationState | None = None
+
+
 class EntityResolver(Protocol):
     """Common boundary for converting a query into an entity resolution state."""
 
@@ -119,6 +147,12 @@ class Planner(Protocol):
         text_generator: Callable[..., str] | None = None,
         debug: bool = False,
     ) -> Plan: ...
+
+
+class ResponseComposer(Protocol):
+    """Common boundary for turning orchestration facts into a Chat response."""
+
+    def compose(self, request: ComposeRequest) -> ComposeResult: ...
 
 
 def legacy_chat_response_to_v1(

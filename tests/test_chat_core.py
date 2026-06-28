@@ -5,6 +5,8 @@ from pydantic import ValidationError
 
 from backend.chat_core import (
     ChatResponseV1,
+    ComposeRequest,
+    ComposeResult,
     ContentBlock,
     ConversationState,
     EntityCandidate,
@@ -12,6 +14,7 @@ from backend.chat_core import (
     SuggestedAction,
     legacy_chat_response_to_v1,
 )
+from backend.travel_response_composer import TravelResponseComposer
 from backend.travel_chat_adapter import (
     CLIENT_CONTEXT_SOURCE,
     RUNTIME_SOURCE,
@@ -24,6 +27,15 @@ from backend.travel_chat_adapter import (
 
 
 class ChatCoreTest(unittest.TestCase):
+    def test_response_composer_protocol_models_carry_legacy_and_v1_outputs(self) -> None:
+        request = ComposeRequest(outcome="not_found", diagnostics={"source": "test"})
+
+        composed = TravelResponseComposer().compose(request)
+
+        self.assertIsInstance(composed, ComposeResult)
+        self.assertEqual(composed.response["action"], "needs_context")
+        self.assertEqual(composed.response_v1.outcome, "needs_context")
+
     def test_foundation_types_validate_and_serialize(self) -> None:
         entity = EntityRef(
             skill_id="travel",
