@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import codex_api
-from .chat_orchestrator import handle_travel_chat
+from .chat_router import handle_chat
 from .config import FRONTEND_DIR, ROOT_DIR, SKILLS_DIR, TOOLS_DIR
 from .git_api import file_diff, git, git_changes
 from .models import (
@@ -79,7 +79,7 @@ async def index() -> FileResponse:
     response_model_exclude_none=True,
 )
 async def chat(request: ChatRequest) -> ChatResponse:
-    result = handle_travel_chat(
+    result = handle_chat(
         request.message,
         # Authentication is not implemented yet. Keep this temporary role on
         # the trusted server side; request/Browser/LLM role values are ignored.

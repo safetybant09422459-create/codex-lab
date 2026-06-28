@@ -1,0 +1,98 @@
+import json
+import unittest
+from datetime import datetime, timezone
+from unittest.mock import patch
+
+from backend.basic_chat import handle_basic_chat
+from backend.chat_core import ConversationTurn
+from backend.chat_router import handle_chat
+from backend import chat_router
+
+
+class ChatRouterTest(unittest.TestCase):
+    def test_basic_chat_answers_without_calling_travel(self) -> None:
+        route_generator = lambda **_: (  # noqa: E731
+            json.dumps({"route": "basic", "confidence": "high"}),
+            {"total": 1.0},
+        )
+        basic_generator = lambda **_: (  # noqa: E731
+            "おはようございます。",
+            {"total": 2.0},
+        )
+
+        with patch.object(chat_router, "handle_travel_chat") as travel:
+            result = handle_chat(
+                "おはよう",
+                route_text_generator=route_generator,
+                basic_text_generator=basic_generator,
+            )
+
+        self.assertEqual(
+            result,
+            {"action": "direct_answer", "reply": "おはようございます。"},
+        )
+        travel.assert_not_called()
+
+    def test_validated_travel_route_delegates_to_existing_adapter(self) -> None:
+        route_generator = lambda **_: (  # noqa: E731
+            json.dumps({"route": "travel", "confidence": "high"}),
+            None,
+        )
+        expected = {"action": "tool_result", "reply": "旅行一覧です。"}
+
+        with patch.object(
+            chat_router, "handle_travel_chat", return_value=expected
+        ) as travel:
+            result = handle_chat(
+                "旅行一覧を見せて",
+                route_text_generator=route_generator,
+            )
+
+        self.assertEqual(result, expected)
+        travel.assert_called_once()
+
+    def test_invalid_route_falls_back_to_basic_without_skill_execution(self) -> None:
+        invalid_route = lambda **_: (  # noqa: E731
+            '{"route":"calendar","confidence":"high"}',
+            None,
+        )
+        basic_generator = lambda **_: (  # noqa: E731
+            "通常会話として回答します。",
+            None,
+        )
+
+        with patch.object(chat_router, "handle_travel_chat") as travel:
+            result = handle_chat(
+                "こんにちは",
+                route_text_generator=invalid_route,
+                basic_text_generator=basic_generator,
+                debug=True,
+            )
+
+        self.assertEqual(result["action"], "direct_answer")
+        self.assertTrue(result["debug"]["routing"]["fallback"])
+        travel.assert_not_called()
+
+    def test_basic_chat_receives_time_and_ephemeral_history(self) -> None:
+        captured = {}
+
+        def generator(**kwargs):
+            captured.update(kwargs)
+            return "Jarvisです。", None
+
+        result = handle_basic_chat(
+            "あなたは誰？",
+            conversation_history=[
+                ConversationTurn(role="user", content="さっきの話を覚えてる？")
+            ],
+            text_generator=generator,
+            now=datetime(2026, 6, 29, 12, 34, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(result["reply"], "Jarvisです。")
+        self.assertIn("2026-06-29T12:34:00+00:00", captured["input_text"])
+        self.assertIn("さっきの話を覚えてる？", captured["input_text"])
+
+
+if __name__ == "__main__":
+    unittest.main()

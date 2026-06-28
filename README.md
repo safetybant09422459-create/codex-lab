@@ -64,20 +64,22 @@ Implemented:
 - Chat Core v0.2 Foundation（[設計原則と責務](docs/chat_core.md)、既存Chat API互換）
 - Clarification & Candidate Fallback v0.1（曖昧質問への候補提示、最新3件、Reason Trace）
 - Jarvis Benchmark v0.3（[Root Cause分析、Improvement Opportunities、Diff、Baseline、Regression検知](docs/chat_eval.md)）
+- Basic Chat Router v0.1（通常会話とTravel SkillをLLM判定で分離）
 - Chat Orchestrator v0.1（Travel read-only Tool実行、writeは提案のみ）
 - FastAPI Chat API v0.1 (`POST /api/chat`)
 
 Not Yet Implemented:
 
-- Jarvis Chat Core / Orchestrator v2（Basic Chat、Context Assembly、Capability Catalog）
+- Jarvis Chat Core / Orchestrator v2（Context Assembly、Capability Catalog）
 - Memory RAG / Memory Capability
 - Knowledge Enrichment Engine
 - Confirmation UI
 - External API / DB-backed Real Tool Execution
 
-Travel Answer Generator v0.1とGoal-aware PlanningはTravel Chat内で実装済みだが、現在の
-`POST /api/chat`は全発話をTravel Orchestratorへ渡す。通常会話を含む汎用Jarvis Chat Coreは未実装で
-あり、[Orchestrator v2方針](docs/chat_core.md)に従ってTravel固有処理をSkill Adapter側へ下げる。
+`POST /api/chat`はBasic Chat Routerで通常会話とTravel Skill利用をLLMに判定させる。通常会話は
+ToolなしでJarvis LLMへ渡し、Travel固有の発話だけ既存Travel Planner / Executor / Answer Generatorへ
+委譲する。Router出力はserver-sideで検証し、判定失敗時はRuntimeを呼ばないBasic Chatへfallbackする。
+Capability Catalog、Memory RAG、複数Skill連携は未実装である。
 
 Travel Runtime Read v0.1 は実装済み。Runtime safety layer 経由で `backend/travel_executor.py` の `TravelExecutor` が呼ばれ、`backend/travel_repository.py` と `backend/travel_sources.py` のローカル読み取りデータを返す。
 
@@ -151,9 +153,9 @@ Chat API:
 - `POST /api/chat`
 
 `POST /api/chat` はBrowserから受け取った自然文をserver-sideの
-`backend.chat_orchestrator.handle_travel_chat()` へ渡す。BrowserへOpenAI API Keyを
-渡さず、BrowserからOpenAI APIへ直接接続しない。read-only ToolはChat Orchestratorの
-検証後にRuntime経由で実行し、write proposalは実行しない。
+`backend.chat_router.handle_chat()` へ渡す。RouterのLLM判定が`basic`ならToolなしで直接回答し、
+`travel`なら既存Travel Chatへ委譲する。BrowserへOpenAI API Keyを渡さず、BrowserからOpenAI APIへ
+直接接続しない。read-only ToolはTravel Chatの検証後にRuntime経由で実行し、write proposalは実行しない。
 
 Travel名解決のmulti-step v0.1では、LLMは最初のToolを提案するだけで、server-side
 Orchestratorが最大3回のbounded loopを管理する。`福岡旅行を開いて` のような入力で

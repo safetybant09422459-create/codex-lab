@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import httpx
 
-from backend import chat_orchestrator, main
+from backend import basic_chat, chat_orchestrator, chat_router, main
 
 
 class FakeRuntimeService:
@@ -34,6 +34,20 @@ class FakeRuntimeService:
 
 
 class ChatApiTest(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        self.route_patcher = patch.object(
+            chat_router,
+            "generate_text_with_timings",
+            return_value=(
+                json.dumps({"route": "travel", "confidence": "high"}),
+                None,
+            ),
+        )
+        self.route_patcher.start()
+
+    def tearDown(self) -> None:
+        self.route_patcher.stop()
+
     async def post_chat(self, payload: dict[str, Any]) -> httpx.Response:
         transport = httpx.ASGITransport(app=main.app)
         async with httpx.AsyncClient(
@@ -96,6 +110,32 @@ class ChatApiTest(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
+    async def test_post_chat_returns_basic_answer_without_travel(self) -> None:
+        with (
+            patch.object(
+                chat_router,
+                "generate_text_with_timings",
+                return_value=(
+                    json.dumps({"route": "basic", "confidence": "high"}),
+                    None,
+                ),
+            ),
+            patch.object(
+                basic_chat,
+                "generate_text_with_timings",
+                return_value=("おはようございます。", None),
+            ),
+            patch.object(chat_router, "handle_travel_chat") as travel,
+        ):
+            response = await self.post_chat({"message": "おはよう"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {"action": "direct_answer", "reply": "おはようございます。"},
+        )
+        travel.assert_not_called()
+
     async def test_client_role_is_ignored_and_server_role_is_used(self) -> None:
         expected = {
             "action": "needs_context",
@@ -103,7 +143,7 @@ class ChatApiTest(unittest.IsolatedAsyncioTestCase):
             "debug": {"timings_ms": {"total": 1.25}},
         }
 
-        with patch.object(main, "handle_travel_chat", return_value=expected) as handle:
+        with patch.object(main, "handle_chat", return_value=expected) as handle:
             response = await self.post_chat(
                 {
                     "message": "旅行を見せて",
@@ -129,7 +169,7 @@ class ChatApiTest(unittest.IsolatedAsyncioTestCase):
             {"role": "assistant", "content": "博物館へ行きました。"},
         ]
 
-        with patch.object(main, "handle_travel_chat", return_value=expected) as handle:
+        with patch.object(main, "handle_chat", return_value=expected) as handle:
             response = await self.post_chat(
                 {"message": "大阪で何食べた？", "conversation_history": history}
             )
