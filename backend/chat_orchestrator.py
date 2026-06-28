@@ -101,6 +101,7 @@ def handle_travel_chat(
     answer = travel_answer_generator.generate(
         AnswerRequest(
             user_question=message,
+            plan=plan,
             execution_result=execution,
             conversation_state=execution_state,
             evidence=execution.evidence,
@@ -155,6 +156,11 @@ def handle_travel_chat(
             "timings_ms": timings_ms,
             "steps": runtime_steps,
             "max_steps": MAX_TRAVEL_STEPS,
+            "planning": {
+                "goal": plan.goal,
+                "answer_mode": plan.answer_mode,
+                "required_evidence": plan.required_evidence,
+            },
             "answer_generation": {
                 "answer_type": answer.answer_type,
                 "confidence": answer.confidence,

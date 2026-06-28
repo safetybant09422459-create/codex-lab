@@ -35,6 +35,19 @@ def plan_for(tool_id: str, arguments=None) -> Plan:
     )
 
 
+def summary_plan(goal: str, answer_mode: str, query: str) -> Plan:
+    return Plan(
+        intent="get_trips",
+        goal=goal,
+        answer_mode=answer_mode,
+        required_evidence=["trip", "timeline"],
+        target_skill="travel",
+        resolution_query=query,
+        tool_candidates=[PlanToolCandidate(tool_id="get_trips")],
+        confidence="high",
+    )
+
+
 def request_for(
     plan: Plan,
     runtime: FakeRuntimeService,
@@ -103,6 +116,53 @@ class TravelPlanExecutorTest(unittest.TestCase):
             ["get_trips", "get_trip"],
         )
         self.assertEqual(result.resolution_result.status, "resolved")
+
+    def test_named_trip_summary_uses_required_timeline_evidence(self) -> None:
+        trip = {"id": "trip-fukuoka", "title": "福岡旅行"}
+        runtime = FakeRuntimeService(
+            [
+                {"success": True, "result": {"trips": [trip]}},
+                {"success": True, "result": {"items": []}},
+            ]
+        )
+
+        result = self.executor.execute(
+            request_for(
+                summary_plan("summarize_trip", "summary", "福岡旅行"),
+                runtime,
+                message="福岡旅行なにした？",
+                context={"selected_trip_id": "trip-kobe"},
+            )
+        )
+
+        self.assertEqual(result.execution_status, "success")
+        self.assertEqual(result.tool_id, "get_trip_timeline")
+        self.assertEqual(
+            [call["tool_id"] for call in runtime.calls],
+            ["get_trips", "get_trip_timeline"],
+        )
+        self.assertEqual(runtime.calls[1]["params"], {"trip_id": "trip-fukuoka"})
+
+    def test_named_day_summary_extracts_trip_before_resolving(self) -> None:
+        trip = {"id": "trip-fukuoka", "title": "福岡旅行"}
+        runtime = FakeRuntimeService(
+            [
+                {"success": True, "result": {"trips": [trip]}},
+                {"success": True, "result": {"items": []}},
+            ]
+        )
+
+        result = self.executor.execute(
+            request_for(
+                summary_plan("summarize_day", "day_summary", "福岡"),
+                runtime,
+                message="福岡の旅行で2日目何した？",
+            )
+        )
+
+        self.assertEqual(result.execution_status, "success")
+        self.assertEqual(result.tool_id, "get_trip_timeline")
+        self.assertEqual(len(runtime.calls), 2)
 
     def test_ambiguous_candidates_stop_before_get_trip(self) -> None:
         trips = [

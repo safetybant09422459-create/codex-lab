@@ -154,8 +154,8 @@ class TravelChatEvaluatorTest(unittest.TestCase):
             self.cases, mode="mock"
         )
 
-        self.assertEqual(summary["total"], 54)
-        self.assertEqual(summary["passed"], 52)
+        self.assertEqual(summary["total"], 57)
+        self.assertEqual(summary["passed"], 55)
         self.assertEqual(summary["failed"], 2)
         self.assertEqual(
             summary["failure_categories"]["entity_resolution_missing"], 1
@@ -190,7 +190,7 @@ class TravelChatEvaluatorTest(unittest.TestCase):
             1,
         )
         opportunity = summary["improvement_opportunities"][0]
-        self.assertEqual(opportunity["percentage"], 1.9)
+        self.assertEqual(opportunity["percentage"], 1.8)
         self.assertEqual(opportunity["priority"], "Low")
         self.assertIn("SearchDocument", opportunity["improvement_candidate"])
         self.assertTrue(opportunity["expected_effect"])
@@ -226,6 +226,12 @@ class TravelChatEvaluatorTest(unittest.TestCase):
             "get_trip_timeline", [call["tool_id"] for call in self.runtime.calls]
         )
         self.assertTrue(all(call["confirmed"] is False for call in self.runtime.calls))
+        goal_record = next(
+            record
+            for record in summary["records"]
+            if record["id"] == "goal_summary_fukuoka_natural"
+        )
+        self.assertEqual(goal_record["actual_goal"], "summarize_trip")
 
     def test_cases_cover_requested_classifications(self) -> None:
         counts = {}
@@ -241,7 +247,7 @@ class TravelChatEvaluatorTest(unittest.TestCase):
                 "memo_derived": 8,
                 "date_year_or_duration": 8,
                 "context_follow_up": 7,
-                "travel_answer_generation": 4,
+                "travel_answer_generation": 7,
                 "ambiguous_query": 5,
                 "unsupported_or_needs_experience_context": 4,
             },

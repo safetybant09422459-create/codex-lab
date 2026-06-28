@@ -45,6 +45,7 @@ class TravelPlanExecutor:
             candidate.tool_id,
             candidate.arguments,
             state,
+            required_evidence=plan.required_evidence,
         )
         execution_policy = get_chat_tool_execution_policy(tool_id)
         if execution_policy == "write_requires_pending_action":
@@ -58,7 +59,11 @@ class TravelPlanExecutor:
         pending_steps = [(tool_id, arguments, "result")]
         runtime_steps: list[ExecutionStep] = []
         evidence: list[ExecutionEvidence] = []
-        trip_query = _extract_trip_name(request.user_message) if tool_id == "get_trips" else None
+        trip_query = (
+            plan.resolution_query or _extract_trip_name(request.user_message)
+            if tool_id == "get_trips"
+            else None
+        )
         resolution_result: EntityResolutionResult | None = None
 
         if used_selected_trip and tool_id == "get_trip_timeline":
@@ -165,7 +170,10 @@ class TravelPlanExecutor:
                     )
                 trip = candidates[0]
                 state = conversation_state_from_runtime_trip(trip)
-                if _is_answer_question(request.user_message):
+                if "timeline" in plan.required_evidence or (
+                    not plan.required_evidence
+                    and _is_legacy_answer_question(request.user_message)
+                ):
                     pending_steps.append(
                         (
                             "get_trip_timeline",
@@ -245,23 +253,31 @@ def _apply_selected_trip_context(
     tool_id: str,
     arguments: dict[str, Any],
     conversation_state: ConversationState,
+    *,
+    required_evidence: list[str] | None = None,
 ) -> tuple[str, dict[str, Any], bool]:
     """Use a selected Trip hint without accepting model-owned context writes."""
     entity = selected_trip_entity(conversation_state)
-    intent = _selected_trip_intent(message)
+    if tool_id == "get_trips":
+        return tool_id, arguments, False
+    if required_evidence:
+        intent = tool_id if tool_id in {"get_trip", "get_trip_timeline"} else None
+    else:
+        intent = _legacy_selected_trip_intent(message)
     if entity is None or intent is None:
         return tool_id, arguments, False
     return intent, {"trip_id": entity.entity_id}, True
 
 
-def _selected_trip_intent(message: Any) -> str | None:
+def _legacy_selected_trip_intent(message: Any) -> str | None:
+    """Pre-v2 compatibility only; validated Planner v2 fields are primary."""
     if not isinstance(message, str):
         return None
     normalized = unicodedata.normalize("NFKC", message)
     compact = "".join(character for character in normalized if not character.isspace())
     if re.search(r"(?:[0-9]+|[一二三四五六七八九十]+)日目", compact):
         return "get_trip_timeline"
-    if _is_answer_question(compact):
+    if _is_legacy_answer_question(compact):
         return "get_trip_timeline"
     if "この旅行" in compact and any(
         token in compact for token in ("詳細", "メモ", "情報", "見せ", "教えて", "開いて")
@@ -270,7 +286,7 @@ def _selected_trip_intent(message: Any) -> str | None:
     return None
 
 
-def _is_answer_question(message: Any) -> bool:
+def _is_legacy_answer_question(message: Any) -> bool:
     if not isinstance(message, str):
         return False
     normalized = unicodedata.normalize("NFKC", message)

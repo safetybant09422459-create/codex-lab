@@ -1,6 +1,6 @@
 import unittest
 
-from backend.chat_core import ComposeRequest
+from backend.chat_core import ComposeRequest, Plan
 from backend.travel_chat_adapter import conversation_state_from_legacy_context
 from backend.travel_response_composer import TravelResponseComposer
 
@@ -134,6 +134,27 @@ class TravelResponseComposerTest(unittest.TestCase):
                 "reply": "更新操作には確認が必要です。現在は提案のみ対応しています。",
             },
         )
+
+    def test_photo_goal_explains_missing_evidence_instead_of_generic_support(self) -> None:
+        composed = self.composer.compose(
+            ComposeRequest(
+                outcome="needs_context",
+                plan=Plan(
+                    intent="needs_context",
+                    goal="show_photos",
+                    answer_mode="photos",
+                    required_evidence=["trip", "experience", "photo"],
+                    requires_context=True,
+                    reason=(
+                        "アンパンマンミュージアムの写真を探すには、"
+                        "対象体験の写真連携が必要です。"
+                    ),
+                ),
+            )
+        )
+
+        self.assertIn("アンパンマンミュージアム", composed.response["reply"])
+        self.assertIn("対象体験の写真連携", composed.response["reply"])
 
 
 if __name__ == "__main__":

@@ -44,14 +44,32 @@ _TARGET_ENTITY_TYPES = {
     "update_experience": "experience",
 }
 
+_GOAL_CONTRACT = {
+    "open_trip": ("none", ("trip",)),
+    "summarize_trip": ("summary", ("trip", "timeline")),
+    "summarize_day": ("day_summary", ("trip", "timeline")),
+    "summarize_meals": ("meals", ("trip", "timeline")),
+    "show_photos": ("photos", ("trip", "experience", "photo")),
+    "clarify": ("clarification", ()),
+}
+
 _INSTRUCTIONS = """\
 You are the proposal-only Planner for Jarvis Travel Chat v0.1.
 Return exactly one JSON object and no Markdown or commentary.
 You propose a tool; you never execute it.
 
 Allowed actions:
-- tool_proposal: action, tool_id, arguments, confidence, reply
-- needs_context: action, reply
+- tool_proposal: action, goal, answer_mode, required_evidence, tool_id,
+  arguments, optional entity_query, confidence, reply
+- needs_context: action, goal, answer_mode, required_evidence, reply
+
+Allowed goal contracts (use exactly one):
+- open_trip: answer_mode=none, required_evidence=["trip"]
+- summarize_trip: answer_mode=summary, required_evidence=["trip","timeline"]
+- summarize_day: answer_mode=day_summary, required_evidence=["trip","timeline"]
+- summarize_meals: answer_mode=meals, required_evidence=["trip","timeline"]
+- show_photos: answer_mode=photos, required_evidence=["trip","experience","photo"]
+- clarify: answer_mode=clarification, required_evidence=[]
 
 Allowed tool IDs and arguments:
 {tool_policy}
@@ -65,7 +83,8 @@ Rules:
   references to that selected trip, but never return or update state yourself.
 - Use only an allowed tool and only its listed arguments.
 - A trip title, area, prefecture, or memo keyword is not a trip_id. To find a
-  matching trip, propose get_trips with empty arguments.
+  matching trip, propose get_trips with empty arguments and put only the subject
+  to resolve in entity_query. Omit entity_query when listing all trips.
 - Questions asking what someone did or ate on a named trip also use get_trips;
   the Executor resolves the trip and obtains its existing timeline Evidence.
 - With selected_trip_id, questions asking what happened, what was eaten, or what
@@ -74,31 +93,33 @@ Rules:
   experience_id and no actual ID is available, return needs_context.
 - update_experience is proposal-only and accepts exactly experience_id and memo.
 - Do not request or return photo binary data.
+- Infer goal semantically. Do not rely on a fixed keyword or phrase match.
+- goal describes the user's desired result, not merely the first Tool call.
 - confidence must be high, medium, or low.
 - reply must be concise Japanese suitable for the user.
 
 Examples:
 User: 旅行一覧を見せて
-{{"action":"tool_proposal","tool_id":"get_trips","arguments":{{}},"confidence":"high","reply":"旅行一覧を取得します。"}}
+{{"action":"tool_proposal","goal":"open_trip","answer_mode":"none","required_evidence":["trip"],"tool_id":"get_trips","arguments":{{}},"confidence":"high","reply":"旅行一覧を取得します。"}}
 User: 福岡旅行を開いて
-{{"action":"tool_proposal","tool_id":"get_trips","arguments":{{}},"confidence":"medium","reply":"福岡旅行を探します。"}}
+{{"action":"tool_proposal","goal":"open_trip","answer_mode":"none","required_evidence":["trip"],"tool_id":"get_trips","arguments":{{}},"entity_query":"福岡旅行","confidence":"medium","reply":"福岡旅行を探します。"}}
 User: 神戸旅行で何した？
-{{"action":"tool_proposal","tool_id":"get_trips","arguments":{{}},"confidence":"medium","reply":"神戸旅行を探します。"}}
+{{"action":"tool_proposal","goal":"summarize_trip","answer_mode":"summary","required_evidence":["trip","timeline"],"tool_id":"get_trips","arguments":{{}},"entity_query":"神戸旅行","confidence":"medium","reply":"神戸旅行を探します。"}}
 User: 須磨を開いて
-{{"action":"tool_proposal","tool_id":"get_trips","arguments":{{}},"confidence":"medium","reply":"須磨に合う旅行を探します。"}}
+{{"action":"tool_proposal","goal":"open_trip","answer_mode":"none","required_evidence":["trip"],"tool_id":"get_trips","arguments":{{}},"entity_query":"須磨","confidence":"medium","reply":"須磨に合う旅行を探します。"}}
 User: 兵庫の旅行見せて
-{{"action":"tool_proposal","tool_id":"get_trips","arguments":{{}},"confidence":"medium","reply":"兵庫に合う旅行を探します。"}}
+{{"action":"tool_proposal","goal":"open_trip","answer_mode":"none","required_evidence":["trip"],"tool_id":"get_trips","arguments":{{}},"entity_query":"兵庫","confidence":"medium","reply":"兵庫に合う旅行を探します。"}}
 Context: selected_trip_id=trip_fukuoka, selected_trip_title=福岡旅行
 User: この旅行の詳細見せて
-{{"action":"tool_proposal","tool_id":"get_trip","arguments":{{"trip_id":"trip_fukuoka"}},"confidence":"high","reply":"選択中の旅行を取得します。"}}
+{{"action":"tool_proposal","goal":"open_trip","answer_mode":"none","required_evidence":["trip"],"tool_id":"get_trip","arguments":{{"trip_id":"trip_fukuoka"}},"confidence":"high","reply":"選択中の旅行を取得します。"}}
 Context: selected_trip_id=trip_fukuoka, selected_trip_title=福岡旅行
 User: 2日目は？
-{{"action":"tool_proposal","tool_id":"get_trip_timeline","arguments":{{"trip_id":"trip_fukuoka"}},"confidence":"high","reply":"選択中の旅行の日程を取得します。"}}
+{{"action":"tool_proposal","goal":"summarize_day","answer_mode":"day_summary","required_evidence":["trip","timeline"],"tool_id":"get_trip_timeline","arguments":{{"trip_id":"trip_fukuoka"}},"confidence":"high","reply":"選択中の旅行の日程を取得します。"}}
 Context: selected_trip_id=trip_fukuoka, selected_trip_title=福岡旅行
 User: 何食べた？
-{{"action":"tool_proposal","tool_id":"get_trip_timeline","arguments":{{"trip_id":"trip_fukuoka"}},"confidence":"high","reply":"選択中の旅行の日程を取得します。"}}
+{{"action":"tool_proposal","goal":"summarize_meals","answer_mode":"meals","required_evidence":["trip","timeline"],"tool_id":"get_trip_timeline","arguments":{{"trip_id":"trip_fukuoka"}},"confidence":"high","reply":"選択中の旅行の日程を取得します。"}}
 User: アンパンマンミュージアムの写真見せて
-{{"action":"needs_context","reply":"どの旅行の体験か確認するため、旅行または体験を先に選んでください。"}}
+{{"action":"needs_context","goal":"show_photos","answer_mode":"photos","required_evidence":["trip","experience","photo"],"reply":"アンパンマンミュージアムの写真を探すには、対象体験の写真連携が必要です。"}}
 """.format(
     tool_policy=json.dumps(
         {
@@ -204,18 +225,15 @@ class TravelPlanner:
             finally:
                 timings_ms["policy_validation"] = _elapsed_ms(validation_started)
 
-            plan = self._proposal_to_plan(_redact_value(proposal))
+            plan = self._proposal_to_plan(
+                _normalize_goal_contract(_redact_value(proposal))
+            )
         except Exception as exc:
             if isinstance(exc, OpenAIRequestError) and exc.timings_ms is not None:
                 adapter_timings_ms = exc.timings_ms
             fallback_started = perf_counter()
             try:
-                plan = Plan(
-                    intent="needs_context",
-                    target_skill="travel",
-                    requires_context=True,
-                    reason=_FALLBACK_REASON,
-                )
+                plan = self._fallback_plan()
             finally:
                 timings_ms["fallback"] = _elapsed_ms(fallback_started)
 
@@ -232,12 +250,17 @@ class TravelPlanner:
         return plan.model_copy(update={"diagnostics": diagnostics})
 
     @staticmethod
-    def _proposal_to_plan(proposal: dict[str, Any]) -> Plan:
+    def _proposal_to_plan(
+        proposal: dict[str, Any],
+    ) -> Plan:
         # `reason` carries the validated legacy proposal text for compatibility;
         # the Planner does not compose a new user response.
         if proposal["action"] == "needs_context":
             return Plan(
                 intent="needs_context",
+                goal=proposal["goal"],
+                answer_mode=proposal["answer_mode"],
+                required_evidence=proposal["required_evidence"],
                 target_skill="travel",
                 requires_context=True,
                 reason=proposal["reply"],
@@ -246,8 +269,12 @@ class TravelPlanner:
         tool_id = proposal["tool_id"]
         return Plan(
             intent=tool_id,
+            goal=proposal["goal"],
+            answer_mode=proposal["answer_mode"],
+            required_evidence=proposal["required_evidence"],
             target_skill="travel",
             target_entity_type=_TARGET_ENTITY_TYPES.get(tool_id),
+            resolution_query=proposal.get("entity_query"),
             tool_candidates=[
                 PlanToolCandidate(
                     tool_id=tool_id,
@@ -257,6 +284,15 @@ class TravelPlanner:
             requires_confirmation=tool_id in CHAT_WRITE_PENDING_TOOLS,
             reason=proposal["reply"],
             confidence=proposal["confidence"],
+        )
+
+    @staticmethod
+    def _fallback_plan() -> Plan:
+        return Plan(
+            intent="needs_context",
+            target_skill="travel",
+            requires_context=True,
+            reason=_FALLBACK_REASON,
         )
 
 
@@ -283,6 +319,23 @@ def legacy_proposal_from_plan(plan: Plan, *, debug: bool = False) -> dict[str, A
             for key, value in plan.diagnostics.items()
             if key != "planner"
         }
+    return proposal
+
+
+def _normalize_goal_contract(proposal: dict[str, Any]) -> dict[str, Any]:
+    """Allow only Travel's declared goal tuple; never infer it from user text."""
+    goal = proposal.get("goal")
+    # Missing v2 fields are normalized by the legacy proposal validator.
+    if goal == "clarify" and proposal.get("answer_mode") == "none":
+        return proposal
+    contract = _GOAL_CONTRACT.get(goal)
+    if contract is None:
+        raise ValueError("unsupported Travel goal")
+    expected_mode, expected_evidence = contract
+    if proposal.get("answer_mode") != expected_mode:
+        raise ValueError("answer_mode does not match Travel goal")
+    if tuple(proposal.get("required_evidence", ())) != expected_evidence:
+        raise ValueError("required_evidence does not match Travel goal")
     return proposal
 
 

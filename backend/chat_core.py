@@ -83,8 +83,14 @@ class Plan(ChatCoreModel):
     """
 
     intent: str
+    # Goal vocabularies belong to each Skill. Core only transports the
+    # validated values so Photo, Calendar, and Garden do not depend on Travel.
+    goal: str = "clarify"
+    answer_mode: str = "none"
+    required_evidence: list[str] = Field(default_factory=list)
     target_skill: str | None = None
     target_entity_type: str | None = None
+    resolution_query: str | None = None
     tool_candidates: list[PlanToolCandidate] = Field(default_factory=list)
     requires_resolution: bool = False
     requires_context: bool = False
@@ -152,6 +158,7 @@ class AnswerRequest(ChatCoreModel):
     """Read-only facts available to an AnswerGenerator after execution."""
 
     user_question: str
+    plan: Plan | None = None
     execution_result: ExecutionResult
     conversation_state: ConversationState
     evidence: list[ExecutionEvidence] = Field(default_factory=list)

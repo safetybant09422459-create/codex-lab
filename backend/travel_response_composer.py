@@ -20,6 +20,7 @@ WRITE_NOT_IMPLEMENTED_REPLY = (
 RUNTIME_ERROR_REPLY = "Toolの実行に失敗しました。時間をおいて再度お試しください。"
 PERMISSION_DENIED_REPLY = "この操作を実行する権限がありません。"
 MAX_STEPS_REPLY = "安全のため処理を中断しました。対象の旅行をもう少し具体的に指定してください。"
+PHOTO_EVIDENCE_REQUIRED_REPLY = "写真を探すには、対象体験の写真連携が必要です。"
 
 SUCCESS_REPLIES = {
     "get_trips": "旅行一覧を取得しました。",
@@ -46,11 +47,15 @@ class TravelResponseComposer:
         state = request.conversation_state
         clarification = self._clarification_policy.evaluate(request)
         if clarification.status != "not_required":
+            clarification_reply = clarification.clarification
+            if request.plan is not None and request.plan.goal == "show_photos":
+                clarification_reply = request.plan.reason or PHOTO_EVIDENCE_REQUIRED_REPLY
             response = {
                 "action": "needs_context",
-                "reply": clarification.clarification,
+                "reply": clarification_reply,
                 "clarification": clarification.model_dump(),
             }
+            response["clarification"]["clarification"] = clarification_reply
             if clarification.candidate_list:
                 response["candidates"] = clarification.candidate_list
         elif request.outcome == "success":

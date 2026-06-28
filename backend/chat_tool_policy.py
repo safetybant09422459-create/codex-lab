@@ -57,11 +57,11 @@ _REQUIRED_ARGUMENTS: dict[str, frozenset[str]] = {
     "update_experience": frozenset({"experience_id", "memo"}),
 }
 
+_PLANNING_FIELDS = frozenset({"goal", "answer_mode", "required_evidence"})
 _TOP_LEVEL_FIELDS = frozenset(
-    {"action", "tool_id", "arguments", "confidence", "reply"}
-)
+    {"action", "tool_id", "arguments", "confidence", "reply", "entity_query"}
+) | _PLANNING_FIELDS
 _CONFIDENCE_VALUES = frozenset({"high", "medium", "low"})
-
 
 class ProposalValidationError(ValueError):
     pass
@@ -88,14 +88,17 @@ def validate_chat_proposal(value: Any) -> dict[str, Any]:
     if not isinstance(reply, str) or not reply.strip() or len(reply) > 500:
         raise ProposalValidationError("reply must be a non-empty string")
 
+    planning = _validate_planning_fields(value)
+
     if action == "needs_context":
-        if set(value) != {"action", "reply"}:
+        if set(value) - ({"action", "reply"} | _PLANNING_FIELDS):
             raise ProposalValidationError("needs_context has unsupported fields")
-        return {"action": "needs_context", "reply": reply.strip()}
+        return {"action": "needs_context", "reply": reply.strip(), **planning}
 
     if action != "tool_proposal":
         raise ProposalValidationError("unsupported action")
-    if set(value) != _TOP_LEVEL_FIELDS:
+    required_fields = {"action", "tool_id", "arguments", "confidence", "reply"}
+    if not required_fields.issubset(value):
         raise ProposalValidationError("tool_proposal is missing fields")
 
     tool_id = value.get("tool_id")
@@ -116,12 +119,58 @@ def validate_chat_proposal(value: Any) -> dict[str, Any]:
         raise ProposalValidationError("tool is missing required arguments")
 
     normalized_arguments = _validate_argument_values(arguments)
+    entity_query = value.get("entity_query")
+    if entity_query is not None:
+        if tool_id != "get_trips":
+            raise ProposalValidationError("entity_query is only valid for get_trips")
+        if (
+            not isinstance(entity_query, str)
+            or not entity_query.strip()
+            or len(entity_query) > 256
+        ):
+            raise ProposalValidationError("entity_query must be a non-empty string")
     return {
         "action": "tool_proposal",
         "tool_id": tool_id,
         "arguments": normalized_arguments,
         "confidence": confidence,
         "reply": reply.strip(),
+        "entity_query": entity_query.strip() if entity_query is not None else None,
+        **planning,
+    }
+
+
+def _validate_planning_fields(value: dict[str, Any]) -> dict[str, Any]:
+    present = _PLANNING_FIELDS.intersection(value)
+    if not present:
+        # Compatibility for pre-Planner-v2 callers. This is intentionally not
+        # semantic classification of the user's words.
+        return {"goal": "clarify", "answer_mode": "none", "required_evidence": []}
+    if present != _PLANNING_FIELDS:
+        raise ProposalValidationError("planning fields must be supplied together")
+
+    goal = value.get("goal")
+    answer_mode = value.get("answer_mode")
+    evidence = value.get("required_evidence")
+    if not isinstance(goal, str) or not goal.strip() or len(goal) > 64:
+        raise ProposalValidationError("goal must be a non-empty string")
+    if (
+        not isinstance(answer_mode, str)
+        or not answer_mode.strip()
+        or len(answer_mode) > 64
+    ):
+        raise ProposalValidationError("answer_mode must be a non-empty string")
+    if not isinstance(evidence, list) or any(
+        not isinstance(item, str) or not item.strip() or len(item) > 64
+        for item in evidence
+    ):
+        raise ProposalValidationError("required_evidence must be a string list")
+    if len(evidence) > 8 or len(set(evidence)) != len(evidence):
+        raise ProposalValidationError("required_evidence is invalid")
+    return {
+        "goal": goal.strip(),
+        "answer_mode": answer_mode.strip(),
+        "required_evidence": [item.strip() for item in evidence],
     }
 
 

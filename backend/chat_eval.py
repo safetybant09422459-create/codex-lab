@@ -297,6 +297,8 @@ class TravelChatEvaluator:
             "skill_id": skill_id,
             "question": question,
             "expected_intent": case.get("expected_intent"),
+            "expected_goal": case.get("expected_goal"),
+            "actual_goal": _actual_goal(actual),
             "expected_entity": case.get("expected_entity"),
             "expected_trip": case.get("expected_trip_title"),
             "actual_action": actual.get("action"),
@@ -622,7 +624,20 @@ def _compare(
     expected_classification = case.get("expected_classification")
     if expected_classification == "unsupported_or_needs_experience_context":
         passed = action == "needs_context"
+        expected_goal = case.get("expected_goal")
+        if expected_goal and _actual_goal(actual) != expected_goal:
+            return False, "tool_selection_error"
+        expected_reply_contains = case.get("expected_reply_contains")
+        if (
+            isinstance(expected_reply_contains, str)
+            and expected_reply_contains not in reply
+        ):
+            return False, "response_not_human_friendly"
         return passed, "pass" if passed else "unsupported_expected"
+
+    expected_goal = case.get("expected_goal")
+    if expected_goal and _actual_goal(actual) != expected_goal:
+        return False, "tool_selection_error"
 
     expected_outcome = case.get("expected_outcome")
     if expected_outcome == "candidates":
@@ -667,7 +682,24 @@ def _compare(
         and expected_reply_contains not in reply
     ):
         return False, "response_not_human_friendly"
+    expected_reply_contains_any = case.get("expected_reply_contains_any")
+    if (
+        isinstance(expected_reply_contains_any, list)
+        and expected_reply_contains_any
+        and not any(
+            isinstance(fragment, str) and fragment in reply
+            for fragment in expected_reply_contains_any
+        )
+    ):
+        return False, "response_not_human_friendly"
     return True, "pass"
+
+
+def _actual_goal(actual: dict[str, Any]) -> str | None:
+    debug = actual.get("debug")
+    planning = debug.get("planning") if isinstance(debug, dict) else None
+    goal = planning.get("goal") if isinstance(planning, dict) else None
+    return goal if isinstance(goal, str) else None
 
 
 def _build_trace(

@@ -5,6 +5,7 @@ from backend.chat_core import (
     ConversationState,
     ExecutionEvidence,
     ExecutionResult,
+    Plan,
 )
 from backend.travel_answer_generator import TravelAnswerGenerator
 from backend.travel_chat_adapter import conversation_state_from_runtime_trip
@@ -29,6 +30,34 @@ def generate(question: str, evidence: list[ExecutionEvidence]):
 
 
 class TravelAnswerGeneratorTest(unittest.TestCase):
+    def test_plan_answer_mode_is_primary_classification(self) -> None:
+        execution = ExecutionResult(
+            execution_status="success",
+            evidence=[
+                ExecutionEvidence(
+                    tool_id="get_trip_timeline",
+                    result={"items": [{"display_title": "屋台"}]},
+                )
+            ],
+        )
+        result = TravelAnswerGenerator().generate(
+            AnswerRequest(
+                user_question="福岡旅行について教えて",
+                plan=Plan(
+                    intent="get_trips",
+                    goal="summarize_trip",
+                    answer_mode="summary",
+                    required_evidence=["trip", "timeline"],
+                ),
+                execution_result=execution,
+                conversation_state=conversation_state_from_runtime_trip(
+                    {"id": "trip-fukuoka", "title": "福岡旅行"}
+                ),
+            )
+        )
+
+        self.assertEqual(result.answer_type, "activities")
+        self.assertIn("屋台", result.answer)
     def test_answers_what_did_from_timeline_evidence(self) -> None:
         result = generate(
             "神戸旅行って何した？",

@@ -375,6 +375,39 @@
     "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trips", "arguments": {}, "confidence": "medium", "reply": "福岡旅行を探します。"}
   },
   {
+    "id": "goal_summary_fukuoka_natural",
+    "question": "福岡旅行なにした？",
+    "expected_intent": "answer_trip_activities",
+    "expected_goal": "summarize_trip",
+    "expected_entity": "trip",
+    "expected_tool": "get_trip_timeline",
+    "expected_reply_contains": "屋台",
+    "expected_classification": "travel_answer_generation",
+    "mock_proposal": {"action": "tool_proposal", "goal": "summarize_trip", "answer_mode": "summary", "required_evidence": ["trip", "timeline"], "tool_id": "get_trips", "arguments": {}, "entity_query": "福岡旅行", "confidence": "medium", "reply": "福岡旅行を探します。"}
+  },
+  {
+    "id": "goal_day_two_fukuoka_named",
+    "question": "福岡の旅行で2日目何した？",
+    "expected_intent": "answer_trip_day",
+    "expected_goal": "summarize_day",
+    "expected_entity": "trip",
+    "expected_tool": "get_trip_timeline",
+    "expected_reply_contains": "2日目は、",
+    "expected_classification": "travel_answer_generation",
+    "mock_proposal": {"action": "tool_proposal", "goal": "summarize_day", "answer_mode": "day_summary", "required_evidence": ["trip", "timeline"], "tool_id": "get_trips", "arguments": {}, "entity_query": "福岡旅行", "confidence": "medium", "reply": "福岡旅行を探します。"}
+  },
+  {
+    "id": "goal_meals_fukuoka_natural",
+    "question": "福岡旅行のご飯何食べた？",
+    "expected_intent": "answer_trip_food",
+    "expected_goal": "summarize_meals",
+    "expected_entity": "trip",
+    "expected_tool": "get_trip_timeline",
+    "expected_reply_contains_any": ["食事については", "食事内容は含まれていません"],
+    "expected_classification": "travel_answer_generation",
+    "mock_proposal": {"action": "tool_proposal", "goal": "summarize_meals", "answer_mode": "meals", "required_evidence": ["trip", "timeline"], "tool_id": "get_trips", "arguments": {}, "entity_query": "福岡旅行", "confidence": "medium", "reply": "福岡旅行を探します。"}
+  },
+  {
     "id": "answer_selected_trip_activities",
     "question": "何した？",
     "expected_intent": "answer_trip_activities",
@@ -515,13 +548,15 @@
     "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trips", "arguments": {}, "confidence": "medium", "reply": "大阪旅行を探します。"}
   },
   {
-    "id": "unsupported_experience_photos",
-    "question": "アンパンマンの写真見せて",
+    "id": "goal_show_experience_photos",
+    "question": "アンパンマンミュージアムの写真見せて",
     "expected_intent": "show_experience_photos",
+    "expected_goal": "show_photos",
     "expected_entity": "experience",
     "expected_outcome": "unsupported",
+    "expected_reply_contains": "対象体験の写真連携が必要です",
     "expected_classification": "unsupported_or_needs_experience_context",
-    "mock_proposal": {"action": "needs_context", "reply": "どの旅行の体験か確認するため、旅行または体験を先に選んでください。"}
+    "mock_proposal": {"action": "needs_context", "goal": "show_photos", "answer_mode": "photos", "required_evidence": ["trip", "experience", "photo"], "reply": "アンパンマンミュージアムの写真を探すには、対象体験の写真連携が必要です。"}
   },
   {
     "id": "unsupported_weather",
