@@ -1,5 +1,10 @@
 # Chat Core v0.2 Foundation
 
+> 次フェーズのChat Core v0.3 Response IntelligenceとTravel Answer Generator v0.1の
+> 設計・Effort Policy・実装準備は
+> [Chat Core v0.3: Response Intelligence](chat_response_intelligence.md)を参照する。
+> 現時点では設計のみで、既存挙動はv0.2 Foundationのままである。
+
 Chat Core v0.2 Foundationは、Chatの賢さや対応Toolを増やす変更ではない。
 Entity Resolution、Response Composer、Photo連携、Pending Actionを追加する前に、
 `chat_orchestrator.py`へ集まり始めた責務を分離するための内部契約を定義する。
