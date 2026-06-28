@@ -10,6 +10,9 @@ from backend.chat_eval import (
     TravelChatEvaluator,
     build_executive_summary,
     build_improvement_opportunities,
+    build_recommended_next_actions,
+    build_root_cause_opportunities,
+    classify_failure_root_cause,
     classify_failure_layer,
     compare_benchmarks,
     detect_regressions,
@@ -23,6 +26,7 @@ from backend.chat_eval import (
     render_markdown,
     save_baseline,
     summarize_layers,
+    summarize_root_causes,
     write_reports,
 )
 
@@ -158,13 +162,35 @@ class TravelChatEvaluatorTest(unittest.TestCase):
         )
         self.assertEqual(summary["failure_categories"]["context_not_used"], 1)
         self.assertEqual(sum(summary["failure_categories"].values()), 9)
-        self.assertEqual(summary["benchmark_version"], "Jarvis Benchmark v0.2")
+        self.assertEqual(summary["benchmark_version"], "Jarvis Benchmark v0.3")
         self.assertEqual(summary["skill_id"], "travel")
         self.assertEqual(summary["skill_ids"], ["travel"])
         self.assertEqual(summary["layer_summary"]["travel"]["entity_resolution"], 8)
         self.assertEqual(summary["layer_summary"]["travel"]["context"], 1)
         self.assertEqual(summary["top_improvements"][0]["failure_layer"], "entity_resolution")
         self.assertEqual(summary["top_improvements"][0]["count"], 8)
+        root_counts = {
+            root_cause: item["count"]
+            for root_cause, item in summary["root_cause_summary"].items()
+            if item["count"]
+        }
+        self.assertEqual(
+            root_counts,
+            {
+                "query_too_broad": 3,
+                "missing_memo_paraphrase": 4,
+                "ambiguous_expected_but_resolved": 1,
+                "context_slot_missing": 1,
+            },
+        )
+        self.assertEqual(
+            summary["root_cause_opportunities"][0]["failure_root_cause"],
+            "missing_memo_paraphrase",
+        )
+        self.assertEqual(
+            summary["recommended_next_actions"][0]["expected_improvement_count"],
+            4,
+        )
         opportunity = summary["improvement_opportunities"][0]
         self.assertEqual(opportunity["percentage"], 16.0)
         self.assertEqual(opportunity["priority"], "Medium")
@@ -277,9 +303,13 @@ class TravelChatEvaluatorTest(unittest.TestCase):
         self.assertEqual(payload["benchmark_version"], BENCHMARK_VERSION)
         self.assertIn("layer_summary", payload)
         self.assertIn("top_improvements", payload)
+        self.assertIn("root_cause_summary", payload)
+        self.assertIn("root_cause_opportunities", payload)
+        self.assertIn("recommended_next_actions", payload)
+        self.assertIn("failure_root_cause", payload["records"][0])
         self.assertIn("trace", payload["records"][0])
         self.assertIn("# Jarvis Benchmark Report", report)
-        self.assertIn("Benchmark Version: `Jarvis Benchmark v0.2`", report)
+        self.assertIn("Benchmark Version: `Jarvis Benchmark v0.3`", report)
         self.assertIn("## Layer Summary", report)
         self.assertIn("### Travel (`travel`)", report)
         self.assertIn("## Reason Trace", report)
@@ -287,6 +317,11 @@ class TravelChatEvaluatorTest(unittest.TestCase):
         self.assertIn("## 改善ヒント", report)
         self.assertIn("## Executive Summary", report)
         self.assertIn("## Improvement Opportunities", report)
+        self.assertIn("## Failure Analysis", report)
+        self.assertIn("## Root Cause Summary", report)
+        self.assertIn("## Top Root Causes", report)
+        self.assertIn("## Failure Details", report)
+        self.assertIn("## Recommended Next Actions", report)
         self.assertIn("福岡旅行を開いて", render_markdown(summary))
 
     def test_failure_layer_and_hint_rules_are_stable(self) -> None:
@@ -338,6 +373,57 @@ class TravelChatEvaluatorTest(unittest.TestCase):
         )
         self.assertEqual(opportunities[0]["priority"], "High")
         self.assertEqual(opportunities[1]["priority"], "Medium")
+
+    def test_root_cause_rules_use_expected_actual_candidates_and_trace(self) -> None:
+        common = {
+            "question": "旅行を開いて",
+            "actual": {"action": "needs_context"},
+            "candidates": [],
+            "trace": {
+                "decision": {"type": "not_found"},
+                "search_candidates": [],
+            },
+            "failure_category": "entity_resolution_missing",
+        }
+        self.assertEqual(
+            classify_failure_root_cause(
+                **common,
+                expected={"expected_classification": "ambiguous_query"},
+            ),
+            "query_too_broad",
+        )
+        self.assertEqual(
+            classify_failure_root_cause(
+                **{**common, "question": "満喫した旅行"},
+                expected={"expected_classification": "memo_derived"},
+            ),
+            "missing_memo_paraphrase",
+        )
+
+    def test_root_cause_summary_has_representatives_and_actions(self) -> None:
+        records = [
+            {
+                "question": "満喫した旅行を見せて",
+                "failure_root_cause": "missing_memo_paraphrase",
+            },
+            {
+                "question": "リベンジと書いた旅行を開いて",
+                "failure_root_cause": "missing_memo_paraphrase",
+            },
+            {"question": "成功", "failure_root_cause": None},
+        ]
+        root_summary = summarize_root_causes(records)
+        opportunities = build_root_cause_opportunities(root_summary, total=3)
+        actions = build_recommended_next_actions(
+            {"root_cause_opportunities": opportunities}
+        )
+
+        item = root_summary["missing_memo_paraphrase"]
+        self.assertEqual(item["count"], 2)
+        self.assertEqual(len(item["representative_questions"]), 2)
+        self.assertEqual(item["expected_improvement_count"], 2)
+        self.assertEqual(item["difficulty"], "Medium")
+        self.assertEqual(actions[0]["failure_root_cause"], "missing_memo_paraphrase")
 
     def test_benchmark_diff_reports_improvements_and_overall_change(self) -> None:
         baseline = _benchmark_result(
@@ -490,10 +576,13 @@ class TravelChatEvaluatorTest(unittest.TestCase):
             runtime=self.runtime, chat_handler=handler
         ).run([self.cases[0]], mode="live")
         serialized = json.dumps(summary, ensure_ascii=False)
+        markdown = render_markdown(summary)
 
         self.assertNotIn(secret, serialized)
         self.assertNotIn("plain-eval-secret", serialized)
         self.assertNotIn("Bearer", serialized)
+        self.assertNotIn(secret, markdown)
+        self.assertNotIn("Bearer", markdown)
         self.assertEqual(
             summary["failure_categories"]["security_violation"], 1
         )

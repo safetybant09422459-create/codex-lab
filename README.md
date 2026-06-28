@@ -55,7 +55,7 @@ Implemented:
 - Weather Executor v0.1 (`execution_mode: local_weather_stub`)
 - Travel Runtime Read v0.1 (`execution_mode: local_travel_read`)
 - Chat Core v0.2 Foundation（[設計原則と責務](docs/chat_core.md)、既存Chat API互換）
-- Jarvis Benchmark v0.2（[Improvement Opportunities、Diff、Baseline、Regression検知、Executive Summary](docs/chat_eval.md)）
+- Jarvis Benchmark v0.3（[Root Cause分析、Improvement Opportunities、Diff、Baseline、Regression検知](docs/chat_eval.md)）
 - Chat Orchestrator v0.1（Travel read-only Tool実行、writeは提案のみ）
 - FastAPI Chat API v0.1 (`POST /api/chat`)
 

@@ -14,7 +14,7 @@ from .travel_search_index import TravelSearchIndex
 
 
 DEFAULT_CASES_PATH = ROOT_DIR / "evals" / "travel_chat_cases.json"
-BENCHMARK_VERSION = "Jarvis Benchmark v0.2"
+BENCHMARK_VERSION = "Jarvis Benchmark v0.3"
 FAILURE_CATEGORIES = (
     "tool_selection_error",
     "entity_resolution_missing",
@@ -37,6 +37,56 @@ FAILURE_LAYERS = (
     "ui",
     "unknown",
 )
+FAILURE_ROOT_CAUSES = (
+    "query_too_broad",
+    "missing_semantic_match",
+    "missing_memo_paraphrase",
+    "missing_experience_search",
+    "ambiguous_expected_but_resolved",
+    "context_slot_missing",
+    "benchmark_expectation_mismatch",
+    "unsupported_intent",
+    "unknown",
+)
+
+_ROOT_CAUSE_GUIDANCE = {
+    "query_too_broad": {
+        "improvement_candidate": "clarification question / candidate fallback policy",
+        "difficulty": "Low",
+    },
+    "missing_semantic_match": {
+        "improvement_candidate": "semantic search / synonym and paraphrase handling",
+        "difficulty": "Medium",
+    },
+    "missing_memo_paraphrase": {
+        "improvement_candidate": "semantic search / embedding / memo synonym handling",
+        "difficulty": "Medium",
+    },
+    "missing_experience_search": {
+        "improvement_candidate": "experience search source and intent routing",
+        "difficulty": "High",
+    },
+    "ambiguous_expected_but_resolved": {
+        "improvement_candidate": "candidate expectation policy and resolved-result acceptance review",
+        "difficulty": "Low",
+    },
+    "context_slot_missing": {
+        "improvement_candidate": "ConversationState slot expansion",
+        "difficulty": "Medium",
+    },
+    "benchmark_expectation_mismatch": {
+        "improvement_candidate": "benchmark expectation and valid-outcome policy review",
+        "difficulty": "Low",
+    },
+    "unsupported_intent": {
+        "improvement_candidate": "supported-intent scope and fallback response definition",
+        "difficulty": "High",
+    },
+    "unknown": {
+        "improvement_candidate": "Reason Trace review and root-cause rule addition",
+        "difficulty": "High",
+    },
+}
 
 _FAILURE_CATEGORY_LAYERS = {
     "tool_selection_error": "tool_selection",
@@ -116,6 +166,10 @@ class TravelChatEvaluator:
         improvement_opportunities = build_improvement_opportunities(
             layer_summary, total=len(records)
         )
+        root_cause_summary = summarize_root_causes(records)
+        root_cause_opportunities = build_root_cause_opportunities(
+            root_cause_summary, total=len(records)
+        )
         failures = [
             {
                 "skill_id": record["skill_id"],
@@ -124,6 +178,7 @@ class TravelChatEvaluator:
                 "actual": record["actual"],
                 "category": record["outcome_classification"],
                 "failure_layer": record["failure_layer"],
+                "failure_root_cause": record["failure_root_cause"],
                 "improvement_hint": record["improvement_hint"],
                 "trace": record["trace"],
             }
@@ -153,9 +208,12 @@ class TravelChatEvaluator:
             "improvement_hints": _improvement_hints(records),
             "layer_summary": layer_summary,
             "improvement_opportunities": improvement_opportunities,
+            "root_cause_summary": root_cause_summary,
+            "root_cause_opportunities": root_cause_opportunities,
             # Keep the v0.1 field readable for existing report consumers.
             "top_improvements": improvement_opportunities,
         }
+        summary["recommended_next_actions"] = build_recommended_next_actions(summary)
         summary["executive_summary"] = build_executive_summary(summary)
         return summary
 
@@ -222,6 +280,17 @@ class TravelChatEvaluator:
             failure_layer=failure_layer,
             improvement_hint=improvement_hint,
         )
+        failure_root_cause = None
+        if not passed:
+            failure_root_cause = classify_failure_root_cause(
+                question=question,
+                expected=expected,
+                actual=_compact_actual(actual),
+                candidates=actual.get("candidates", []),
+                trace=trace,
+                failure_category=classification,
+            )
+        trace["failure_root_cause"] = failure_root_cause
         record = {
             "id": case.get("id"),
             "skill_id": skill_id,
@@ -241,6 +310,7 @@ class TravelChatEvaluator:
             "outcome_classification": classification,
             "failure_category": None if passed else classification,
             "failure_layer": failure_layer,
+            "failure_root_cause": failure_root_cause,
             "improvement_hint": improvement_hint,
             "passed": passed,
             "expected": expected,
@@ -356,11 +426,45 @@ def render_markdown(summary: dict[str, Any]) -> str:
             for layer, count in layer_counts.items()
         )
         lines.append("")
+    lines.extend(
+        [
+            "## Failure Analysis",
+            "",
+            "失敗ケースをLayerに加えてRoot Cause単位で分析します。",
+            "",
+            "## Root Cause Summary",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "| Root Cause | Count | Representative Questions | Improvement | Expected | Difficulty |",
+            "| --- | ---: | --- | --- | ---: | --- |",
+        ]
+    )
+    for root_cause, item in summary.get("root_cause_summary", {}).items():
+        questions = " / ".join(item["representative_questions"]) or "-"
+        lines.append(
+            f"| `{root_cause}` | {item['count']} | {_cell(questions)} | "
+            f"{_cell(item['improvement_candidate'])} | "
+            f"{item['expected_improvement_count']} | {item['difficulty']} |"
+        )
+    lines.extend(["", "## Top Root Causes", ""])
+    root_opportunities = summary.get("root_cause_opportunities", [])
+    if not root_opportunities:
+        lines.append("失敗Root Causeはありません。")
+    for index, item in enumerate(root_opportunities, start=1):
+        lines.append(
+            f"{index}. `{item['failure_root_cause']}`: {item['count']}件 / "
+            f"改善案: {item['improvement_candidate']} / "
+            f"想定改善: {item['expected_improvement_count']}件 / "
+            f"難易度: {item['difficulty']}"
+        )
     lines.extend([
         "## Case table",
         "",
-        "| Result | Skill | Question | Expected | Actual | Classification | Layer |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
+        "| Result | Skill | Question | Expected | Actual | Classification | Layer | Root Cause |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ])
     for record in summary["records"]:
         expected = record.get("expected_trip") or record["expected"].get(
@@ -372,9 +476,10 @@ def render_markdown(summary: dict[str, Any]) -> str:
             f"| {result} | `{record['skill_id']}` | {_cell(record['question'])} | "
             f"{_cell(expected)} | {_cell(actual)} | "
             f"{_cell(record['outcome_classification'])} | "
-            f"{_cell(record['failure_layer'] or '-')} |"
+            f"{_cell(record['failure_layer'] or '-')} | "
+            f"{_cell(record.get('failure_root_cause') or '-')} |"
         )
-    lines.extend(["", "## Failure detail", ""])
+    lines.extend(["", "## Failure Details", ""])
     failures = [record for record in summary["records"] if not record["passed"]]
     if not failures:
         lines.append("失敗ケースはありません。")
@@ -386,6 +491,7 @@ def render_markdown(summary: dict[str, Any]) -> str:
                 f"- Skill ID: `{record['skill_id']}`",
                 f"- Category: `{record['failure_category']}`",
                 f"- Failure Layer: `{record['failure_layer']}`",
+                f"- Failure Root Cause: `{record.get('failure_root_cause') or 'unknown'}`",
                 f"- Improvement Hint: {record['improvement_hint']}",
                 f"- Expected: `{_cell(record['expected'])}`",
                 f"- Actual: `{_cell(record['actual'])}`",
@@ -426,6 +532,32 @@ def render_markdown(summary: dict[str, Any]) -> str:
                 f"- 推奨優先度: **{target['priority']}**",
                 "",
             ]
+        )
+    lines.extend(["## Root Cause Opportunities", ""])
+    if not root_opportunities:
+        lines.append("失敗Root Causeはありません。")
+    for index, target in enumerate(root_opportunities, start=1):
+        lines.extend(
+            [
+                f"### {index}. `{target['failure_root_cause']}`",
+                "",
+                f"- 件数: {target['count']}",
+                f"- 全体割合: {target['percentage']:.1f}%",
+                f"- 改善候補: {target['improvement_candidate']}",
+                f"- 想定改善件数: {target['expected_improvement_count']}",
+                f"- 実装難易度: **{target['difficulty']}**",
+                "",
+            ]
+        )
+    lines.extend(["## Recommended Next Actions", ""])
+    actions = summary.get("recommended_next_actions", [])
+    if not actions:
+        lines.append("追加アクションはありません。")
+    for action in actions:
+        lines.append(
+            f"{action['rank']}. `{action['failure_root_cause']}` — "
+            f"{action['action']}（想定改善: {action['expected_improvement_count']}件、"
+            f"難易度: {action['difficulty']}）"
         )
     return redact_sensitive_text("\n".join(lines) + "\n")
 
@@ -674,6 +806,143 @@ def classify_failure_layer(failure_category: str) -> str:
 def improvement_hint_for_layer(failure_layer: str) -> str:
     """Return a stable, implementation-oriented hint for a benchmark layer."""
     return _IMPROVEMENT_HINTS.get(failure_layer, _IMPROVEMENT_HINTS["unknown"])
+
+
+def classify_failure_root_cause(
+    *,
+    question: str,
+    expected: dict[str, Any],
+    actual: dict[str, Any],
+    candidates: Any,
+    trace: dict[str, Any],
+    failure_category: str,
+) -> str:
+    """Classify a failed case from its expectation and observable Reason Trace."""
+    expected_classification = expected.get("expected_classification")
+    decision = trace.get("decision")
+    decision_type = decision.get("type") if isinstance(decision, dict) else None
+    actual_action = actual.get("action")
+    search_candidates = trace.get("search_candidates")
+    has_search_candidates = isinstance(search_candidates, list) and bool(
+        search_candidates
+    )
+    has_visible_candidates = isinstance(candidates, list) and bool(candidates)
+
+    if failure_category == "context_not_used":
+        return "context_slot_missing"
+    if expected_classification == "memo_derived" and not has_search_candidates:
+        return "missing_memo_paraphrase"
+    if expected_classification == "ambiguous_query":
+        return "query_too_broad"
+    if expected_classification == "unsupported_or_needs_experience_context":
+        return (
+            "missing_experience_search"
+            if "体験" in question or "経験" in question
+            else "unsupported_intent"
+        )
+    if (
+        expected.get("expected_outcome") == "candidates"
+        and decision_type == "resolved"
+        and actual_action == "tool_result"
+        and not has_visible_candidates
+    ):
+        return "ambiguous_expected_but_resolved"
+    if failure_category == "unsupported_expected":
+        return "unsupported_intent"
+    if failure_category in {"entity_resolution_missing", "wrong_entity"}:
+        return "missing_semantic_match"
+    if failure_category == "entity_resolution_ambiguous" and has_visible_candidates:
+        return "benchmark_expectation_mismatch"
+    return "unknown"
+
+
+def summarize_root_causes(
+    records: Sequence[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Summarize counts, examples, impact, and implementation difficulty."""
+    summary = {
+        root_cause: {
+            "count": 0,
+            "representative_questions": [],
+            "improvement_candidate": guidance["improvement_candidate"],
+            "expected_improvement_count": 0,
+            "difficulty": guidance["difficulty"],
+        }
+        for root_cause, guidance in _ROOT_CAUSE_GUIDANCE.items()
+    }
+    for record in records:
+        root_cause = record.get("failure_root_cause")
+        if root_cause is None:
+            continue
+        normalized = root_cause if root_cause in FAILURE_ROOT_CAUSES else "unknown"
+        item = summary[normalized]
+        item["count"] += 1
+        question = record.get("question")
+        if (
+            isinstance(question, str)
+            and question
+            and len(item["representative_questions"]) < 3
+        ):
+            item["representative_questions"].append(question)
+    for item in summary.values():
+        item["expected_improvement_count"] = item["count"]
+    return summary
+
+
+def build_root_cause_opportunities(
+    root_cause_summary: dict[str, dict[str, Any]], *, total: int
+) -> list[dict[str, Any]]:
+    """Rank root causes without changing legacy layer-based opportunities."""
+    root_order = {
+        root_cause: index for index, root_cause in enumerate(FAILURE_ROOT_CAUSES)
+    }
+    opportunities = []
+    for root_cause, summary in root_cause_summary.items():
+        count = summary.get("count", 0)
+        if not isinstance(count, int) or count <= 0:
+            continue
+        percentage = (count / total * 100.0) if total else 0.0
+        opportunities.append(
+            {
+                "failure_root_cause": root_cause,
+                "count": count,
+                "percentage": round(percentage, 1),
+                "representative_questions": list(
+                    summary.get("representative_questions", [])
+                ),
+                "improvement_candidate": summary["improvement_candidate"],
+                "expected_improvement_count": summary[
+                    "expected_improvement_count"
+                ],
+                "difficulty": summary["difficulty"],
+                "priority": priority_for_percentage(percentage),
+            }
+        )
+    return sorted(
+        opportunities,
+        key=lambda item: (
+            -item["count"],
+            root_order.get(item["failure_root_cause"], len(FAILURE_ROOT_CAUSES)),
+        ),
+    )
+
+
+def build_recommended_next_actions(summary: dict[str, Any]) -> list[dict[str, Any]]:
+    """Turn ranked root-cause opportunities into deterministic next actions."""
+    return [
+        {
+            "rank": index,
+            "failure_root_cause": opportunity["failure_root_cause"],
+            "action": opportunity["improvement_candidate"],
+            "expected_improvement_count": opportunity[
+                "expected_improvement_count"
+            ],
+            "difficulty": opportunity["difficulty"],
+        }
+        for index, opportunity in enumerate(
+            summary.get("root_cause_opportunities", []), start=1
+        )
+    ]
 
 
 def summarize_layers(
