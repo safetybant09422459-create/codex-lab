@@ -155,20 +155,20 @@ class TravelChatEvaluatorTest(unittest.TestCase):
         )
 
         self.assertEqual(summary["total"], 50)
-        self.assertEqual(summary["passed"], 45)
-        self.assertEqual(summary["failed"], 5)
+        self.assertEqual(summary["passed"], 48)
+        self.assertEqual(summary["failed"], 2)
         self.assertEqual(
-            summary["failure_categories"]["entity_resolution_missing"], 4
+            summary["failure_categories"]["entity_resolution_missing"], 1
         )
         self.assertEqual(summary["failure_categories"]["context_not_used"], 1)
-        self.assertEqual(sum(summary["failure_categories"].values()), 5)
+        self.assertEqual(sum(summary["failure_categories"].values()), 2)
         self.assertEqual(summary["benchmark_version"], "Jarvis Benchmark v0.3")
         self.assertEqual(summary["skill_id"], "travel")
         self.assertEqual(summary["skill_ids"], ["travel"])
-        self.assertEqual(summary["layer_summary"]["travel"]["entity_resolution"], 4)
+        self.assertEqual(summary["layer_summary"]["travel"]["entity_resolution"], 1)
         self.assertEqual(summary["layer_summary"]["travel"]["context"], 1)
         self.assertEqual(summary["top_improvements"][0]["failure_layer"], "entity_resolution")
-        self.assertEqual(summary["top_improvements"][0]["count"], 4)
+        self.assertEqual(summary["top_improvements"][0]["count"], 1)
         root_counts = {
             root_cause: item["count"]
             for root_cause, item in summary["root_cause_summary"].items()
@@ -177,21 +177,20 @@ class TravelChatEvaluatorTest(unittest.TestCase):
         self.assertEqual(
             root_counts,
             {
-                "query_too_broad": 3,
                 "ambiguous_expected_but_resolved": 1,
                 "context_slot_missing": 1,
             },
         )
         self.assertEqual(
             summary["root_cause_opportunities"][0]["failure_root_cause"],
-            "query_too_broad",
+            "ambiguous_expected_but_resolved",
         )
         self.assertEqual(
             summary["recommended_next_actions"][0]["expected_improvement_count"],
-            3,
+            1,
         )
         opportunity = summary["improvement_opportunities"][0]
-        self.assertEqual(opportunity["percentage"], 8.0)
+        self.assertEqual(opportunity["percentage"], 2.0)
         self.assertEqual(opportunity["priority"], "Low")
         self.assertIn("SearchDocument", opportunity["improvement_candidate"])
         self.assertTrue(opportunity["expected_effect"])
@@ -215,6 +214,9 @@ class TravelChatEvaluatorTest(unittest.TestCase):
         self.assertIsInstance(trace["top_candidate_score"], float)
         self.assertIn("decision", trace)
         self.assertIn("response_summary", trace)
+        self.assertEqual(
+            trace["clarification_layer"]["reason"], "multiple_candidates"
+        )
         timeline_record = next(
             record for record in summary["records"] if record["id"] == "context_day_two"
         )

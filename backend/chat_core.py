@@ -147,6 +147,25 @@ class ChatResponseV1(ChatCoreModel):
     diagnostics: dict[str, Any] | None = None
 
 
+class ClarificationResult(ChatCoreModel):
+    """Skill-neutral decision produced after execution cannot pick one entity."""
+
+    status: Literal["not_required", "clarification_required", "candidates"]
+    clarification: str | None = None
+    candidate_list: list[dict[str, Any]] = Field(default_factory=list)
+    reason: Literal[
+        "query_too_broad",
+        "multiple_candidates",
+        "low_confidence",
+        "missing_context",
+    ] | None = None
+    recommended_action: Literal[
+        "continue",
+        "select_candidate",
+        "provide_context",
+    ] = "continue"
+
+
 class ComposeRequest(ChatCoreModel):
     """Facts available to a ResponseComposer after orchestration.
 
@@ -155,6 +174,7 @@ class ComposeRequest(ChatCoreModel):
     """
 
     outcome: str
+    user_message: str = ""
     plan: Plan | None = None
     resolution_result: EntityResolutionResult | None = None
     runtime_result: Any = None

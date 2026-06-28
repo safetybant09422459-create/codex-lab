@@ -118,6 +118,45 @@ class ChatApiTest(unittest.IsolatedAsyncioTestCase):
             "旅行を見せて", role="admin", debug=True, context=None
         )
 
+    async def test_broad_query_returns_clarification_contract(self) -> None:
+        trips = [
+            {"id": "trip-old", "title": "以前の旅行", "start_date": "2025-01-01"},
+            {"id": "trip-new", "title": "最近の旅行", "start_date": "2026-01-01"},
+        ]
+        runtime = FakeRuntimeService(
+            response={"success": True, "result": {"trips": trips}}
+        )
+        proposal = {
+            "action": "tool_proposal",
+            "tool_id": "get_trips",
+            "arguments": {},
+            "confidence": "low",
+            "reply": "どの旅行か確認します。",
+        }
+
+        with (
+            patch.object(
+                chat_orchestrator,
+                "generate_text_with_timings",
+                return_value=(json.dumps(proposal), None),
+            ),
+            patch.object(chat_orchestrator, "runtime_service", runtime),
+        ):
+            response = await self.post_chat({"message": "旅行を開いて"})
+
+        payload = response.json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["action"], "needs_context")
+        self.assertEqual(payload["candidates"], trips)
+        self.assertEqual(payload["clarification"]["status"], "candidates")
+        self.assertEqual(
+            payload["clarification"]["reason"], "query_too_broad"
+        )
+        self.assertEqual(
+            payload["clarification"]["recommended_action"],
+            "select_candidate",
+        )
+
     async def test_named_trip_response_keeps_navigation_and_two_runtime_steps(self) -> None:
         trip = {"id": "trip-fukuoka", "title": "福岡旅行"}
         runtime = FakeRuntimeService(

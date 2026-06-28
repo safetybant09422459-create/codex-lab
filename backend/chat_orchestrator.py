@@ -89,6 +89,7 @@ def handle_travel_chat(
     composed = travel_response_composer.compose(
         ComposeRequest(
             outcome=execution.execution_status,
+            user_message=message,
             plan=plan,
             resolution_result=execution.resolution_result,
             runtime_result=execution.runtime_result,

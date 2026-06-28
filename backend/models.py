@@ -25,6 +25,23 @@ class ChatRequest(BaseModel):
     context: dict[str, Any] | None = None
 
 
+class ChatClarificationResponse(BaseModel):
+    status: Literal["not_required", "clarification_required", "candidates"]
+    clarification: str | None = None
+    candidate_list: list[dict[str, Any]] = Field(default_factory=list)
+    reason: Literal[
+        "query_too_broad",
+        "multiple_candidates",
+        "low_confidence",
+        "missing_context",
+    ] | None = None
+    recommended_action: Literal[
+        "continue",
+        "select_candidate",
+        "provide_context",
+    ]
+
+
 class ChatResponse(BaseModel):
     action: str
     reply: str
@@ -32,6 +49,7 @@ class ChatResponse(BaseModel):
     arguments: dict[str, Any] | None = None
     result: dict[str, Any] | None = None
     candidates: list[dict[str, Any]] | None = None
+    clarification: ChatClarificationResponse | None = None
     navigation: dict[str, Any] | None = None
     updated_context: dict[str, Any] | None = None
     debug: dict[str, Any] | None = None

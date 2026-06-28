@@ -114,6 +114,14 @@ def trip_entity_ref(
 
 
 def travel_content_blocks(response: dict[str, Any]) -> list[ContentBlock]:
+    candidates = response.get("candidates")
+    if isinstance(candidates, list) and candidates:
+        return [
+            ContentBlock(
+                type="travel_trip_candidates",
+                data={"trips": candidates},
+            )
+        ]
     result = response.get("result")
     if not isinstance(result, dict):
         return []

@@ -697,6 +697,7 @@ def _build_trace(
             "candidate_count": resolution.get("candidate_count"),
             "top_candidate_score": resolution.get("top_candidate_score"),
             "decision": decision,
+            "clarification_layer": _trace_clarification(actual),
             "response_summary": {
                 "action": actual.get("action"),
                 "outcome": (
@@ -781,7 +782,13 @@ def _trace_decision(
 ) -> dict[str, Any]:
     visible = actual.get("candidates")
     if isinstance(visible, list) and visible:
-        return {"type": "ambiguous", "reason": "multiple_candidates"}
+        clarification = actual.get("clarification")
+        reason = (
+            clarification.get("reason")
+            if isinstance(clarification, dict)
+            else None
+        )
+        return {"type": "ambiguous", "reason": reason or "multiple_candidates"}
     if actual.get("action") == "tool_result":
         return {"type": "resolved", "reason": "single_candidate_or_direct_tool"}
     if actual.get("action") == "runtime_error":
@@ -796,6 +803,19 @@ def _trace_decision(
             ),
         }
     return {"type": "unsupported", "reason": "no_runtime_decision"}
+
+
+def _trace_clarification(actual: dict[str, Any]) -> dict[str, Any] | None:
+    clarification = actual.get("clarification")
+    if not isinstance(clarification, dict):
+        return None
+    candidates = clarification.get("candidate_list")
+    return {
+        "status": clarification.get("status"),
+        "reason": clarification.get("reason"),
+        "recommended_action": clarification.get("recommended_action"),
+        "candidate_count": len(candidates) if isinstance(candidates, list) else 0,
+    }
 
 
 def classify_failure_layer(failure_category: str) -> str:

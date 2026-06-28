@@ -4,6 +4,7 @@ from typing import Any
 from urllib.parse import quote
 
 from .chat_core import ComposeRequest, ComposeResult, ConversationState
+from .clarification_policy import ClarificationPolicy
 from .openai_adapter import redact_sensitive_text
 from .travel_chat_adapter import (
     compose_travel_chat_response_v1,
@@ -34,9 +35,25 @@ SUCCESS_REPLIES = {
 class TravelResponseComposer:
     """Compose Travel results without crossing Planner, Resolver, or Runtime."""
 
+    def __init__(
+        self,
+        *,
+        clarification_policy: ClarificationPolicy | None = None,
+    ) -> None:
+        self._clarification_policy = clarification_policy or ClarificationPolicy()
+
     def compose(self, request: ComposeRequest) -> ComposeResult:
         state = request.conversation_state
-        if request.outcome == "success":
+        clarification = self._clarification_policy.evaluate(request)
+        if clarification.status != "not_required":
+            response = {
+                "action": "needs_context",
+                "reply": clarification.clarification,
+                "clarification": clarification.model_dump(),
+            }
+            if clarification.candidate_list:
+                response["candidates"] = clarification.candidate_list
+        elif request.outcome == "success":
             response, state = self._compose_success(request, state)
         elif request.outcome == "candidates":
             response = {

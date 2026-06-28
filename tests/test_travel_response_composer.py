@@ -77,13 +77,24 @@ class TravelResponseComposerTest(unittest.TestCase):
             ComposeRequest(outcome="candidates", candidates=candidates)
         )
 
+        self.assertEqual(composed.response["action"], "needs_context")
         self.assertEqual(
-            composed.response,
+            composed.response["reply"], "2件の候補があります。どれを開きますか？"
+        )
+        self.assertEqual(composed.response["candidates"], candidates)
+        self.assertEqual(
+            composed.response["clarification"],
             {
-                "action": "needs_context",
-                "reply": "候補が複数あります。",
-                "candidates": candidates,
+                "status": "candidates",
+                "clarification": "2件の候補があります。どれを開きますか？",
+                "candidate_list": candidates,
+                "reason": "multiple_candidates",
+                "recommended_action": "select_candidate",
             },
+        )
+        self.assertEqual(
+            composed.response_v1.content_blocks[0].type,
+            "travel_trip_candidates",
         )
 
     def test_not_found_can_clear_unverified_selected_trip(self) -> None:

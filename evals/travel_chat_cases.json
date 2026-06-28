@@ -462,7 +462,7 @@
     "expected_intent": "open_trip",
     "expected_entity": "trip_collection",
     "expected_outcome": "candidates",
-    "expected_contains_titles": ["ゆい初旅行", "ひいばあ米寿祝い", "まい初旅行", "福岡旅行", "APM &ドイツの森", "須磨シーワールド", "大阪旅行"],
+    "expected_contains_titles": ["大阪旅行", "須磨シーワールド", "APM &ドイツの森"],
     "expected_classification": "ambiguous_query",
     "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trips", "arguments": {}, "confidence": "low", "reply": "どの旅行か確認します。"}
   },

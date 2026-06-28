@@ -517,7 +517,7 @@ class ChatOrchestratorTest(unittest.TestCase):
             result = chat_orchestrator.handle_travel_chat("兵庫の旅行見せて")
 
         self.assertEqual(result["action"], "needs_context")
-        self.assertEqual(result["reply"], "候補が複数あります。")
+        self.assertEqual(result["reply"], "2件の候補があります。どれを開きますか？")
         self.assertEqual(
             {trip["id"] for trip in result["candidates"]},
             {"trip-suma", "trip-awaji"},
@@ -810,7 +810,7 @@ class ChatOrchestratorTest(unittest.TestCase):
             result = chat_orchestrator.handle_travel_chat("大阪旅行を開いて")
 
         self.assertEqual(result["action"], "needs_context")
-        self.assertEqual(result["reply"], "候補が複数あります。")
+        self.assertEqual(result["reply"], "2件の候補があります。どれを開きますか？")
         self.assertEqual(result["candidates"], trips)
         self.assertEqual(len(runtime.calls), 1)
 
