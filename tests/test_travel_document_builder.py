@@ -39,6 +39,7 @@ class TravelDocumentBuilderTest(unittest.TestCase):
                 "location_terms",
                 "regions",
                 "memo",
+                "memo_terms",
                 "date",
                 "calendar",
                 "season",
@@ -88,6 +89,35 @@ class TravelDocumentBuilderTest(unittest.TestCase):
         self.assertIn("夏", document.document)
         self.assertIn("日帰り", document.document)
         self.assertEqual(trip, original)
+
+    def test_build_derives_memo_conjugation_and_short_recall_terms(self) -> None:
+        document = self.builder.build(
+            {
+                "id": "trip-memory",
+                "memo": "おじちゃんの家に泊まって2回目リベンジ",
+            }
+        )
+
+        self.assertIsNotNone(document)
+        assert document is not None
+        self.assertIn("おじちゃんの家に泊まった", document.document)
+        self.assertIn("リベンジと書いた", document.document)
+        self.assertIn("リベンジと書いてある", document.document)
+        self.assertIn("memo_terms", [item.matched_by for item in document.keywords])
+
+    def test_build_derives_kana_experience_and_facility_terms_from_memo(self) -> None:
+        document = self.builder.build(
+            {
+                "id": "trip-aquarium",
+                "memo": "須磨シーワールド満喫",
+            }
+        )
+
+        self.assertIsNotNone(document)
+        assert document is not None
+        self.assertIn("須磨しーわーるど満喫", document.document)
+        self.assertIn("満喫した", document.document)
+        self.assertIn("水族館へ行った", document.document)
 
     def test_build_ignores_invalid_dates_when_deriving_facets(self) -> None:
         document = self.builder.build(

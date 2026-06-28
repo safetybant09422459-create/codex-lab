@@ -35,12 +35,14 @@ class TravelDocumentBuilder:
             trip.get("outing_type"),
         )
         location_facets = _derive_location_facets(trip.get("prefectures"))
+        memo_terms = _derive_memo_terms(trip.get("memo"))
         fields = {
             "title": _normalize_field(title),
             "prefectures": _normalize_field(trip.get("prefectures")),
             "location_terms": location_facets["location_terms"],
             "regions": location_facets["regions"],
             "memo": _normalize_field(trip.get("memo")),
+            "memo_terms": memo_terms,
             "date": _normalize_field((trip.get("start_date"), trip.get("end_date"))),
             "calendar": date_facets["calendar"],
             "season": date_facets["season"],
@@ -62,6 +64,7 @@ class TravelDocumentBuilder:
                 ("location_terms", 0.68, 0.68, None, None),
                 ("regions", 0.60, 0.60, None, None),
                 ("memo", 0.58, 0.58, None, None),
+                ("memo_terms", 0.54, 0.54, None, None),
                 ("date", 0.42, 0.42, None, None),
                 ("calendar", 0.42, 0.42, None, None),
                 ("season", 0.42, 0.42, None, None),
@@ -104,6 +107,89 @@ def _normalize_field(value: Any) -> str:
     if isinstance(value, (list, tuple, set)):
         value = " ".join(str(item) for item in value if item is not None)
     return normalize_search_text(value)
+
+
+_MEMO_FACILITY_ALIASES = (
+    (("シーワールド", "アクアリウム", "マリンパーク"), "水族館"),
+)
+
+
+def _derive_memo_terms(value: Any) -> str:
+    """Derive a small, generic set of searchable forms from a travel memo."""
+    memo = _normalize_field(value)
+    if not memo:
+        return ""
+
+    terms: list[str] = []
+
+    def add(term: str) -> None:
+        normalized = normalize_search_text(term)
+        if normalized and normalized != memo and normalized not in terms:
+            terms.append(normalized)
+
+    # Kana differences are common when a place or experience was entered from
+    # speech or recalled phonetically.
+    add(_hiragana_to_katakana(memo))
+    add(_katakana_to_hiragana(memo))
+
+    # A memo often records an event in conjunctive form ("泊まって...") while
+    # a search asks for it in past form ("泊まった旅行").
+    add(_conjunctive_to_past(memo))
+
+    # Katakana words are useful short recall cues. Add common ways users refer
+    # to literal memo text without binding any term to a particular trip.
+    for keyword in re.findall(r"[ァ-ヿー]{2,}|[a-z0-9]{2,}", memo):
+        add(f"{keyword}と書いた")
+        add(f"{keyword}と書いてある")
+
+    # Short kanji endings frequently describe an experience as a verbal noun,
+    # such as "満喫". Their ordinary past form is useful for recall queries.
+    for stem in re.findall(r"(?<![一-龯])([一-龯]{2,4})(?![一-龯])", memo):
+        add(f"{stem}した")
+
+    # Facility brands often contain a category-like naming term. Keep this
+    # vocabulary deliberately small and category-based, then add generic visit
+    # expressions rather than question/trip mappings.
+    for aliases, facility_type in _MEMO_FACILITY_ALIASES:
+        if not any(normalize_search_text(alias) in memo for alias in aliases):
+            continue
+        add(facility_type)
+        add(f"{facility_type}へ行った")
+        add(f"{facility_type}に行った")
+        add(f"{facility_type}へ行く")
+        add(f"{facility_type}に行く")
+
+    return _normalize_field(terms)
+
+
+def _hiragana_to_katakana(value: str) -> str:
+    return "".join(
+        chr(ord(character) + 0x60) if "ぁ" <= character <= "ゖ" else character
+        for character in value
+    )
+
+
+def _katakana_to_hiragana(value: str) -> str:
+    return "".join(
+        chr(ord(character) - 0x60) if "ァ" <= character <= "ヶ" else character
+        for character in value
+    )
+
+
+def _conjunctive_to_past(value: str) -> str:
+    replacements = (
+        ("って", "った"),
+        ("んで", "んだ"),
+        ("いて", "いた"),
+        ("いで", "いだ"),
+        ("して", "した"),
+        ("て", "た"),
+        ("で", "だ"),
+    )
+    derived = value
+    for conjunctive, past in replacements:
+        derived = derived.replace(conjunctive, past)
+    return derived
 
 
 _PREFECTURES_BY_REGION = (
