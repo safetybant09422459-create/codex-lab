@@ -2,16 +2,26 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from backend.chat_eval import (
     BENCHMARK_VERSION,
     ChatEvalError,
     TravelChatEvaluator,
+    build_executive_summary,
+    build_improvement_opportunities,
     classify_failure_layer,
+    compare_benchmarks,
+    detect_regressions,
     improvement_hint_for_layer,
     load_cases,
+    load_benchmark,
+    main,
+    priority_for_percentage,
     rank_top_improvements,
+    render_diff_markdown,
     render_markdown,
+    save_baseline,
     summarize_layers,
     write_reports,
 )
@@ -112,6 +122,24 @@ class FakeRuntimeService:
         return {"success": True, "result": result}
 
 
+def _benchmark_result(
+    *, total: int, passed: int, planner: int, search: int, context: int
+) -> dict:
+    return {
+        "benchmark_version": BENCHMARK_VERSION,
+        "total": total,
+        "passed": passed,
+        "failed": total - passed,
+        "layer_summary": {
+            "travel": {
+                "planner": planner,
+                "search": search,
+                "context": context,
+            }
+        },
+    }
+
+
 class TravelChatEvaluatorTest(unittest.TestCase):
     def setUp(self) -> None:
         self.cases = load_cases()
@@ -123,20 +151,25 @@ class TravelChatEvaluatorTest(unittest.TestCase):
         )
 
         self.assertEqual(summary["total"], 50)
-        self.assertEqual(summary["passed"], 33)
-        self.assertEqual(summary["failed"], 17)
+        self.assertEqual(summary["passed"], 41)
+        self.assertEqual(summary["failed"], 9)
         self.assertEqual(
-            summary["failure_categories"]["entity_resolution_missing"], 16
+            summary["failure_categories"]["entity_resolution_missing"], 8
         )
         self.assertEqual(summary["failure_categories"]["context_not_used"], 1)
-        self.assertEqual(sum(summary["failure_categories"].values()), 17)
-        self.assertEqual(summary["benchmark_version"], "Jarvis Benchmark v0.1")
+        self.assertEqual(sum(summary["failure_categories"].values()), 9)
+        self.assertEqual(summary["benchmark_version"], "Jarvis Benchmark v0.2")
         self.assertEqual(summary["skill_id"], "travel")
         self.assertEqual(summary["skill_ids"], ["travel"])
-        self.assertEqual(summary["layer_summary"]["travel"]["entity_resolution"], 16)
+        self.assertEqual(summary["layer_summary"]["travel"]["entity_resolution"], 8)
         self.assertEqual(summary["layer_summary"]["travel"]["context"], 1)
         self.assertEqual(summary["top_improvements"][0]["failure_layer"], "entity_resolution")
-        self.assertEqual(summary["top_improvements"][0]["count"], 16)
+        self.assertEqual(summary["top_improvements"][0]["count"], 8)
+        opportunity = summary["improvement_opportunities"][0]
+        self.assertEqual(opportunity["percentage"], 16.0)
+        self.assertEqual(opportunity["priority"], "Medium")
+        self.assertIn("SearchDocument", opportunity["improvement_candidate"])
+        self.assertTrue(opportunity["expected_effect"])
         self.assertTrue(
             all("debug_steps" in record for record in summary["records"])
         )
@@ -242,13 +275,14 @@ class TravelChatEvaluatorTest(unittest.TestCase):
         self.assertIn("top_improvements", payload)
         self.assertIn("trace", payload["records"][0])
         self.assertIn("# Jarvis Benchmark Report", report)
-        self.assertIn("Benchmark Version: `Jarvis Benchmark v0.1`", report)
+        self.assertIn("Benchmark Version: `Jarvis Benchmark v0.2`", report)
         self.assertIn("## Layer Summary", report)
         self.assertIn("### Travel (`travel`)", report)
         self.assertIn("## Reason Trace", report)
         self.assertIn("## Failure categories count", report)
         self.assertIn("## 改善ヒント", report)
-        self.assertIn("## Top Improvement Targets", report)
+        self.assertIn("## Executive Summary", report)
+        self.assertIn("## Improvement Opportunities", report)
         self.assertIn("福岡旅行を開いて", render_markdown(summary))
 
     def test_failure_layer_and_hint_rules_are_stable(self) -> None:
@@ -289,6 +323,146 @@ class TravelChatEvaluatorTest(unittest.TestCase):
         self.assertEqual(top[0]["skill_id"], "travel")
         self.assertEqual(top[0]["failure_layer"], "search")
         self.assertEqual(top[0]["count"], 2)
+
+    def test_priority_uses_total_case_impact(self) -> None:
+        self.assertEqual(priority_for_percentage(20.0), "High")
+        self.assertEqual(priority_for_percentage(10.0), "Medium")
+        self.assertEqual(priority_for_percentage(9.9), "Low")
+
+        opportunities = build_improvement_opportunities(
+            {"travel": {"search": 2, "context": 1}}, total=10
+        )
+        self.assertEqual(opportunities[0]["priority"], "High")
+        self.assertEqual(opportunities[1]["priority"], "Medium")
+
+    def test_benchmark_diff_reports_improvements_and_overall_change(self) -> None:
+        baseline = _benchmark_result(
+            total=100, passed=70, planner=3, search=12, context=2
+        )
+        current = _benchmark_result(
+            total=100, passed=76, planner=3, search=4, context=1
+        )
+
+        diff = compare_benchmarks(baseline, current)
+
+        self.assertEqual(diff["layers"]["planner"]["delta"], 0)
+        self.assertEqual(diff["layers"]["search"]["delta"], 8)
+        self.assertEqual(diff["layers"]["context"]["delta"], 1)
+        self.assertEqual(diff["overall"]["delta_percentage_points"], 6.0)
+        self.assertFalse(diff["has_regression"])
+        self.assertIn("Search", render_diff_markdown(diff))
+
+    def test_regression_detection_reports_worsened_layers(self) -> None:
+        baseline = _benchmark_result(
+            total=100, passed=80, planner=1, search=2, context=0
+        )
+        current = _benchmark_result(
+            total=100, passed=75, planner=3, search=2, context=1
+        )
+
+        diff = compare_benchmarks(baseline, current)
+        regressions = detect_regressions(diff["layers"])
+
+        self.assertTrue(diff["has_regression"])
+        self.assertEqual(
+            [item["failure_layer"] for item in regressions],
+            ["planner", "context"],
+        )
+        self.assertIn("**Regression**: Planner", render_diff_markdown(diff))
+
+    def test_executive_summary_identifies_highest_impact_work(self) -> None:
+        summary = {
+            "layer_summary": {
+                "travel": {"entity_resolution": 16, "context": 0, "planner": 0}
+            },
+            "improvement_opportunities": build_improvement_opportunities(
+                {
+                    "travel": {
+                        "entity_resolution": 16,
+                        "context": 0,
+                        "planner": 0,
+                    }
+                },
+                total=50,
+            ),
+        }
+
+        executive_summary = build_executive_summary(summary)
+
+        self.assertIn("32.0%", executive_summary[0])
+        self.assertTrue(any("Contextは失敗0件" in item for item in executive_summary))
+        self.assertTrue(any("Plannerは失敗0件" in item for item in executive_summary))
+        self.assertTrue(any("最も効果的" in item for item in executive_summary))
+
+    def test_baseline_save_round_trips_complete_result(self) -> None:
+        summary = _benchmark_result(
+            total=10, passed=8, planner=1, search=1, context=0
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "baseline.json"
+
+            save_baseline(summary, path)
+            loaded = load_benchmark(path)
+
+        self.assertEqual(loaded, summary)
+
+    def test_cli_saves_baseline_during_benchmark_run(self) -> None:
+        summary = _benchmark_result(
+            total=10, passed=8, planner=1, search=1, context=0
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            baseline_path = Path(directory) / "baseline.json"
+            output_path = Path(directory) / "current.json"
+            with patch("backend.chat_eval.TravelChatEvaluator") as evaluator, patch(
+                "backend.chat_eval.load_cases", return_value=[]
+            ):
+                evaluator.return_value.run.return_value = summary
+
+                exit_code = main(
+                    [
+                        "--save-baseline",
+                        str(baseline_path),
+                        "--format",
+                        "json",
+                        "--output",
+                        str(output_path),
+                    ]
+                )
+
+            loaded = load_benchmark(baseline_path)
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(loaded, summary)
+
+    def test_cli_diff_writes_report_and_returns_regression_exit_code(self) -> None:
+        baseline = _benchmark_result(
+            total=100, passed=80, planner=1, search=2, context=0
+        )
+        current = _benchmark_result(
+            total=100, passed=79, planner=2, search=2, context=0
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            baseline_path = Path(directory) / "baseline.json"
+            current_path = Path(directory) / "current.json"
+            report_path = Path(directory) / "diff.md"
+            save_baseline(baseline, baseline_path)
+            save_baseline(current, current_path)
+
+            exit_code = main(
+                [
+                    "--diff",
+                    str(baseline_path),
+                    str(current_path),
+                    "--format",
+                    "markdown",
+                    "--output",
+                    str(report_path),
+                ]
+            )
+            report = report_path.read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("**Regression**: Planner", report)
 
     def test_trace_redacts_secrets(self) -> None:
         secret = "sk-eval-secret-value"

@@ -14,7 +14,7 @@ from .travel_search_index import TravelSearchIndex
 
 
 DEFAULT_CASES_PATH = ROOT_DIR / "evals" / "travel_chat_cases.json"
-BENCHMARK_VERSION = "Jarvis Benchmark v0.1"
+BENCHMARK_VERSION = "Jarvis Benchmark v0.2"
 FAILURE_CATEGORIES = (
     "tool_selection_error",
     "entity_resolution_missing",
@@ -62,6 +62,18 @@ _IMPROVEMENT_HINTS = {
     "unknown": "Reason Traceを確認し、失敗レイヤーの判定ルールを追加する。",
 }
 
+_EXPECTED_EFFECTS = {
+    "planner": "未対応intentの判定精度と計画成功率の向上",
+    "entity_resolution": "対象Entityを必要とする検索の成功率向上",
+    "search": "検索結果の適合率と正しいEntity選択率の向上",
+    "tool_selection": "適切なToolへ到達する割合の向上",
+    "tool_execution": "Tool実行成功率と障害時の回復性向上",
+    "context": "会話継続時の文脈利用成功率向上",
+    "response": "回答の可読性と利用者の理解度向上",
+    "ui": "状態把握と操作完了率の向上",
+    "unknown": "未分類失敗の可視化と改善対象の特定",
+}
+
 
 class ChatEvalError(ValueError):
     pass
@@ -101,7 +113,9 @@ class TravelChatEvaluator:
         records = [self._run_case(case, trips=trips, mode=mode) for case in cases]
         skill_ids = sorted({record["skill_id"] for record in records})
         layer_summary = summarize_layers(records)
-        top_improvements = rank_top_improvements(layer_summary)
+        improvement_opportunities = build_improvement_opportunities(
+            layer_summary, total=len(records)
+        )
         failures = [
             {
                 "skill_id": record["skill_id"],
@@ -116,7 +130,7 @@ class TravelChatEvaluator:
             for record in records
             if not record["passed"]
         ]
-        return {
+        summary = {
             "benchmark_version": BENCHMARK_VERSION,
             "skill_id": skill_ids[0] if len(skill_ids) == 1 else None,
             "skill_ids": skill_ids,
@@ -138,8 +152,12 @@ class TravelChatEvaluator:
             "records": records,
             "improvement_hints": _improvement_hints(records),
             "layer_summary": layer_summary,
-            "top_improvements": top_improvements,
+            "improvement_opportunities": improvement_opportunities,
+            # Keep the v0.1 field readable for existing report consumers.
+            "top_improvements": improvement_opportunities,
         }
+        summary["executive_summary"] = build_executive_summary(summary)
+        return summary
 
     def _run_case(
         self,
@@ -299,6 +317,12 @@ def render_markdown(summary: dict[str, Any]) -> str:
     lines = [
         "# Jarvis Benchmark Report",
         "",
+        "## Executive Summary",
+        "",
+    ]
+    lines.extend(f"- {item}" for item in summary.get("executive_summary", []))
+    lines.extend([
+        "",
         "## Summary",
         "",
         f"- Benchmark Version: `{summary['benchmark_version']}`",
@@ -312,7 +336,7 @@ def render_markdown(summary: dict[str, Any]) -> str:
         "",
         "| Category | Count |",
         "| --- | ---: |",
-    ]
+    ])
     lines.extend(
         f"| `{category}` | {count} |"
         for category, count in summary["failure_categories"].items()
@@ -382,14 +406,26 @@ def render_markdown(summary: dict[str, Any]) -> str:
         )
     lines.extend(["## 改善ヒント", ""])
     lines.extend(f"- {hint}" for hint in summary["improvement_hints"])
-    lines.extend(["", "## Top Improvement Targets", ""])
-    if not summary["top_improvements"]:
+    lines.extend(["", "## Improvement Opportunities", ""])
+    opportunities = summary.get(
+        "improvement_opportunities", summary.get("top_improvements", [])
+    )
+    if not opportunities:
         lines.append("失敗レイヤーはありません。")
-    for index, target in enumerate(summary["top_improvements"], start=1):
-        lines.append(
-            f"{index}. {_skill_label(target['skill_id'])} / "
-            f"{_layer_label(target['failure_layer'])} ({target['count']}件) — "
-            f"{target['improvement_hint']}"
+    for index, target in enumerate(opportunities, start=1):
+        lines.extend(
+            [
+                f"### {index}. {_skill_label(target['skill_id'])} / "
+                f"{_layer_label(target['failure_layer'])}",
+                "",
+                f"- Failure Layer: `{target['failure_layer']}`",
+                f"- 件数: {target['count']}",
+                f"- 全体割合: {target['percentage']:.1f}%",
+                f"- 改善候補: {target['improvement_candidate']}",
+                f"- 期待効果: {target['expected_effect']}",
+                f"- 推奨優先度: **{target['priority']}**",
+                "",
+            ]
         )
     return redact_sensitive_text("\n".join(lines) + "\n")
 
@@ -409,6 +445,33 @@ def write_reports(
         encoding="utf-8",
     )
     markdown_target.write_text(render_markdown(summary), encoding="utf-8")
+
+
+def save_baseline(summary: dict[str, Any], path: str | Path = "baseline.json") -> None:
+    """Persist a complete benchmark result for later comparison."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        json.dumps(_redact_value(summary), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def load_benchmark(path: str | Path) -> dict[str, Any]:
+    source = Path(path)
+    try:
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ChatEvalError(f"failed to load benchmark: {source}") from exc
+    if not isinstance(payload, dict):
+        raise ChatEvalError("benchmark file must contain a JSON object")
+    if not isinstance(payload.get("total"), int) or not isinstance(
+        payload.get("passed"), int
+    ):
+        raise ChatEvalError("benchmark file is missing total or passed")
+    if not isinstance(payload.get("layer_summary"), dict):
+        raise ChatEvalError("benchmark file is missing layer_summary")
+    return payload
 
 
 def _compare(
@@ -657,6 +720,176 @@ def rank_top_improvements(
     )
 
 
+def build_improvement_opportunities(
+    layer_summary: dict[str, dict[str, int]], *, total: int
+) -> list[dict[str, Any]]:
+    """Describe ranked improvements with impact and a stable priority rule."""
+    opportunities = []
+    for target in rank_top_improvements(layer_summary):
+        percentage = (target["count"] / total * 100.0) if total else 0.0
+        opportunities.append(
+            {
+                **target,
+                "percentage": round(percentage, 1),
+                "improvement_candidate": target["improvement_hint"],
+                "expected_effect": _EXPECTED_EFFECTS.get(
+                    target["failure_layer"], _EXPECTED_EFFECTS["unknown"]
+                ),
+                "priority": priority_for_percentage(percentage),
+            }
+        )
+    return opportunities
+
+
+def priority_for_percentage(percentage: float) -> str:
+    """Map total-case impact to a recommendation priority."""
+    if percentage >= 20.0:
+        return "High"
+    if percentage >= 10.0:
+        return "Medium"
+    return "Low"
+
+
+def build_executive_summary(summary: dict[str, Any]) -> list[str]:
+    """Create deterministic, human-readable findings from one benchmark result."""
+    opportunities = summary.get("improvement_opportunities", [])
+    findings: list[str] = []
+    if opportunities:
+        top = opportunities[0]
+        findings.append(
+            f"{_layer_label(top['failure_layer'])}が全ケースの"
+            f"{top['percentage']:.1f}%（{top['count']}件）を占めています。"
+        )
+    else:
+        findings.append("固定ケースで失敗は検出されていません。")
+
+    aggregate = _aggregate_layers(summary.get("layer_summary", {}))
+    for layer in ("context", "planner"):
+        count = aggregate[layer]
+        if count == 0:
+            findings.append(f"{_layer_label(layer)}は失敗0件で安定しています。")
+        elif count == 1:
+            findings.append(f"{_layer_label(layer)}の残課題は1件です。")
+    if opportunities:
+        top = opportunities[0]
+        findings.append(
+            f"次は{top['improvement_candidate'].rstrip('。')}ことが最も効果的です。"
+        )
+    return findings
+
+
+def compare_benchmarks(
+    baseline: dict[str, Any], current: dict[str, Any]
+) -> dict[str, Any]:
+    """Compare results; positive layer deltas mean fewer failures."""
+    baseline_layers = _aggregate_layers(baseline.get("layer_summary", {}))
+    current_layers = _aggregate_layers(current.get("layer_summary", {}))
+    layers = {
+        layer: {
+            "baseline": baseline_layers[layer],
+            "current": current_layers[layer],
+            "delta": baseline_layers[layer] - current_layers[layer],
+        }
+        for layer in FAILURE_LAYERS
+    }
+    baseline_rate = _pass_rate(baseline)
+    current_rate = _pass_rate(current)
+    regressions = detect_regressions(layers)
+    return {
+        "benchmark_version": BENCHMARK_VERSION,
+        "baseline_version": baseline.get("benchmark_version"),
+        "current_version": current.get("benchmark_version"),
+        "layers": layers,
+        "overall": {
+            "baseline_pass_rate": baseline_rate,
+            "current_pass_rate": current_rate,
+            "delta_percentage_points": round(current_rate - baseline_rate, 1),
+        },
+        "regressions": regressions,
+        "has_regression": bool(regressions),
+    }
+
+
+def detect_regressions(
+    layer_diff: dict[str, dict[str, int]],
+) -> list[dict[str, Any]]:
+    """Return layers whose failure count increased from the baseline."""
+    return [
+        {
+            "failure_layer": layer,
+            "baseline": values["baseline"],
+            "current": values["current"],
+            "increase": -values["delta"],
+        }
+        for layer, values in layer_diff.items()
+        if values["delta"] < 0
+    ]
+
+
+def render_diff_markdown(diff: dict[str, Any]) -> str:
+    lines = [
+        "# Jarvis Benchmark Diff",
+        "",
+        "正の差分は改善、負の差分は悪化を表します。",
+        "",
+        "## Layer Diff",
+        "",
+        "| Layer | Baseline Failures | Current Failures | Delta |",
+        "| --- | ---: | ---: | ---: |",
+    ]
+    for layer, values in diff["layers"].items():
+        lines.append(
+            f"| {_layer_label(layer)} | {values['baseline']} | "
+            f"{values['current']} | {values['delta']:+d} |"
+        )
+    overall = diff["overall"]
+    lines.extend(
+        [
+            "",
+            "## Overall",
+            "",
+            f"- Pass rate: {overall['baseline_pass_rate']:.1f}% → "
+            f"{overall['current_pass_rate']:.1f}% "
+            f"({overall['delta_percentage_points']:+.1f} points)",
+            "",
+            "## Regression Detection",
+            "",
+        ]
+    )
+    if not diff["regressions"]:
+        lines.append("Regressionは検出されませんでした。")
+    else:
+        for regression in diff["regressions"]:
+            lines.append(
+                f"- **Regression**: {_layer_label(regression['failure_layer'])} "
+                f"の失敗が{regression['increase']}件増加 "
+                f"({regression['baseline']} → {regression['current']})"
+            )
+    return redact_sensitive_text("\n".join(lines) + "\n")
+
+
+def _aggregate_layers(layer_summary: Any) -> dict[str, int]:
+    aggregate = {layer: 0 for layer in FAILURE_LAYERS}
+    if not isinstance(layer_summary, dict):
+        return aggregate
+    for counts in layer_summary.values():
+        if not isinstance(counts, dict):
+            continue
+        for layer, count in counts.items():
+            normalized = layer if layer in FAILURE_LAYERS else "unknown"
+            if isinstance(count, int) and count >= 0:
+                aggregate[normalized] += count
+    return aggregate
+
+
+def _pass_rate(summary: dict[str, Any]) -> float:
+    total = summary.get("total", 0)
+    passed = summary.get("passed", 0)
+    if not isinstance(total, int) or total <= 0 or not isinstance(passed, int):
+        return 0.0
+    return round(passed / total * 100.0, 1)
+
+
 def _improvement_hints(records: Sequence[dict[str, Any]]) -> list[str]:
     targets = rank_top_improvements(summarize_layers(records))
     hints = [
@@ -772,11 +1005,24 @@ def _is_sensitive_key(key: str) -> bool:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Evaluate Travel Chat conversations")
+    parser.add_argument(
+        "--diff",
+        nargs=2,
+        metavar=("BASELINE", "CURRENT"),
+        help="Compare two benchmark JSON files instead of running cases",
+    )
     parser.add_argument("--mode", choices=("mock", "live"), default="mock")
     parser.add_argument("--cases", default=str(DEFAULT_CASES_PATH))
     parser.add_argument("--json-output", default="artifacts/chat_eval_summary.json")
     parser.add_argument("--markdown-output", default="artifacts/chat_eval_report.md")
     parser.add_argument("--format", choices=("json", "markdown"))
+    parser.add_argument(
+        "--save-baseline",
+        nargs="?",
+        const="baseline.json",
+        metavar="PATH",
+        help="Save the benchmark result (default: baseline.json)",
+    )
     parser.add_argument(
         "--output",
         help="Write the selected --format to this path (requires --format)",
@@ -785,7 +1031,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.output and not args.format:
         parser.error("--output requires --format")
 
+    if args.diff:
+        diff = compare_benchmarks(
+            load_benchmark(args.diff[0]), load_benchmark(args.diff[1])
+        )
+        rendered = (
+            json.dumps(diff, ensure_ascii=False, indent=2) + "\n"
+            if args.format == "json"
+            else render_diff_markdown(diff)
+        )
+        if args.output:
+            target = Path(args.output)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(rendered, encoding="utf-8")
+        else:
+            print(rendered, end="")
+        return 1 if diff["has_regression"] else 0
+
     summary = TravelChatEvaluator().run(load_cases(args.cases), mode=args.mode)
+    if args.save_baseline:
+        save_baseline(summary, args.save_baseline)
     if args.format:
         rendered = (
             json.dumps(summary, ensure_ascii=False, indent=2) + "\n"
