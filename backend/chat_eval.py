@@ -244,6 +244,7 @@ class TravelChatEvaluator:
                     role="admin",
                     debug=True,
                     context=context,
+                    conversation_history=case.get("conversation_history", []),
                     text_generator=generator,
                     runtime=self.runtime,
                 )

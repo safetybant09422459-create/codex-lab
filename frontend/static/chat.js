@@ -3,6 +3,13 @@ import { api } from "./api.js";
 var chatSending = false;
 var chatComposing = false;
 var currentContext = null;
+var conversationHistory = [];
+var maxConversationTurns = 5;
+
+function rememberConversationTurn(role, content) {
+  conversationHistory.push({ role: role, content: content.slice(0, 2000) });
+  conversationHistory = conversationHistory.slice(-maxConversationTurns);
+}
 
 function chatElements() {
   return {
@@ -174,12 +181,15 @@ function setSending(elements, sending) {
 
 async function sendChat(elements, message) {
   var data;
+  var historyForRequest;
+  var assistantReply;
 
   message = typeof message === "string" ? message.trim() : "";
   if (!message || chatSending) {
     return;
   }
 
+  historyForRequest = conversationHistory.slice(-maxConversationTurns);
   appendMessage(elements.history, "user", message, false);
   elements.input.value = "";
   setSending(elements, true);
@@ -188,7 +198,11 @@ async function sendChat(elements, message) {
     data = await api("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: message, context: currentContext }),
+      body: JSON.stringify({
+        message: message,
+        conversation_history: historyForRequest,
+        context: currentContext,
+      }),
     });
     if (Object.prototype.hasOwnProperty.call(data, "updated_context")) {
       currentContext =
@@ -196,14 +210,13 @@ async function sendChat(elements, message) {
           ? data.updated_context
           : null;
     }
-    appendMessage(
-      elements.history,
-      "assistant",
+    assistantReply =
       typeof data.reply === "string" && data.reply
         ? data.reply
-        : "返答を受け取りました。",
-      false,
-    );
+        : "返答を受け取りました。";
+    appendMessage(elements.history, "assistant", assistantReply, false);
+    rememberConversationTurn("user", message);
+    rememberConversationTurn("assistant", assistantReply);
     if (data.result && Array.isArray(data.result.trips)) {
       appendTrips(elements.history, data.result.trips);
     } else if (Array.isArray(data.candidates)) {

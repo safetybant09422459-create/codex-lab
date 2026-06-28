@@ -86,6 +86,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         role=CHAT_SERVER_ROLE,
         debug=request.debug,
         context=request.context,
+        conversation_history=request.conversation_history,
     )
     return ChatResponse(**result)
 

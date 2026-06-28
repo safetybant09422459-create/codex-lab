@@ -115,8 +115,40 @@ class ChatApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["debug"]["timings_ms"]["total"], 1.25)
         handle.assert_called_once_with(
-            "旅行を見せて", role="admin", debug=True, context=None
+            "旅行を見せて",
+            role="admin",
+            debug=True,
+            context=None,
+            conversation_history=[],
         )
+
+    async def test_conversation_history_is_validated_and_forwarded(self) -> None:
+        expected = {"action": "needs_context", "reply": "対象を指定してください。"}
+        history = [
+            {"role": "user", "content": "神戸で何した？"},
+            {"role": "assistant", "content": "博物館へ行きました。"},
+        ]
+
+        with patch.object(main, "handle_travel_chat", return_value=expected) as handle:
+            response = await self.post_chat(
+                {"message": "大阪で何食べた？", "conversation_history": history}
+            )
+
+        self.assertEqual(response.status_code, 200)
+        forwarded = handle.call_args.kwargs["conversation_history"]
+        self.assertEqual([turn.model_dump() for turn in forwarded], history)
+
+    async def test_conversation_history_rejects_more_than_five_turns(self) -> None:
+        response = await self.post_chat(
+            {
+                "message": "大阪で何食べた？",
+                "conversation_history": [
+                    {"role": "user", "content": str(index)} for index in range(6)
+                ],
+            }
+        )
+
+        self.assertEqual(response.status_code, 422)
 
     async def test_broad_query_returns_clarification_contract(self) -> None:
         trips = [

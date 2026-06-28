@@ -5,7 +5,12 @@ from collections.abc import Callable
 from time import perf_counter
 from typing import Any
 
-from .chat_core import Plan, PlanToolCandidate
+from .chat_core import (
+    ConversationState,
+    ConversationWorkingContext,
+    Plan,
+    PlanToolCandidate,
+)
 from .chat_tool_policy import (
     CHAT_TOOL_ARGUMENTS,
     CHAT_TRAVEL_TOOL_ALLOWLIST,
@@ -17,10 +22,7 @@ from .openai_adapter import (
     generate_text_with_timings,
     redact_sensitive_text,
 )
-from .travel_chat_adapter import (
-    conversation_state_from_legacy_context,
-    legacy_context_from_conversation_state,
-)
+from .travel_chat_adapter import conversation_state_from_legacy_context
 
 
 TimedTextGenerator = Callable[..., tuple[str, dict[str, float] | None]]
@@ -55,10 +57,12 @@ Allowed tool IDs and arguments:
 {tool_policy}
 
 Rules:
+- Interpret the current question first. Conversation history is supporting working
+  context, and ConversationState is a weaker read-only hint. An explicitly named
+  subject in the current question replaces a different subject in either context.
 - Never invent or decide role, confirmed, user_id, permission, or authorization.
-- Server-owned conversation context may be included with the utterance. Use its
-  selected_trip_id for references to the selected trip, but never return or update
-  context yourself.
+- ConversationState may include a selected trip EntityRef. Use its entity_id for
+  references to that selected trip, but never return or update state yourself.
 - Use only an allowed tool and only its listed arguments.
 - A trip title, area, prefecture, or memo keyword is not a trip_id. To find a
   matching trip, propose get_trips with empty arguments.
@@ -123,6 +127,8 @@ class TravelPlanner:
         self,
         user_message: str,
         *,
+        conversation: ConversationWorkingContext | None = None,
+        conversation_state: ConversationState | None = None,
         context: dict[str, Any] | None = None,
         text_generator: Callable[..., str] | None = None,
         debug: bool = False,
@@ -144,20 +150,29 @@ class TravelPlanner:
                 if not isinstance(user_message, str) or not user_message.strip():
                     raise ValueError("user message must be a non-empty string")
                 safe_message = redact_sensitive_text(user_message.strip())
-                safe_context = _redact_value(
-                    legacy_context_from_conversation_state(
-                        conversation_state_from_legacy_context(context)
-                    )
+                state = conversation_state or conversation_state_from_legacy_context(
+                    context
                 )
-                context_text = json.dumps(
-                    safe_context,
+                safe_history = _redact_value(
+                    (conversation or ConversationWorkingContext()).model_dump()["turns"]
+                )
+                safe_state = _redact_value(state.model_dump(mode="json"))
+                history_text = json.dumps(
+                    safe_history,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+                state_text = json.dumps(
+                    safe_state,
                     ensure_ascii=False,
                     separators=(",", ":"),
                 )
                 input_text = (
-                    "Server-normalized conversation context candidate (read-only):\n"
-                    f"{context_text}\n"
-                    f"User utterance:\n{safe_message}"
+                    f"Current question:\n{safe_message}\n"
+                    "Conversation history (ephemeral working context, oldest first):\n"
+                    f"{history_text}\n"
+                    "ConversationState (read-only state hint):\n"
+                    f"{state_text}"
                 )
             finally:
                 timings_ms["build_prompt"] = _elapsed_ms(prompt_started)

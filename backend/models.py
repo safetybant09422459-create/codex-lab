@@ -2,6 +2,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from .chat_core import ConversationTurn
+
 
 class RunRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=12000)
@@ -13,6 +15,14 @@ class RunResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
+    conversation_history: list[ConversationTurn] = Field(
+        default_factory=list,
+        max_length=5,
+        description=(
+            "Recent user/assistant messages used only as ephemeral Planner "
+            "working context; not persisted as Memory."
+        ),
+    )
     role: str | None = Field(
         default=None,
         deprecated=True,

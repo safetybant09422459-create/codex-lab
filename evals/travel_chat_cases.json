@@ -501,6 +501,20 @@
   },
 
   {
+    "id": "working_context_subject_change_kobe_to_osaka",
+    "question": "大阪で何食べた？",
+    "conversation_history": [
+      {"role": "user", "content": "神戸のアンパンマンミュージアムで何した？"},
+      {"role": "assistant", "content": "アンパンマンミュージアムで遊びました。"}
+    ],
+    "expected_intent": "answer_trip_food",
+    "expected_entity": "trip",
+    "expected_tool": "get_trip_timeline",
+    "requires_context": "須磨シーワールド",
+    "expected_classification": "travel_answer_generation",
+    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trips", "arguments": {}, "confidence": "medium", "reply": "大阪旅行を探します。"}
+  },
+  {
     "id": "unsupported_experience_photos",
     "question": "アンパンマンの写真見せて",
     "expected_intent": "show_experience_photos",

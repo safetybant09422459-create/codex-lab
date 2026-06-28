@@ -9,6 +9,8 @@ from backend.chat_core import (
     ComposeResult,
     ContentBlock,
     ConversationState,
+    ConversationTurn,
+    ConversationWorkingContext,
     EntityCandidate,
     EntityRef,
     SuggestedAction,
@@ -27,6 +29,24 @@ from backend.travel_chat_adapter import (
 
 
 class ChatCoreTest(unittest.TestCase):
+    def test_conversation_working_context_is_bounded_and_separate_from_state(self) -> None:
+        working_context = ConversationWorkingContext(
+            turns=[
+                ConversationTurn(role="user", content="神戸で何した？"),
+                ConversationTurn(role="assistant", content="博物館へ行きました。"),
+            ]
+        )
+
+        self.assertEqual(working_context.turns[0].role, "user")
+        self.assertFalse(hasattr(ConversationState(), "turns"))
+        with self.assertRaises(ValidationError):
+            ConversationWorkingContext(
+                turns=[
+                    ConversationTurn(role="user", content=str(index))
+                    for index in range(6)
+                ]
+            )
+
     def test_response_composer_protocol_models_carry_legacy_and_v1_outputs(self) -> None:
         request = ComposeRequest(outcome="not_found", diagnostics={"source": "test"})
 

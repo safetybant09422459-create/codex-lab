@@ -54,6 +54,19 @@ class ConversationState(ChatCoreModel):
     skill_slots: dict[str, Any] = Field(default_factory=dict)
 
 
+class ConversationTurn(ChatCoreModel):
+    """One recent message used as ephemeral Planner working context."""
+
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class ConversationWorkingContext(ChatCoreModel):
+    """Recent conversation only; this is neither state nor persisted Memory."""
+
+    turns: list[ConversationTurn] = Field(default_factory=list, max_length=5)
+
+
 class PlanToolCandidate(ChatCoreModel):
     """One validated Tool option proposed for a Plan."""
 
@@ -236,6 +249,8 @@ class Planner(Protocol):
         self,
         user_message: str,
         *,
+        conversation: ConversationWorkingContext | None = None,
+        conversation_state: ConversationState | None = None,
         context: dict[str, Any] | None = None,
         text_generator: Callable[..., str] | None = None,
         debug: bool = False,

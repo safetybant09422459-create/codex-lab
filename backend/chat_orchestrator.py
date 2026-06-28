@@ -4,7 +4,13 @@ from collections.abc import Callable
 from time import perf_counter
 from typing import Any
 
-from .chat_core import AnswerRequest, ComposeRequest, ExecutionRequest
+from .chat_core import (
+    AnswerRequest,
+    ComposeRequest,
+    ConversationTurn,
+    ConversationWorkingContext,
+    ExecutionRequest,
+)
 from .openai_adapter import generate_text_with_timings, redact_sensitive_text
 from .runtime import RuntimeService
 from .travel_chat_adapter import (
@@ -36,6 +42,7 @@ def propose_travel_tool(
     user_message: str,
     *,
     context: dict[str, Any] | None = None,
+    conversation_history: list[ConversationTurn] | None = None,
     text_generator: Callable[..., str] | None = None,
     debug: bool = False,
 ) -> dict[str, Any]:
@@ -43,7 +50,8 @@ def propose_travel_tool(
     planner = TravelPlanner(timed_text_generator=generate_text_with_timings)
     plan = planner.create_plan(
         user_message,
-        context=context,
+        conversation=ConversationWorkingContext(turns=conversation_history or []),
+        conversation_state=conversation_state_from_legacy_context(context),
         text_generator=text_generator,
         debug=debug,
     )
@@ -55,6 +63,7 @@ def handle_travel_chat(
     role: str = "admin",
     debug: bool = False,
     context: dict[str, Any] | None = None,
+    conversation_history: list[ConversationTurn] | None = None,
     *,
     text_generator: Callable[..., str] | None = None,
     runtime: RuntimeService | None = None,
@@ -67,7 +76,8 @@ def handle_travel_chat(
     planner = TravelPlanner(timed_text_generator=generate_text_with_timings)
     plan = planner.create_plan(
         message,
-        context=legacy_context_from_conversation_state(conversation_state),
+        conversation=ConversationWorkingContext(turns=conversation_history or []),
+        conversation_state=conversation_state,
         text_generator=text_generator,
         debug=debug,
     )
