@@ -116,6 +116,18 @@ class ExecutionEvidence(ChatCoreModel):
     result: Any = None
 
 
+class EvidenceBundle(ChatCoreModel):
+    """One Skill result prepared as read-only input for an LLM answer."""
+
+    skill_id: str
+    tool_id: str
+    user_question: str
+    result: Any = None
+    summary_for_llm: str = ""
+    limitations: list[str] = Field(default_factory=list)
+    confidence: Literal["high", "medium", "low"] = "high"
+
+
 class ExecutionRequest(ChatCoreModel):
     """Server-owned inputs required to execute a descriptive Plan."""
 
@@ -169,8 +181,16 @@ class AnswerResult(ChatCoreModel):
 
     answer: str
     confidence: Literal["high", "medium", "low"]
-    answer_type: Literal["activities", "food", "day", "not_applicable"]
+    answer_type: Literal[
+        "grounded", "activities", "food", "day", "not_applicable"
+    ]
     used_evidence: list[ExecutionEvidence] = Field(default_factory=list)
+    source: Literal[
+        "llm",
+        "fallback_travel_answer_generator",
+        "fallback_static",
+    ] = "fallback_static"
+    evidence_used: bool = False
 
 
 class ContentBlock(ChatCoreModel):

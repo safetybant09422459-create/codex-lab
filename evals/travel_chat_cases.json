@@ -510,7 +510,7 @@
     "expected_outcome": "candidates",
     "expected_contains_titles": ["ゆい初旅行", "ひいばあ米寿祝い", "まい初旅行", "福岡旅行", "APM &ドイツの森", "須磨シーワールド", "大阪旅行"],
     "expected_classification": "ambiguous_query",
-    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trips", "arguments": {}, "confidence": "low", "reply": "どの旅行か確認します。"}
+    "mock_proposal": {"action": "tool_proposal", "goal": "clarify", "answer_mode": "clarification", "required_evidence": [], "tool_id": "get_trips", "arguments": {}, "confidence": "low", "reply": "どの旅行か確認します。"}
   },
   {
     "id": "ambiguous_first_time",
@@ -520,7 +520,7 @@
     "expected_outcome": "candidates",
     "expected_contains_titles": ["ゆい初旅行", "まい初旅行"],
     "expected_classification": "ambiguous_query",
-    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trips", "arguments": {}, "confidence": "low", "reply": "初めての旅行を探します。"}
+    "mock_proposal": {"action": "tool_proposal", "goal": "clarify", "answer_mode": "clarification", "required_evidence": [], "tool_id": "get_trips", "arguments": {}, "entity_query": "初旅行", "confidence": "low", "reply": "初めての旅行を探します。"}
   },
   {
     "id": "ambiguous_some_trip",
@@ -530,7 +530,7 @@
     "expected_outcome": "candidates",
     "expected_contains_titles": ["大阪旅行", "須磨シーワールド", "APM &ドイツの森"],
     "expected_classification": "ambiguous_query",
-    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trips", "arguments": {}, "confidence": "low", "reply": "どの旅行か確認します。"}
+    "mock_proposal": {"action": "tool_proposal", "goal": "clarify", "answer_mode": "clarification", "required_evidence": [], "tool_id": "get_trips", "arguments": {}, "confidence": "low", "reply": "どの旅行か確認します。"}
   },
 
   {

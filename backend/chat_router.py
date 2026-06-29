@@ -47,6 +47,7 @@ def handle_chat(
     *,
     route_text_generator: TimedTextGenerator | None = None,
     basic_text_generator: TimedTextGenerator | None = None,
+    final_answer_text_generator: TimedTextGenerator | None = None,
 ) -> dict[str, Any]:
     """Select Basic Chat or the existing Travel adapter from validated LLM output."""
     route, route_fallback, route_timings = _select_route(
@@ -63,6 +64,7 @@ def handle_chat(
             debug=debug,
             context=context,
             conversation_history=conversation_history,
+            final_answer_text_generator=final_answer_text_generator,
         )
         if debug:
             result.setdefault("debug", {})["routing"] = {

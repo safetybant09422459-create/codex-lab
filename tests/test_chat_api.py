@@ -200,6 +200,9 @@ class ChatApiTest(unittest.IsolatedAsyncioTestCase):
         )
         proposal = {
             "action": "tool_proposal",
+            "goal": "clarify",
+            "answer_mode": "clarification",
+            "required_evidence": [],
             "tool_id": "get_trips",
             "arguments": {},
             "confidence": "low",

@@ -59,11 +59,17 @@ class TravelPlanExecutor:
         pending_steps = [(tool_id, arguments, "result")]
         runtime_steps: list[ExecutionStep] = []
         evidence: list[ExecutionEvidence] = []
-        trip_query = (
-            plan.resolution_query or _extract_trip_name(request.user_message)
-            if tool_id == "get_trips"
-            else None
-        )
+        trip_query = plan.resolution_query if tool_id == "get_trips" else None
+        if (
+            tool_id == "get_trips"
+            and trip_query is None
+            and plan.goal == "clarify"
+            and plan.answer_mode == "none"
+            and not plan.required_evidence
+        ):
+            # Pre-Planner-v2 compatibility only. Validated v2 plans carry the
+            # semantic resolution query explicitly and are never reinterpreted.
+            trip_query = _extract_trip_name(request.user_message)
         resolution_result: EntityResolutionResult | None = None
 
         if used_selected_trip and tool_id == "get_trip_timeline":
@@ -187,6 +193,25 @@ class TravelPlanExecutor:
                     )
                 continue
 
+            if (
+                current_tool_id == "get_trips"
+                and plan.goal == "clarify"
+                and plan.answer_mode == "clarification"
+            ):
+                # The Planner has already decided that selection is required.
+                # Python only validates and transports Runtime-owned candidates.
+                trips = _runtime_trip_candidates(runtime_result)
+                return self._result(
+                    "candidates",
+                    runtime_result=runtime_result,
+                    tool_id=current_tool_id,
+                    arguments=current_arguments,
+                    steps=runtime_steps,
+                    state=state,
+                    candidates=trips,
+                    evidence=evidence,
+                )
+
             return self._result(
                 "success",
                 runtime_result=runtime_result,
@@ -307,6 +332,21 @@ def _extract_runtime_trip(runtime_result: Any) -> dict[str, Any] | None:
     if not isinstance(trip_id, str) or not trip_id.strip():
         return None
     return trip
+
+
+def _runtime_trip_candidates(runtime_result: Any) -> list[dict[str, Any]]:
+    if not isinstance(runtime_result, dict):
+        return []
+    trips = runtime_result.get("trips")
+    if not isinstance(trips, list):
+        return []
+    return [
+        trip
+        for trip in trips
+        if isinstance(trip, dict)
+        and isinstance(trip.get("id"), str)
+        and trip["id"].strip()
+    ]
 
 
 def _execute_runtime_read(

@@ -109,6 +109,8 @@ User: 須磨を開いて
 {{"action":"tool_proposal","goal":"open_trip","answer_mode":"none","required_evidence":["trip"],"tool_id":"get_trips","arguments":{{}},"entity_query":"須磨","confidence":"medium","reply":"須磨に合う旅行を探します。"}}
 User: 兵庫の旅行見せて
 {{"action":"tool_proposal","goal":"open_trip","answer_mode":"none","required_evidence":["trip"],"tool_id":"get_trips","arguments":{{}},"entity_query":"兵庫","confidence":"medium","reply":"兵庫に合う旅行を探します。"}}
+User: 旅行を開いて
+{{"action":"tool_proposal","goal":"clarify","answer_mode":"clarification","required_evidence":[],"tool_id":"get_trips","arguments":{{}},"confidence":"medium","reply":"候補を確認します。"}}
 Context: selected_trip_id=trip_fukuoka, selected_trip_title=福岡旅行
 User: この旅行の詳細見せて
 {{"action":"tool_proposal","goal":"open_trip","answer_mode":"none","required_evidence":["trip"],"tool_id":"get_trip","arguments":{{"trip_id":"trip_fukuoka"}},"confidence":"high","reply":"選択中の旅行を取得します。"}}

@@ -4,7 +4,6 @@ from typing import Any
 from urllib.parse import quote
 
 from .chat_core import ComposeRequest, ComposeResult, ConversationState
-from .clarification_policy import ClarificationPolicy
 from .openai_adapter import redact_sensitive_text
 from .travel_chat_adapter import (
     compose_travel_chat_response_v1,
@@ -36,36 +35,34 @@ SUCCESS_REPLIES = {
 class TravelResponseComposer:
     """Compose Travel results without crossing Planner, Resolver, or Runtime."""
 
-    def __init__(
-        self,
-        *,
-        clarification_policy: ClarificationPolicy | None = None,
-    ) -> None:
-        self._clarification_policy = clarification_policy or ClarificationPolicy()
-
     def compose(self, request: ComposeRequest) -> ComposeResult:
         state = request.conversation_state
-        clarification = self._clarification_policy.evaluate(request)
-        if clarification.status != "not_required":
-            clarification_reply = clarification.clarification
-            if request.plan is not None and request.plan.goal == "show_photos":
-                clarification_reply = request.plan.reason or PHOTO_EVIDENCE_REQUIRED_REPLY
+        if request.outcome == "candidates":
+            candidate_fallback = (
+                f"{len(request.candidates)}件の候補があります。どれを開きますか？"
+                if request.candidates
+                else MULTIPLE_TRIPS_REPLY
+            )
+            clarification_reply = _answer_or_default(request, candidate_fallback)
             response = {
                 "action": "needs_context",
                 "reply": clarification_reply,
-                "clarification": clarification.model_dump(),
+                "candidates": request.candidates,
+                "clarification": {
+                    "status": "candidates",
+                    "clarification": clarification_reply,
+                    "candidate_list": request.candidates,
+                    "reason": (
+                        "query_too_broad"
+                        if request.plan is not None
+                        and request.plan.answer_mode == "clarification"
+                        else "multiple_candidates"
+                    ),
+                    "recommended_action": "select_candidate",
+                },
             }
-            response["clarification"]["clarification"] = clarification_reply
-            if clarification.candidate_list:
-                response["candidates"] = clarification.candidate_list
         elif request.outcome == "success":
             response, state = self._compose_success(request, state)
-        elif request.outcome == "candidates":
-            response = {
-                "action": "needs_context",
-                "reply": MULTIPLE_TRIPS_REPLY,
-                "candidates": request.candidates,
-            }
         elif request.outcome == "not_found":
             response = {
                 "action": "needs_context",
@@ -81,9 +78,20 @@ class TravelResponseComposer:
                 "reply": WRITE_NOT_IMPLEMENTED_REPLY,
             }
         elif request.outcome == "needs_context":
+            default_reply = (
+                PHOTO_EVIDENCE_REQUIRED_REPLY
+                if request.plan is not None and request.plan.goal == "show_photos"
+                else "対象を指定してください。"
+            )
             response = {
                 "action": "needs_context",
-                "reply": request.plan.reason if request.plan else "対象を指定してください。",
+                # plan.reason is Planner LLM output; Python only supplies a
+                # bounded availability fallback when no reason is available.
+                "reply": (
+                    request.plan.reason
+                    if request.plan is not None and request.plan.reason
+                    else default_reply
+                ),
             }
         elif request.outcome in {"runtime_error", "permission_denied"}:
             response = {
@@ -164,6 +172,12 @@ class TravelResponseComposer:
             "trip_id": safe_trip_id,
             "label": "Travelで開く",
         }
+        if (
+            request.answer_result is not None
+            and request.answer_result.answer_type != "not_applicable"
+            and request.answer_result.source == "llm"
+        ):
+            response["reply"] = request.answer_result.answer
         return response, state
 
 
@@ -177,3 +191,10 @@ def _extract_trip(runtime_result: Any) -> dict[str, Any] | None:
     if not isinstance(trip_id, str) or not trip_id.strip():
         return None
     return trip
+
+
+def _answer_or_default(request: ComposeRequest, default: str) -> str:
+    answer = request.answer_result
+    if answer is not None and answer.answer.strip():
+        return answer.answer
+    return default

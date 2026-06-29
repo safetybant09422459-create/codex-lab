@@ -33,6 +33,23 @@ class ChatRouterTest(unittest.TestCase):
         )
         travel.assert_not_called()
 
+    def test_casual_food_question_stays_in_basic_chat(self) -> None:
+        route_generator = lambda **_: (  # noqa: E731
+            json.dumps({"route": "basic", "confidence": "high"}),
+            None,
+        )
+        basic_generator = lambda **_: ("味の好みはないですが、ラーメンの話はできます。", None)  # noqa: E731
+
+        with patch.object(chat_router, "handle_travel_chat") as travel:
+            result = handle_chat(
+                "ラーメン好き？",
+                route_text_generator=route_generator,
+                basic_text_generator=basic_generator,
+            )
+
+        self.assertEqual(result["action"], "direct_answer")
+        travel.assert_not_called()
+
     def test_validated_travel_route_delegates_to_existing_adapter(self) -> None:
         route_generator = lambda **_: (  # noqa: E731
             json.dumps({"route": "travel", "confidence": "high"}),
@@ -50,6 +67,29 @@ class ChatRouterTest(unittest.TestCase):
 
         self.assertEqual(result, expected)
         travel.assert_called_once()
+
+    def test_final_answer_generator_is_only_forwarded_to_travel(self) -> None:
+        route_generator = lambda **_: (  # noqa: E731
+            json.dumps({"route": "travel", "confidence": "high"}),
+            None,
+        )
+        final_generator = lambda **_: ("旅行の記録です。", None)  # noqa: E731
+
+        with patch.object(
+            chat_router,
+            "handle_travel_chat",
+            return_value={"action": "tool_result", "reply": "旅行の記録です。"},
+        ) as travel:
+            handle_chat(
+                "福岡旅行なにした？",
+                route_text_generator=route_generator,
+                final_answer_text_generator=final_generator,
+            )
+
+        self.assertIs(
+            travel.call_args.kwargs["final_answer_text_generator"],
+            final_generator,
+        )
 
     def test_invalid_route_falls_back_to_basic_without_skill_execution(self) -> None:
         invalid_route = lambda **_: (  # noqa: E731

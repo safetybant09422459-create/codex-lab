@@ -139,6 +139,13 @@ class FixedProposalGenerator:
         return json.dumps(self.proposal, ensure_ascii=False)
 
 
+class FixedFinalAnswerGenerator:
+    """Exercise the deterministic fallback without an external LLM call."""
+
+    def __call__(self, **_kwargs: str) -> tuple[str, None]:
+        raise RuntimeError("mock final answer unavailable")
+
+
 class TravelChatEvaluator:
     def __init__(
         self,
@@ -246,6 +253,9 @@ class TravelChatEvaluator:
                     context=context,
                     conversation_history=case.get("conversation_history", []),
                     text_generator=generator,
+                    final_answer_text_generator=(
+                        FixedFinalAnswerGenerator() if mode == "mock" else None
+                    ),
                     runtime=self.runtime,
                 )
             except Exception as exc:  # Keep one bad case from hiding the full eval.

@@ -6,10 +6,16 @@ from typing import Any
 
 from .chat_core import (
     AnswerRequest,
+    AnswerResult,
     ComposeRequest,
     ConversationTurn,
     ConversationWorkingContext,
     ExecutionRequest,
+)
+from .final_answer_generator import (
+    FinalAnswerGenerationError,
+    FinalAnswerGenerator,
+    TimedTextGenerator,
 )
 from .openai_adapter import generate_text_with_timings, redact_sensitive_text
 from .runtime import RuntimeService
@@ -24,8 +30,8 @@ from .travel_plan_executor import (
     _find_trip_candidates as find_trip_candidates,
 )
 from .travel_planner import TravelPlanner, legacy_proposal_from_plan
-from .travel_response_composer import TravelResponseComposer
 from .travel_answer_generator import TravelAnswerGenerator
+from .travel_response_composer import TravelResponseComposer
 
 
 MAX_TRAVEL_STEPS = 3
@@ -36,6 +42,7 @@ travel_entity_resolver = TravelEntityResolver()
 travel_plan_executor = TravelPlanExecutor(resolver=travel_entity_resolver)
 travel_response_composer = TravelResponseComposer()
 travel_answer_generator = TravelAnswerGenerator()
+final_answer_generator = FinalAnswerGenerator()
 
 
 def propose_travel_tool(
@@ -66,6 +73,7 @@ def handle_travel_chat(
     conversation_history: list[ConversationTurn] | None = None,
     *,
     text_generator: Callable[..., str] | None = None,
+    final_answer_text_generator: TimedTextGenerator | None = None,
     runtime: RuntimeService | None = None,
 ) -> dict[str, Any]:
     """Plan, execute, and compose one bounded server-side Travel request."""
@@ -98,15 +106,36 @@ def handle_travel_chat(
         )
     )
     execution_state = execution.conversation_state or conversation_state
-    answer = travel_answer_generator.generate(
-        AnswerRequest(
-            user_question=message,
-            plan=plan,
-            execution_result=execution,
-            conversation_state=execution_state,
-            evidence=execution.evidence,
-        )
+    answer_request = AnswerRequest(
+        user_question=message,
+        plan=plan,
+        execution_result=execution,
+        conversation_state=execution_state,
+        evidence=execution.evidence,
     )
+    answer = None
+    final_answer_fallback_reason: str | None = None
+    if execution.execution_status in {"success", "candidates"} and execution.evidence:
+        try:
+            answer = final_answer_generator.generate(
+                answer_request,
+                skill_id="travel",
+                text_generator=final_answer_text_generator,
+            )
+        except FinalAnswerGenerationError as exc:
+            final_answer_fallback_reason = str(exc)
+            # The deterministic generator is deliberately lazy: it is never
+            # invoked before a Final Answer LLM attempt has failed.
+            answer = travel_answer_generator.generate(answer_request)
+            if answer.answer_type == "not_applicable" or not answer.answer:
+                answer = None
+
+    if answer is None:
+        answer = _static_answer_result()
+        if final_answer_fallback_reason is None:
+            final_answer_fallback_reason = (
+                f"final answer not applicable for {execution.execution_status}"
+            )
     composed = travel_response_composer.compose(
         ComposeRequest(
             outcome=execution.execution_status,
@@ -165,7 +194,14 @@ def handle_travel_chat(
                 "answer_type": answer.answer_type,
                 "confidence": answer.confidence,
                 "used_evidence_count": len(answer.used_evidence),
+                "evidence_used": answer.evidence_used,
+                "final_answer_source": answer.source,
+                "final_answer_fallback_reason": final_answer_fallback_reason,
             },
+            "route": "travel",
+            "evidence_used": answer.evidence_used,
+            "final_answer_source": answer.source,
+            "final_answer_fallback_reason": final_answer_fallback_reason,
         }
         diagnostics = execution.diagnostics or {}
         if "entity_resolution" in diagnostics:
@@ -194,6 +230,16 @@ def _runtime_success_result(
         )
     )
     return _redact_value(composed.response)
+
+
+def _static_answer_result() -> AnswerResult:
+    return AnswerResult(
+        answer="",
+        confidence="low",
+        answer_type="not_applicable",
+        source="fallback_static",
+        evidence_used=False,
+    )
 
 
 def _find_trip_candidates(

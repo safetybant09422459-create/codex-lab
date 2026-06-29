@@ -34,14 +34,14 @@ User question
     -> Planner                 # 回答目的と必要なEvidenceを計画
     -> Plan Executor           # Resolverを調整し、read Toolを選択
     -> Runtime                 # Permission / Confirmation / Auditを維持して実行
-    -> Answer Generator        # 与えられたEvidenceだけで質問へ回答
+    -> Final Answer LLM        # 解決済み対象のEvidenceだけで質問へ回答
     -> Response Composer       # API互換response / content block / actionへ整形
 ```
 
 Entity ResolverはExecutorから呼ばれ、対象旅行を確定する。Answer GeneratorはExecutor成功後、
 Composer前に置く。Answer GeneratorとComposerの責務は分ける。
 
-* Answer Generator: 質問への直接回答、Evidenceの選択と要約
+* Final Answer Generator: 質問への直接回答（Evidenceの投影は決定的なPython処理）
 * Response Composer: outcome、legacy API形式、content block、suggested action、会話状態の整形
 
 Answer GeneratorはRuntime、Repository、Tool、Resolverを呼ばない。入力として渡されたEvidence
@@ -66,14 +66,17 @@ LLMループを使わない。
 * 上限へ達した場合や対象・日付を一意に決められない場合は、推測せず聞き返す。
 * LLM回数とTool回数をdebug diagnosticsへ残し、上限をテスト可能にする。
 
-## Travel Answer Generator v0.1 Scope
+## Final Answer LLM and Travel fallback
 
-v0.1はTravelのread-only質問だけを対象にし、追加探索、Evaluator、Replannerは実装しない。
+通常経路は、Runtime後に`EvidenceBundle`を作り、Skill-neutralなFinal Answer LLMが回答する。
+名前解決用の`get_trips`全件は解決後には渡さず、解決済みTripだけを`relevant_items`として渡す。
+一覧要求では全Trip、曖昧時はResolver候補だけを渡す。
 
 Planner v2では`Plan.goal / answer_mode / required_evidence`をAnswer Generatorまで保持する。
-Generatorは質問文の再分類より`answer_mode`を優先し、`summary`は全timeline、`day_summary`は
-指定日、`meals`は食事Evidenceだけを回答する。Evidenceがない場合は推測せず、特に食事では
-「取得できた情報には食事内容は含まれていません」と返す。
+`TravelAnswerGenerator`は通常時には呼ばれず、Final Answer LLMが失敗した場合だけ遅延実行する。
+その決定的fallbackでは`answer_mode`を優先し、取得済みEvidenceだけを扱う。さらに適用不能なら
+Composerのstatic fallbackを使う。debugには`final_answer_source`、
+`final_answer_fallback_reason`、`evidence_used`を残す。
 
 現在発話のGoal判定はPlanner LLMへ任せ、Pythonは許可されたGoal tupleの検証と正規化だけを行う。
 LLM失敗時は語彙推定をせず`needs_context`へ安全に倒し、不正な出力をTool実行へ昇格させない。
@@ -87,8 +90,8 @@ Photo Goalは
 * 「○○旅行で何食べた？」: timeline / experienceの食事関連記録の抽出
 * 「○日目何した？」: 選択中旅行の指定日の要約
 
-基本フローは「旅行特定 → timeline取得 → Answer Generatorによる自然文回答」とする。
-現実装のLLM呼び出しはPlannerの最大1回で、Answer Generatorは取得済みEvidenceを決定的に整形する。
+基本フローは「旅行特定 → timeline取得 → Final Answer LLMによる自然文回答」とする。
+Skill会話全体ではRouter、Travel Planner、Final Answerの最大3 LLMを使う。
 Toolは、名前付き
 質問では`get_trips → get_trip_timeline`、選択中旅行では必要に応じて
 `get_trip → get_trip_timeline`の最大2回を想定する。

@@ -60,12 +60,15 @@ class TravelAnswerGenerator:
                 answer="",
                 confidence="low",
                 answer_type=answer_type,
+                source="fallback_travel_answer_generator",
             )
         if not evidence or not any(item.result is not None for item in evidence):
             return AnswerResult(
                 answer=NO_EVIDENCE_REPLY,
                 confidence="low",
                 answer_type=answer_type,
+                source="fallback_travel_answer_generator",
+                evidence_used=False,
             )
 
         timeline_items = _timeline_items(evidence)
@@ -94,6 +97,8 @@ class TravelAnswerGenerator:
                 answer=answer,
                 confidence="low",
                 answer_type=answer_type,
+                source="fallback_travel_answer_generator",
+                evidence_used=True,
             )
 
         trip_label = _trip_label(request, evidence)
@@ -111,6 +116,8 @@ class TravelAnswerGenerator:
             confidence="high",
             answer_type=answer_type,
             used_evidence=used,
+            source="fallback_travel_answer_generator",
+            evidence_used=True,
         )
 
 

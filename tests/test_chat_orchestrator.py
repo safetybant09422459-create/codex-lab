@@ -814,6 +814,40 @@ class ChatOrchestratorTest(unittest.TestCase):
         self.assertEqual(result["candidates"], trips)
         self.assertEqual(len(runtime.calls), 1)
 
+    def test_candidate_clarification_reply_is_generated_by_final_answer_llm(self) -> None:
+        trips = [
+            {"id": "trip-1", "title": "大阪旅行 2025"},
+            {"id": "trip-2", "title": "大阪旅行 2026"},
+        ]
+        runtime = FakeRuntimeService(
+            response={"success": True, "result": {"trips": trips}}
+        )
+        proposal = {
+            "action": "tool_proposal",
+            "tool_id": "get_trips",
+            "arguments": {},
+            "confidence": "medium",
+            "reply": "大阪旅行を探します。",
+        }
+
+        result = chat_orchestrator.handle_travel_chat(
+            "大阪旅行を開いて",
+            debug=True,
+            text_generator=json_generator(proposal),
+            final_answer_text_generator=lambda **_: (
+                "大阪旅行は2025年と2026年の2件あります。どちらにしますか？",
+                None,
+            ),
+            runtime=runtime,
+        )
+
+        self.assertEqual(
+            result["reply"],
+            "大阪旅行は2025年と2026年の2件あります。どちらにしますか？",
+        )
+        self.assertEqual(result["debug"]["final_answer_source"], "llm")
+        self.assertEqual(result["clarification"]["clarification"], result["reply"])
+
     def test_max_steps_stops_before_follow_up_runtime_call(self) -> None:
         trip = {"id": "trip-fukuoka", "title": "福岡旅行"}
         runtime = FakeRuntimeService(
@@ -1055,6 +1089,10 @@ class ChatOrchestratorTest(unittest.TestCase):
             "神戸旅行で何した？",
             debug=True,
             text_generator=json_generator(proposal),
+            final_answer_text_generator=lambda **_: (
+                "神戸旅行では、須磨シーワールド、その後ホテルの記録があります。",
+                None,
+            ),
             runtime=runtime,
         )
 
@@ -1071,10 +1109,121 @@ class ChatOrchestratorTest(unittest.TestCase):
         self.assertEqual(
             result["debug"]["answer_generation"],
             {
-                "answer_type": "activities",
+                "answer_type": "grounded",
                 "confidence": "high",
                 "used_evidence_count": 2,
+                "evidence_used": True,
+                "final_answer_source": "llm",
+                "final_answer_fallback_reason": None,
             },
+        )
+
+    def test_named_trip_answer_uses_llm_after_runtime_evidence(self) -> None:
+        trips = [{"id": "trip-fukuoka", "title": "福岡旅行"}]
+        runtime = FakeRuntimeService(
+            response=[
+                {"success": True, "result": {"trips": trips}},
+                {
+                    "success": True,
+                    "result": {
+                        "trip_id": "trip-fukuoka",
+                        "timeline": [
+                            {"title": "屋台でラーメン", "category": "food"}
+                        ],
+                    },
+                },
+            ]
+        )
+        proposal = {
+            "action": "tool_proposal",
+            "tool_id": "get_trips",
+            "arguments": {},
+            "confidence": "high",
+            "reply": "福岡旅行を探します。",
+            "goal": "summarize_meals",
+            "answer_mode": "meals",
+            "required_evidence": ["trip", "timeline"],
+            "entity_query": "福岡旅行",
+        }
+        captured = {}
+
+        def final_generator(**kwargs):
+            captured.update(kwargs)
+            return "福岡旅行では、屋台でラーメンを食べた記録があります。", None
+
+        with patch.object(
+            chat_orchestrator.travel_answer_generator, "generate"
+        ) as travel_fallback:
+            result = chat_orchestrator.handle_travel_chat(
+                "福岡旅行のご飯何食べた？",
+                debug=True,
+                text_generator=json_generator(proposal),
+                final_answer_text_generator=final_generator,
+                runtime=runtime,
+            )
+
+        self.assertEqual(
+            result["reply"],
+            "福岡旅行では、屋台でラーメンを食べた記録があります。",
+        )
+        self.assertEqual(result["debug"]["route"], "travel")
+        self.assertTrue(result["debug"]["evidence_used"])
+        self.assertEqual(result["debug"]["final_answer_source"], "llm")
+        self.assertIsNone(result["debug"]["final_answer_fallback_reason"])
+        travel_fallback.assert_not_called()
+        self.assertIn("屋台でラーメン", captured["input_text"])
+        self.assertNotIn('"trips"', captured["input_text"])
+        self.assertEqual(
+            [call["tool_id"] for call in runtime.calls],
+            ["get_trips", "get_trip_timeline"],
+        )
+
+    def test_final_answer_failure_invokes_travel_generator_lazily(self) -> None:
+        trip = {"id": "trip-fukuoka", "title": "福岡旅行"}
+        runtime = FakeRuntimeService(
+            response=[
+                {"success": True, "result": {"trips": [trip]}},
+                {
+                    "success": True,
+                    "result": {"timeline": [{"title": "屋台でラーメン"}]},
+                },
+            ]
+        )
+        proposal = {
+            "action": "tool_proposal",
+            "tool_id": "get_trips",
+            "arguments": {},
+            "confidence": "high",
+            "reply": "福岡旅行を探します。",
+            "goal": "summarize_meals",
+            "answer_mode": "meals",
+            "required_evidence": ["trip", "timeline"],
+            "entity_query": "福岡旅行",
+        }
+
+        with patch.object(
+            chat_orchestrator.travel_answer_generator,
+            "generate",
+            wraps=chat_orchestrator.travel_answer_generator.generate,
+        ) as travel_fallback:
+            result = chat_orchestrator.handle_travel_chat(
+                "福岡旅行のご飯何食べた？",
+                debug=True,
+                text_generator=json_generator(proposal),
+                final_answer_text_generator=lambda **_: (_ for _ in ()).throw(
+                    RuntimeError("unavailable")
+                ),
+                runtime=runtime,
+            )
+
+        travel_fallback.assert_called_once()
+        self.assertEqual(
+            result["debug"]["final_answer_source"],
+            "fallback_travel_answer_generator",
+        )
+        self.assertEqual(
+            result["debug"]["final_answer_fallback_reason"],
+            "final answer LLM failed",
         )
 
 

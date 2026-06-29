@@ -1,6 +1,6 @@
 import unittest
 
-from backend.chat_core import ComposeRequest, Plan
+from backend.chat_core import AnswerResult, ComposeRequest, Plan
 from backend.travel_chat_adapter import conversation_state_from_legacy_context
 from backend.travel_response_composer import TravelResponseComposer
 
@@ -66,6 +66,28 @@ class TravelResponseComposerTest(unittest.TestCase):
             composed.response_v1.suggested_actions[0].type,
             "navigate",
         )
+
+    def test_trip_detail_keeps_navigation_with_llm_final_answer(self) -> None:
+        composed = self.composer.compose(
+            ComposeRequest(
+                outcome="success",
+                tool_id="get_trip",
+                arguments={"trip_id": "trip-fukuoka"},
+                runtime_result={
+                    "trip": {"id": "trip-fukuoka", "title": "福岡旅行"}
+                },
+                answer_result=AnswerResult(
+                    answer="福岡旅行を開きます。",
+                    confidence="high",
+                    answer_type="grounded",
+                    source="llm",
+                    evidence_used=True,
+                ),
+            )
+        )
+
+        self.assertEqual(composed.response["reply"], "福岡旅行を開きます。")
+        self.assertEqual(composed.response["navigation"]["trip_id"], "trip-fukuoka")
 
     def test_candidates_keep_legacy_candidate_response(self) -> None:
         candidates = [
