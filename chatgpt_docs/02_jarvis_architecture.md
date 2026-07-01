@@ -1,6 +1,9 @@
 # Jarvis Architecture
 
-> 2026-06-27: Runtime / Registry / Permission / Confirmation / Auditの実装同期情報は `02_runtime_and_tools.md` を正とする。このファイルは全体Architectureの従来詳細版として残す。
+更新日: 2026-06-30
+
+> Runtimeの詳細は `02_runtime_and_tools.md`、Activation RAGの引き継ぎ要点は `07_activation_rag.md`、
+> 通常docsの詳細は `docs/architecture.md` と `docs/activation_rag.md` を参照する。
 
 ## 目的
 
@@ -23,7 +26,21 @@ Jarvis
 └ Frontend
 ```
 
-現在の実装上の主要構造:
+現在のChat主経路:
+
+```text
+Basic Chat
+  -> Router
+  -> Runtime（Capability / Toolが必要な場合）
+  -> Evidence
+  -> Final Answer LLM
+```
+
+通常会話はToolなしで完結する。Capabilityが必要なTurnだけRuntimeへ進む。LLMが発話の意味、Capability、
+Evidenceの十分性、回答を判断し、PythonはContext Assembly、構造検証、安全境界、実行、Repository、
+Evidence整形を担当する。
+
+現在のTool実行構造:
 
 ```text
 Jarvis Core / API / Web UI
@@ -63,6 +80,53 @@ Coreが担当しないこと:
 * Toolの直接実行
 * DB、外部API、家電、ファイルへの直接アクセス
 * AI Provider固有のAPI詳細
+* Pythonキーワード分岐による自然言語理解の代替
+* Activation RAG候補を正本や実行許可として扱うこと
+
+## Activation RAG
+
+Activation RAGは、現在発話から正本Entity候補を軽く広く思い出すread-only補助層である。DB、Repository、
+Runtime、Entity Resolver、Evidence Assemblyを置き換えない。
+
+```text
+User Message + authorized scope
+  -> Activation Search
+       -> Provider -> Builder -> Search index
+  -> unverified candidates
+  -> Router / Entity Resolution
+  -> Runtime（必要な場合）
+  -> Repository canonical read
+  -> Evidence
+  -> Final Answer LLM
+```
+
+Repositoryが唯一のSource of Truthである。RAG Document / indexは再生成可能なprojectionであり、検索score、
+単一候補、LLM選択を理由に正本再取得やRuntime Gateを省略しない。検索障害時は候補なしでBasic Chatを
+継続する。
+
+### Provider境界
+
+Coreは共通Document / Result envelope、Provider登録、検索ライフサイクルだけを扱う。Domain固有のEntity、
+語彙、alias、metadata、projectionは各Provider / Builderが所有する。
+
+* Travel: 最初のProvider / PoC。Travel RAGではない。
+* Memory: 将来Provider。承認済みMemory参照候補を扱う。
+* Photo: 将来Provider。Asset / Album等をPhoto権限内で扱う。
+* Calendar: 将来Provider。EventとvisibilityをCalendar側で扱う。
+* Garden: 将来Provider候補。Garden固有EntityをGarden側で扱う。
+* Home Action: Activation Entity検索とは別。Action schemaとRuntime Gateを使う。
+
+### Knowledge Enrichment
+
+会話、失敗・曖昧検索、ユーザー修正・選択をLearning Eventにし、alias、tag、relation、検索Documentの
+候補を作る。候補は派生Storeでreview / approvalし、承認済みprojectionだけをBuilderが検索Documentへ
+反映する。Travel等の本体DBは更新しない。本体更新は別のDomain writeとしてRuntimeを通す。
+
+### Capability Usage RAG
+
+Skill / Toolの使い方を別corpusで想起する将来案である。「テレビつけて」はHome Action、
+「神戸で何した？」はTravel read、「写真ある？」はPhoto readの候補になり得る。ただしAction Toolと
+Memory / Domain Searchは別設計であり、usage候補はTool callや実行許可ではない。現時点では実装しない。
 
 ## Runtime
 
@@ -218,9 +282,8 @@ Shellが担当しないこと:
 
 ## Jarvis Screen
 
-Jarvis Screenは、Jarvis Shellのトップ画面である。
-
-現時点では「喋らないJarvis」として扱う。固定ダッシュボードではなく、将来Jarvis CoreやSkill Routerが文脈に応じて表示内容を選ぶ場所である。
+Jarvis Screenは、Jarvis Shellのトップ画面である。現在はChat入口を持ち、将来は固定ダッシュボードでは
+なく、Jarvis CoreやSkill Routerが文脈に応じて表示内容を選ぶ場所でもある。
 
 表示候補:
 

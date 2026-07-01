@@ -1,162 +1,124 @@
-# Jarvis Chat v0.1 Design Material
+# Jarvis Chat: Current State and Next Phase
 
-更新日: 2026-06-27
+更新日: 2026-06-30
 
-## 目的
+## 結論
 
-Jarvis Chat v0.1は、ユーザーの自然文を既存Travel Toolへ安全に接続し、結果を会話と既存Travel UIで確認できる最小実装である。新しいTravelロジックをChat内に作らず、Jarvis CoreがToolを選び、Runtimeが実行を統制する。
+旧資料が前提としていた「Jarvis Chat v0.1開始前」の段階は終了した。Basic Chatの復元、Routerによる
+通常会話とTravelの分離、Runtime経由のTravel read、Evidenceを使うFinal Answer LLMは実装済みである。
 
-v0.1の成功条件:
+次フェーズの中心はTravel Chatのユースケース追加ではない。Jarvis CoreのActivation RAG、Entity
+Resolution、Knowledge EnrichmentをProvider中立に育てることである。
 
-- 日本語の代表4ユースケースを扱える
-- readは根拠となるTool結果に基づいて応答する
-- writeは対象・変更内容を提示し、ユーザー確認後だけ実行する
-- Tool結果と最終応答を会話単位で追跡できる
-- 既存Travel画面へ遷移・再表示できる
-- コスト、Tool回数、入力サイズ、タイムアウトに上限がある
-
-## 最初の自然文とTool flow
-
-### 「福岡旅行の体験一覧を見せて」
-
-1. `get_trips` で候補を取得
-2. title、prefectures、dateから福岡旅行を特定
-3. 曖昧なら候補を提示して選択を求める
-4. `get_trip_timeline` でExperience一覧を取得
-5. `display_title`、時刻、type、memo概要を表示し、Travel画面への導線を出す
-
-`get_trips` 自体に検索引数はないため、モデルが勝手なtrip_idを作らない。
-
-### 「アンパンマンミュージアムの写真を見せて」
-
-1. 会話中のtrip / experience contextを優先
-2. 不足時は `get_trips` → `get_trip_timeline`
-3. Experienceを特定し `get_experience` で確認
-4. `get_experience_photo_links` で明示リンクとcoverを取得
-5. `get_experience_photos` で通常時間帯の候補を取得
-6. 必要な場合だけ、明示した期間で `get_experience_photo_search` を使う
-
-同名Experienceが複数ある場合は確認する。写真バイナリをLLMへ送ることと、Browserにthumbnailを表示することを分離する。
-
-### 「この体験にメモを追加して」
-
-1. 「この体験」が指す `experience_id` を会話contextから解決
-2. `get_experience` で現在のmemoを取得
-3. 追記後の全文と対象Experienceをpreviewする
-4. ユーザーが明示確認
-5. `update_experience` に `experience_id` と新しい `memo` を渡す
-6. 成功結果を表示しTravel詳細を再取得する
-
-「追加」は既存memoを上書きしないよう、現在値とのマージ結果を確認画面に出す。対象や本文が曖昧なら実行しない。
-
-### 「旅行の思い出を要約して」
-
-1. 対象Tripを特定
-2. `get_trip` と `get_trip_timeline` を取得
-3. 必要なExperienceだけ `get_experience_photo_links` / `get_experience_photos` を取得
-4. Tool結果の範囲で、体験順、メモ、代表写真、ハイライトを要約
-
-現状は専用Memory Entity / summary Toolがないため、要約文はLLM生成物でありDBへ保存しない。写真の内容理解は未実装なので、撮影時刻やリンク情報だけから画像内容を断定しない。
-
-## v0.1 Tool allowlist
-
-Read:
-
-- `get_trips`
-- `get_trip`
-- `get_trip_timeline`
-- `get_experience`
-- `get_experience_photos`
-- `get_experience_photo_links`
-- `get_experience_photo_search`
-
-Write:
-
-- `update_experience` のうち、v0.1ではmemo更新を第一対象に限定
-
-`create_*`、archive、Photo Link更新、cover更新、Developer / Home Toolはv0.1 allowlist外とする。Tool allowlistと引数制約はserver-sideで強制する。
-
-## write確認方針
-
-現行Runtimeは `admin` と `confirmed: true` でTravel writeを許可するが、Chatでは単なるBooleanをmodelに設定させてはいけない。
-
-推奨フロー:
+## 現在の会話経路
 
 ```text
-modelがwrite案を作る
-  → serverがTool / target / before / afterを正規化
-  → pending_action_idを発行（短い期限、single use）
-  → UIが差分と影響を表示
-  → 人間が確認ボタンを押す
-  → serverが同一payloadをRuntimeへconfirmed=trueで渡す
-  → Auditと結果を表示
+User Message
+  -> Basic Chat / Context
+  -> Router（LLM判断、server-side validation）
+       -> direct answer: ToolなしでBasic Chat回答
+       -> capability required: Skill Adapterへ
+  -> Runtime Gate
+       Validation / Permission / Confirmation / Audit / Execution
+  -> Repository canonical read
+  -> Evidence Assembly
+  -> Final Answer LLM
 ```
 
-確認は会話の「はい」だけに依存せず、対象ID、Tool ID、引数hash、user/session、期限へ束縛する。確認後にmodelが引数を変更した場合は再確認する。
+短く表すと次の構成である。
 
-## Chat UI配置
+```text
+Basic Chat -> Router -> Runtime -> Evidence -> Final Answer LLM
+```
 
-Jarvis Shellの最上位 `Jarvis` 画面へ、独立したChat panel / screenとして置く。Travel画面内に置くと将来のCalendar、Photo、Home横断会話を妨げるためである。
+ただしRuntimeは全Turnへ強制しない。通常会話はToolなしで完結し、ユーザー固有データやActionが必要な
+場合だけRuntimeへ進む。Routerが失敗・不正出力になった場合も、Travel Toolを推測実行せずBasic Chatへ
+安全にfallbackする。
 
-推奨構成:
+## LLM Firstの現状
 
-- Jarvis画面: 会話、確認カード、Tool実行状態、エラー
-- Travel画面: 詳細なTrip / Experience / 写真表示と編集
-- Chat応答: Experience cardと「Travelで開く」deep link
-- Developer画面: raw Tool result、Audit、debug。一般ユーザーには出さない
+LLMが次を判断する。
 
-モバイルSafariを第一対象とし、送信中断、再送、長い結果の折りたたみ、写真lazy loadを考慮する。
+* 通常知識だけで答えられるか
+* ユーザー固有データが必要か
+* どのCapabilityを使うか
+* Evidenceが質問に十分か
+* どう答えるか、または何を聞き返すか
 
-## API境界案
+Pythonは次を担う。
 
-Chat固有のHTTP endpointを追加し、そのserver-side orchestratorだけがOpenAI APIとRuntimeへ接続する。BrowserからOpenAIへ直接接続しない。
+* Context Assemblyと構造化出力の検証
+* Runtime、Permission、Confirmation、Audit、Validation
+* Tool実行とRepository境界
+* 候補数、schema、上限、Evidenceの決定的な整形
+* timeout、fallback、ログ、再現可能な安全Policy
 
-概念的なAPI:
+Pythonによる自然言語キーワード分類や固定語彙回答は主経路の頭脳にしない。既存のTravel固有Plannerや
+deterministic fallbackはTravel Adapter内に閉じ、Final Answer LLM失敗時など限定条件でのみ使う。
 
-- `POST /api/chat/messages`: user message送信
-- `GET /api/chat/conversations/{id}`: 会話取得
-- `POST /api/chat/pending-actions/{id}/confirm`: write確認
-- `POST /api/chat/pending-actions/{id}/cancel`: cancel
+## Activation RAGをChatへどう置くか
 
-会話保存をv0.1に含めるかは要決定。保存するなら本文、Tool call、Tool result、確認、user、timestampの保持期間と削除方針を先に決める。
+Activation RAGはRouter / Entity Resolution前後の軽量な候補想起であり、正本やEvidenceではない。
 
-## OpenAI API環境変数案
+```text
+User Message + authorized scope
+  -> Activation RAG
+  -> unverified candidates
+  -> Router / Entity Resolution
+  -> Runtime（必要な場合）
+  -> Repository canonical read
+  -> Evidence
+  -> Final Answer LLM
+```
 
-- `OPENAI_API_KEY`: server-only secret
-- `JARVIS_CHAT_MODEL`:使用model
-- `JARVIS_CHAT_TIMEOUT_SECONDS`
-- `JARVIS_CHAT_MAX_INPUT_TOKENS`
-- `JARVIS_CHAT_MAX_OUTPUT_TOKENS`
-- `JARVIS_CHAT_MAX_TOOL_CALLS`
-- `JARVIS_CHAT_MAX_REQUESTS_PER_MINUTE`
-- `JARVIS_CHAT_DAILY_BUDGET_USD`
-- `JARVIS_CHAT_PER_REQUEST_BUDGET_USD`
-- `JARVIS_CHAT_STORE_CONVERSATIONS`: 保存有無
-- `JARVIS_CHAT_RETENTION_DAYS`: 保存時の保持日数
+候補のscore 1位を自動確定しない。`entity_id`をRepositoryで再検証し、0件・複数件・stale・権限不一致を
+扱う。検索障害はChat応答の失敗条件にしない。
 
-model名や価格は変わるためコードへ固定せず、導入時に公式情報で確認する。API keyをfrontend、Tool result、Auditへ含めない。
+Travelは最初のProvider / PoCである。Chat CoreがTravelの`trip_id`、地名辞書、日程規則を理解する設計に
+しない。Memory、Photo、Calendar、Gardenも同じ共通envelopeへ接続できるようにする。
 
-## コスト上限と安全設計
+## 次に作るもの
 
-- 1 turnの入力・出力token上限
-- 1 turnのTool call上限（初期値3〜6程度を検討）
-- 同一引数の繰り返しTool callを拒否
-- request / user / day単位のrate limitとbudget
-- 会話履歴を要約して送信量を抑制
-- Tool resultのfield allowlist、件数、文字数上限
-- 写真はthumbnail表示とmodel送信を分離
-- prompt injectionを含むTool resultを命令として扱わない
-- server-side Tool allowlistとschema validation
-- timeout、cancel、partial failure表示
-- OpenAI障害時にwriteを実行しないfail-closed
-- Auditへsecretや写真binaryを記録しない
+1. **Activation RAG Core**: Provider / Builder / Search契約、認証主体・visibility・purpose、再構築と
+   失効、検索障害分離を固める。
+2. **Travel Provider改善**: zero-result、曖昧性、stale Document、削除、visibility変更を評価し、
+   Travel固有処理をProvider内へ保つ。
+3. **Entity Resolution**: RAG候補を正本Entityへ安全に解決する。候補提示、確定、再取得を分ける。
+4. **Knowledge Enrichment**: 会話、失敗検索、ユーザー修正からalias / tag / relation / 検索Document候補を
+   作り、承認後だけ索引へ反映する。
+5. **Memory Provider**
+6. **Photo Provider**
+7. **Calendar Provider**
+8. **Capability Usage RAG検討**
 
-## 実装前に解決する事項
+## 現フェーズで実装しないもの
 
-1. 実ユーザー認証とrole mapping。現行family / guestはmedium-risk photo read不可
-2. pending action型確認をどこに保持するか
-3. conversation保存有無とretention
-4. modelとAPI方式、構造化Tool call schema
-5. 写真をmodelへ送るか、UI表示だけにするか
-6. Trip / Experienceの曖昧一致とcontextの失効ルール
-7. Runtimeのrequired-field-only validationをfull schema validationへ強化する範囲
+* Capability Usage RAG
+* RAG検索結果からのAction自動実行
+* EnrichmentからTravel等の本体DBへの自動書き戻し
+* Travel固有schemaのJarvis Coreへの追加
+* score 1位や単一候補を根拠にした権限・確認・正本再取得の省略
+
+## Capability Usage RAGの検討境界
+
+将来、Capability Catalogが大きくなった場合、承認済みの利用例を別corpusで検索する可能性がある。
+
+| 発話 | 候補 | 次の境界 |
+| --- | --- | --- |
+| 「テレビつけて」 | Home Action | Home Tool schemaとRuntime Gate |
+| 「神戸で何した？」 | Travel read | Entity ResolutionとRepository read |
+| 「写真ある？」 | Photo read | Photo Provider / Photo Tool |
+
+Action ToolとMemory / Domain Searchは別設計である。usage候補はCapability選択のhintに留め、Tool call、
+引数、実行許可を生成しない。導入判断にはCatalog fallback、version失効、承認workflow、Action / Search
+誤分類の評価が必要である。
+
+## 安全とプライバシー
+
+* OpenAI API Keyと認証情報はserver-sideに置く。
+* RuntimeをTool実行の唯一の経路にする。
+* RAG検索前に認可・visibility・purposeを適用する。
+* LLM、debug、Auditへ送る候補本文と家族情報を最小化する。
+* write / Actionは明示対象、差分、権限、確認、監査を要求する。
+* Learning Eventへ会話全文を無条件保存しない。
+* source削除、Forget、権限変更に索引とEnrichmentを連動させる。

@@ -1,5 +1,10 @@
 # Jarvis Knowledge Enrichment
 
+> Enrichment候補の投影先となる共通Documentと現在のTravel索引は
+> [Jarvis Core Activation RAG](activation_rag.md)を参照する。SQLite / Repositoryだけを真実、
+> RAG Documentを再生成可能な索引、
+> Enrichmentをsource / confidence / approval付きの索引改善として分離する。
+
 ## Purpose and boundary
 
 Knowledge Enrichment Engineは、Raw DataとInteractionから検索・想起しやすい派生知識候補を作る
@@ -7,7 +12,7 @@ Core基盤である。Memoryとは別物である。
 
 * **Memory**: 誰にとって何が重要か、好み、思い出、判断文脈を扱う
 * **Knowledge Enrichment**: Entityをどう発見・同定・関連付けるかを支援する派生索引を扱う
-* **Domain Skill**: Trip、Experience、Photo、Calendar Eventなど正となる事実を所有する
+* **Domain Skill**: SQLite / Repository境界でTrip、Experience、Photo、Calendar Event等の正本を所有する
 
 例えば「神戸のアンパンマンミュージアム」と「まい初旅行」の関連は検索用のEntity link / alias候補
 になり得るが、それだけで本人の重要な思い出というMemoryにはならない。
@@ -45,6 +50,18 @@ status: candidate
 失敗、聞き返し、曖昧性、ユーザー修正をLearning Eventにすることで、同じ失敗を将来の検索改善に
 使える。ただし会話からの推測を正データへ直接書き戻さない。
 
+最小の関係は次の通りである。
+
+```text
+conversation / failed search / user correction
+  -> alias candidate / tag candidate / search-document update candidate
+  -> review and approval
+  -> Activation RAG Document rebuild
+```
+
+Knowledge Enrichmentが本体DBを更新することは禁止する。Domain factの修正が必要な場合は、別の明示的
+Domain writeとしてPermission、Confirmation、Auditを通す。
+
 ## Separate facts from derived data
 
 AI生成情報はTravel等の本体レコードへ混ぜない。横テーブルまたは同等の独立Storeで、正データ、
@@ -74,7 +91,8 @@ Domain Event / Learning Event
   -> confidence and provenance assignment
   -> candidate store
   -> review / approval policy
-  -> search index projection
+  -> approved projection
+  -> Provider BuilderによるRagDocument再生成
 ```
 
 Enrichment処理はChat応答の成功条件にせず、応答後の非同期処理にできる境界とする。処理失敗で会話を
@@ -104,4 +122,3 @@ Enrichment Engineではない。
 
 DB / table作成、embedding生成、会話ログ永続化、自動適用、Memory候補作成、既存Travelデータ更新は
 今回行わない。
-

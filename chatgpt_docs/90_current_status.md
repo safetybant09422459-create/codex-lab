@@ -1,8 +1,10 @@
 # Current Status
 
-更新日: 2026-06-27
+更新日: 2026-06-30
 
-> ChatGPT Projectへの新規アップロードでは `00_project_overview.md` と `99_handoff_summary.md` を入口にし、Travel / Photo / Chatの詳細は `03`〜`06` を参照する。
+> ChatGPT Projectへの新規アップロードでは `00_project_overview.md` と `99_handoff_summary.md` を入口にし、
+> Chat / Activation RAGの詳細は `06_jarvis_chat_next_phase.md` と `07_activation_rag.md`、Travel / Photoの
+> 詳細は `03`、`04` を参照する。
 
 ## 目的
 
@@ -64,6 +66,10 @@ Implemented:
 * Jarvis Shell frontend
 * Developer UI
 * Runtime Execute UI
+* Basic Chat Router v0.1
+* Chat Orchestrator / Travel Adapter
+* Evidenceを使うFinal Answer LLM経路
+* Activation RAG共通Document / in-memory index / Travel Provider PoC
 
 ## Runtime API
 
@@ -408,7 +414,12 @@ File:
 * Place Skill
 * 独立Memory Entity / 専用Memory Tool
 * Photo共有・Album更新系
-* Jarvis Chat / OpenAI API連携
+* 完全なJarvis Chat Orchestrator v2 / Capability Catalog
+* Activation RAG永続index / Provider lifecycle
+* Provider横断の完成したEntity Resolution
+* Knowledge Enrichment Engine
+* Memory / Photo / Calendar Provider
+* Capability Usage RAG
 * 一般ユーザー向けConfirmation UI
 
 実装上の注意:
@@ -431,28 +442,27 @@ python -m json.tool tools/path/to/tool.json
 curl -s http://127.0.0.1:8001/api/tools | head -c 500
 ```
 
-## Roadmap
-
-Phase:
-
-* Phase 0: GitHub管理
-* Phase 1: Jarvis Core設計
-* Phase 2: Jarvis Core実装
-* Phase 3: Calendar Module
-* Phase 4: Travel Module
-* Phase 5: Chat Operation
-* Phase 6: Home Automation
-* Phase 7: Voice
-* Phase 8: AI Improvement
-* Phase 9: Self Expansion
+## 現在のRoadmap
 
 現在地:
 
+* Basic Chat復元は完了
 * Jarvis Core / Runtime / Tool Registryのv0.1が進行中
 * TravelはExperience CRUD、Photo Link、代表画像、期間外写真検索まで実装済み
 * PhotoはImmich Adapterを通したAsset検索・取得・thumbnail / previewまで実装済み
 * Calendar / Garden / Home / DeveloperはTool候補とUI導線が中心
-* 次フェーズはJarvis Chat v0.1
+* TravelはActivation RAGの最初のProvider / PoCであり、Travel RAGではない
+
+次の優先順位:
+
+1. Activation RAG Core
+2. Travel Provider改善
+3. Entity Resolution
+4. Knowledge Enrichment
+5. Memory Provider
+6. Photo Provider
+7. Calendar Provider
+8. Capability Usage RAG検討
 
 ## Jarvis Principle Check
 

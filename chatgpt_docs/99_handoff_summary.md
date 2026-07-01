@@ -1,68 +1,96 @@
 # Handoff Summary
 
-更新日: 2026-06-27
+更新日: 2026-06-30
 
-## 現在地
+## 次回ChatGPTが最初に理解すること
 
-Jarvis Chat v0.1開始前のdocs棚卸しを実施した。Travelの実装は旧共有資料より進んでおり、Experience CRUD、Photo Link、代表画像、Experience期間外の任意期間写真検索が利用可能である。Chat / OpenAI連携自体は未実装。
+Jarvisの開発フェーズは変わった。Travel Chat改善を中心に考えない。Basic Chatの復元は完了しており、
+今後の中心はJarvis Core、Activation RAG、Entity Resolution、Knowledge Enrichmentである。
 
-## 実装と設計の一致
+## 完了したこと
 
-一致している点:
+* Basic Chat Routerにより、通常会話とTravel Skill利用を分離した。
+* 通常会話はToolなしで回答し、Travel固有の発話だけTravel Adapterへ入る。
+* Runtime経由でValidation、Permission、Confirmation、Audit、Tool実行を行う。
+* Repositoryから得たEvidenceをFinal Answer LLMへ渡す主経路を作った。
+* Pythonによる自然言語判断・固定回答生成は主経路から大きく除去した。
+* Activation RAGの共通Document、in-memory lexical index、Travel Provider PoC、Chatへのread-only候補注入を
+  実装した。
 
-- Runtime → Executor → Repository → Storage / Adapterの分離
-- Experienceを正規語としTimeline ItemをDB互換として残す方針
-- TravelとPhoto / Immichの分離
-- writeのmedium risk、confirmation、audit
-- UIを入口とし、ロジックをRuntime / Repositoryへ置く方針
+現在の要約:
 
-注意点:
+```text
+Basic Chat -> Router -> Runtime（必要時） -> Evidence -> Final Answer LLM
+```
 
-- `chatgpt_docs/10_skill_travel.md` と `90_current_status.md` の旧一覧はExperience系Tool / APIを反映していなかった
-- Skill JSONのTravel / Photoは `status: idea` のままだが、ToolとExecutorは実装済み。Skill statusだけで実装判定しない
-- `RuntimeService.execute_stub` という名称だが、Weather / Travel / Photoは実Executorを呼ぶ
-- Runtime validationは現状required field確認だけで、JSON Schema全体は検証しない
-- Permissionはadmin以外をlow-risk readに限定する。写真系medium-risk readは現状adminが必要
-- Confirmation UIは一般ユーザー向けには未実装。Chatのwriteにはpending action型確認が必要
-- AuditLoggerは現行Runtimeの成功・失敗・blockを記録し、`audit_required` 値もeventに残す
-- `get_spots` は定義されているがTravelExecutorの明示分岐がなく、Chat allowlistに含めない
+## 変えてはいけない設計思想
 
-## Chat v0.1推奨スコープ
+1. **LLM First**: LLMが意味判断と回答を担う。PythonはRuntime、Permission、Confirmation、Audit、
+   Validation、Repository等の実行基盤である。
+2. **Repository is the Source of Truth**: Activation RAGはDBを思い出す索引であり、DBの代替ではない。
+3. **候補はEvidenceではない**: RAG結果からEntity、回答、Tool実行を確定せず、Repositoryで再取得する。
+4. **TravelはPoC**: Travel RAGを作らない。TravelはJarvis Activation RAGの最初のProviderである。
+5. **CoreはProvider中立**: Travel固有の型、語彙、alias、rankingをCoreへ入れない。
+6. **Enrichmentは検索だけを育てる**: 会話、失敗検索、ユーザー修正からalias、tag、relation、検索Document
+   候補を作るが、本体DBは更新しない。
+7. **ActionとSearchを分ける**: 「テレビつけて」のActionと、「神戸で何した？」「写真ある？」の
+   Memory / Domain Searchは別設計である。
 
-read中心:
+## 次に作る順番
 
-- Trip特定とExperience一覧
-- Experience特定
-- 通常写真、明示Photo Link、任意期間写真検索
-- Trip / Experience情報からの非永続な思い出要約
+1. Activation RAG Core
+2. Travel Provider改善
+3. Entity Resolution
+4. Knowledge Enrichment
+5. Memory Provider
+6. Photo Provider
+7. Calendar Provider
+8. Capability Usage RAG検討
 
-write:
+Capability Usage RAGは、Skill / Toolの承認済み利用例を検索してCapability選択を補助する将来案である。
+まだ実装しない。Capability Catalog、Tool schema、Runtime Gateを置き換えず、ActionとSearchを混同しない
+評価条件が整ってから検討する。
 
-- `update_experience` のmemo更新だけから開始
-- 対象、変更前、変更後を示し、人間の確認操作に束縛した後で実行
+## 直近の設計・実装で確認すること
 
-UIは最上位Jarvis画面へ置き、Travel詳細は既存Travel画面へdeep linkする。OpenAI APIはserver-sideだけで呼び、Runtimeを迂回しない。
+* Provider / Builder / Searchの共通契約にTravel固有fieldが入っていないか。
+* owner、visibility、purposeを検索前に適用しているか。
+* 0件、複数件、stale、削除、権限変更、検索障害を扱えるか。
+* Entity Resolution後にRepositoryから正本を再取得しているか。
+* Learning Eventが会話全文を無条件保存していないか。
+* Enrichment候補にsource、confidence、approval、visibility、失効経路があるか。
+* write / ActionがPermission、Confirmation、Auditを通るか。
 
-## 次の実装タスク候補
+## 未実装として扱うもの
 
-1. Chat v0.1 ADRとthreat model
-2. 認証・role mappingとPhoto read権限決定
-3. Chat request / response / tool-call schema
-4. server-side orchestratorとTool allowlist
-5. pending action型confirmation
-6. Jarvis画面のChat UI
-7. 代表4ユースケースの統合テスト
-8. token / Tool call / rate / daily budget制限
+* 完全なOrchestrator v2 / Capability Catalog
+* Activation RAGの永続indexとProvider lifecycle
+* Provider横断の完成したEntity Resolution
+* Knowledge Enrichment Engine
+* Memory / Photo / Calendar Provider
+* Capability Usage RAG
+* 実ユーザー認証と一般ユーザー向けConfirmation UI
 
-## ChatGPTへ渡す推奨8ファイル
+## 優先して読む資料
 
-1. `00_project_overview.md`
-2. `01_principles_and_constitution.md`
-3. `02_runtime_and_tools.md`
-4. `03_travel_skill_current.md`
-5. `04_photo_skill_current.md`
-6. `05_developer_workflow.md`
-7. `06_jarvis_chat_next_phase.md`
-8. `99_handoff_summary.md`
+* `00_project_overview.md`: 全体の現在地
+* `01_jarvis_constitution.md`: 判断原則
+* `02_jarvis_architecture.md`: 責務境界
+* `06_jarvis_chat_next_phase.md`: Chatの完了点と次フェーズ
+* `07_activation_rag.md`: Activation RAGの引き継ぎ要点
+* `99_handoff_summary.md`: この要約
 
-必要に応じて `99_glossary.md` を9番目に追加する。
+詳細の正本は `docs/chat_core.md`、`docs/context_assembly.md`、`docs/activation_rag.md`、
+`docs/knowledge_enrichment.md` と現行コードで確認する。実装判定は引き継ぎ要約だけに依存せず、README、
+通常docs、コードと照合する。
+
+## Jarvis Principle Check
+
+1. Web UIから利用できるか: Chat / Jarvis Shellから利用できる設計である。
+2. API / Toolとして利用できるか: Chat API、Runtime API、Core service境界から利用できる。
+3. 将来MCP Tool化できるか: Provider中立契約とRuntime境界を保てば可能。
+4. Jarvis Coreから呼び出せるか: Activation SearchはCoreのread-only補助として呼び出す。
+5. UI依存のロジックになっていないか: 判断・検索・実行はCore / Provider / Runtime / Repositoryに置く。
+6. 読み取り系か更新系か: Activation検索はread。索引・Enrichmentは派生データ更新。Domain writeではない。
+7. 副作用・権限・プライバシー上の注意: 家族情報、位置、写真、予定を扱うため検索前認可、最小化、
+   Forget / visibility連動が必要。Action / Domain writeは確認と監査を必須にする。

@@ -8,6 +8,7 @@ AI開発練習用
 主要設計文書:
 
 - [Jarvis Chat Core / Orchestrator v2](docs/chat_core.md)
+- [Jarvis Core Activation RAG](docs/activation_rag.md)
 - [Context Assembly](docs/context_assembly.md)
 - [Jarvis Memory Architecture](docs/memory_architecture.md)
 - [Knowledge Enrichment](docs/knowledge_enrichment.md)
@@ -61,6 +62,7 @@ Implemented:
 - Permission Engine v0.1
 - Weather Executor v0.1 (`execution_mode: local_weather_stub`)
 - Travel Runtime Read v0.1 (`execution_mode: local_travel_read`)
+- Activation RAG Travel Provider PoC（read-only候補想起。正本はSQLite / Repository）
 - Chat Core v0.2 Foundation（[設計原則と責務](docs/chat_core.md)、既存Chat API互換）
 - Clarification & Candidate Fallback v0.1（曖昧質問への候補提示、最新3件、Reason Trace）
 - Jarvis Benchmark v0.3（[Root Cause分析、Improvement Opportunities、Diff、Baseline、Regression検知](docs/chat_eval.md)）
@@ -80,6 +82,11 @@ Not Yet Implemented:
 ToolなしでJarvis LLMへ渡し、Travel固有の発話だけ既存Travel Planner / Executor / Answer Generatorへ
 委譲する。Router出力はserver-sideで検証し、判定失敗時はRuntimeを呼ばないBasic Chatへfallbackする。
 Capability Catalog、Memory RAG、複数Skill連携は未実装である。
+
+Activation RAGはTravel専用検索ではなく、Jarvis Coreが正本Entityを思い出すためのread-only索引である。
+DBやRuntimeを置き換えず、Entity Resolutionへ未検証候補を渡す。Travelは最初のProvider / PoCであり、
+Photo、Calendar、Memory ProviderとCapability Usage RAGは将来範囲、Home ActionはRAG対象外とする。
+詳細は[Jarvis Core Activation RAG](docs/activation_rag.md)を参照する。
 
 Travel Runtime Read v0.1 は実装済み。Runtime safety layer 経由で `backend/travel_executor.py` の `TravelExecutor` が呼ばれ、`backend/travel_repository.py` と `backend/travel_sources.py` のローカル読み取りデータを返す。
 

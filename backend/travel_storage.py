@@ -1,6 +1,8 @@
 import json
 import sqlite3
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -12,9 +14,15 @@ TRAVEL_DB_PATH = ROOT_DIR / "storage" / "travel.db"
 
 
 class SQLiteTravelStorage:
-    def __init__(self, db_path: Path = TRAVEL_DB_PATH) -> None:
+    def __init__(
+        self,
+        db_path: Path = TRAVEL_DB_PATH,
+        *,
+        initialize: bool = True,
+    ) -> None:
         self.db_path = db_path
-        self.initialize()
+        if initialize:
+            self.initialize()
 
     def initialize(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -552,11 +560,16 @@ class SQLiteTravelStorage:
             ).fetchone()
         return self._row_to_dict(row) if row is not None else None
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
-        return conn
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def _row_to_dict(self, row: sqlite3.Row) -> dict[str, Any]:
         return dict(row)

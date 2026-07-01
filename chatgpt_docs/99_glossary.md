@@ -24,7 +24,7 @@ UI上のトップ画面。
 
 単なる固定ダッシュボードではなく、Jarvis Coreが複数Skillの情報を統合し、今見せるべきものを表示する入口。
 
-現時点では「喋らないJarvis」として扱う。
+現在はBasic Chatの入口を持ち、Core / Skill結果の表示先でもある。
 
 ## Jarvis Shell
 

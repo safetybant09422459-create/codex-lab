@@ -35,6 +35,18 @@ Tool Registry
 Skill Registry
 ```
 
+read-onlyの候補想起では、CoreからRuntimeと並列の補助層としてActivation RAGを呼ぶ。Activation RAGは
+SQLite / Repositoryの正本を思い出す索引であり、RuntimeやRepositoryを置き換えない。
+
+```text
+Jarvis Core
+  -> Activation RAG -> unverified Entity candidates
+  -> Entity Resolution
+  -> Runtime / Domain Repository -> canonical Evidence
+```
+
+詳細は[Jarvis Core Activation RAG](activation_rag.md)を参照する。
+
 Runtime は Implemented (v0.1) として、Tool Registry に登録されたTool定義の取得、必須入力の検証、dry-run、stub execution を扱う。
 
 現在は Permission Engine、Confirmation Engine、Audit Log、Executor Registry、Weather Executor、Travel Executor、Travel Runtime v0.1 も実装済みである。Travel Runtime v0.1は `SQLiteTravelStorage` による `storage/travel.db` のlocal DB-backed read/writeを含み、`travel.create_trip` と `travel.create_timeline_item` はguarded writeとして扱う。外部APIを使うReal Tool Execution、追加write tools、MCP Tool化は別フェーズで扱う。
@@ -293,6 +305,27 @@ Memory Skillの責務:
 
 MemoryはAI Agentの長期文脈であり、SkillのDBではない。TravelのTripやPhotoのAssetのようなドメインデータは各Skillが持ち、Memoryはそこから抽出された意味や体験を扱う。
 
+### Activation RAGとの境界
+
+Activation RAGは、現在発話から正本Entity候補を軽く広く想起し、Entity Resolutionを補助する
+Jarvis Coreのread-only検索層である。DBの代替ではなくDBを思い出すための索引であり、Runtimeの
+validation、Permission、Confirmation、Audit、実行責務を持たない。
+
+Coreに置く共通責務:
+
+* Provider中立の`RagDocument` / `RagSearchResult`契約
+* 認可scopeを受け取る`ActivationSearch`
+* Provider登録、検索上限、timeout、部分障害の調停
+
+Provider / Builderに置く責務:
+
+* Domain Repositoryからの認可済みread
+* Domain Entityから再生成可能な検索Documentへのprojection
+* Domain固有の語彙、alias、metadata、visibility継承
+
+Travelは最初のProvider / PoCである。Photo、Calendar、Memoryは将来Providerとし、Homeは現実世界へ
+作用するActionなのでActivation RAG対象外とする。CoreへTravel固有型を追加しない。
+
 ### AI Agentとの境界
 
 AI Agentは、ユーザー要求を解釈し、計画し、Toolを選び、結果を説明する判断層である。
@@ -322,6 +355,7 @@ AI AgentはToolを直接実行しない。実行はRuntimeを通す。CoreはAI 
 | Component | 役割 | Coreとの関係 | 主な注意 |
 | --- | --- | --- | --- |
 | Memory | 継続的な文脈、人格、Preference、Decision、Lessonを保存する | Coreが読み書きする記憶層 | private / family / sharedの可視性が必要 |
+| Activation RAG | SQLite / Repositoryの正本Entity候補を想起する | Entity Resolution前のread-only補助 | 検索結果は正本・Evidence・実行許可ではない |
 | Skill Router | ユーザー要求やAI Agentの意図から候補Skill / Toolを選ぶ | CoreとAI Agentの間で候補選択を補助する | UIボタン名に依存しない |
 | Notification | 出発時間、予定、提案、確認待ちをユーザーへ通知する | Coreがイベントや確認要求を通知へ渡す | 外部送信、家族通知、既読管理に注意 |
 | User Context | 誰が、どこで、何のために使っているかを表す | Coreのすべての判断に付与される | 権限、年齢、端末、場所を扱う可能性がある |

@@ -7,9 +7,51 @@ from backend.basic_chat import handle_basic_chat
 from backend.chat_core import ConversationTurn
 from backend.chat_router import handle_chat
 from backend import chat_router
+from backend.rag_core import RagDocument, RagSearchResult
 
 
 class ChatRouterTest(unittest.TestCase):
+    def test_activation_candidates_are_hints_and_do_not_execute_travel(self) -> None:
+        captured = {}
+
+        def route_generator(**kwargs):
+            captured.update(kwargs)
+            return json.dumps({"route": "basic", "confidence": "high"}), None
+
+        activation = RagSearchResult(
+            document=RagDocument(
+                id="travel:experience:item-1",
+                source_skill="travel",
+                entity_type="experience",
+                entity_id="item-1",
+                text="福岡旅行 マリンワールド海の中道 水族館",
+                metadata={"trip_id": "trip-1"},
+                visibility="private",
+                updated_at=datetime(2026, 6, 20, tzinfo=timezone.utc),
+            ),
+            score=0.9,
+            matched_terms=["福岡", "水族館"],
+            reason="lexical terms",
+        )
+
+        with (
+            patch.object(chat_router, "activation_search", return_value=[activation]),
+            patch.object(chat_router, "handle_travel_chat") as travel,
+        ):
+            result = handle_chat(
+                "福岡で水族館に行ったのいつ？",
+                route_text_generator=route_generator,
+                basic_text_generator=lambda **_: ("確認できません。", None),
+                debug=True,
+            )
+
+        travel.assert_not_called()
+        self.assertIn("unverified recall hints", captured["input_text"])
+        self.assertTrue(result["debug"]["activation_candidates_present"])
+        self.assertTrue(result["debug"]["activation_supplied_to_router"])
+        self.assertNotIn("activation_used", result["debug"])
+        self.assertNotIn("text", result["debug"]["activation_results"][0])
+
     def test_basic_chat_answers_without_calling_travel(self) -> None:
         route_generator = lambda **_: (  # noqa: E731
             json.dumps({"route": "basic", "confidence": "high"}),
