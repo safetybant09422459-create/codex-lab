@@ -97,18 +97,40 @@ class DiffResponse(BaseModel):
     diff: str
 
 
-class CommitRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=2000)
-
-
-class GitActionResponse(BaseModel):
-    ok: bool
-    output: str
-
-
-class PushRequest(BaseModel):
+class GitCommitPushRequest(BaseModel):
     confirm: bool
-    confirm_text: str = Field(max_length=80)
+    expected_snapshot: str = Field(min_length=64, max_length=64)
+    ignored_finding_ids: list[str] = Field(default_factory=list)
+
+
+class GitPreflightFinding(BaseModel):
+    id: str
+    rule: str
+    file: str
+    line: int
+    detected_text: str
+    remediation: str
+    ignorable: bool
+
+
+class GitPreflightResponse(BaseModel):
+    ok: bool
+    blockers: list[str]
+    files: list[str]
+    summary: str
+    commit_message: str
+    head: str
+    branch: str
+    upstream: str
+    snapshot: str
+    findings: list[GitPreflightFinding]
+
+
+class GitCommitPushResponse(GitPreflightResponse):
+    committed: bool
+    pushed: bool
+    commit_hash: str = ""
+    push_output: str = ""
 
 
 class ServiceResponse(BaseModel):

@@ -219,11 +219,18 @@
             <h2>Git操作</h2>
             <span id="git-message" class="status">Commit / Push は人間の操作時のみ実行</span>
           </div>
-          <label for="commit-message">Commit message</label>
-          <input id="commit-message" type="text" value="Update Jarvis Dev v0.3" />
           <div class="git-buttons">
-            <button id="commit-button" type="button">Commit</button>
-            <button id="push-button" class="secondary" type="button">Push</button>
+            <button id="commit-push-button" type="button">Commit &amp; Push</button>
+          </div>
+          <div id="preflight-failure" class="preflight-failure" hidden>
+            <h3>Preflight failed</h3>
+            <div id="preflight-blockers"></div>
+            <div id="preflight-findings"></div>
+            <div class="git-buttons">
+              <button id="preflight-open-diff" class="secondary" type="button">Open Diff</button>
+              <button id="preflight-ignore-once" class="danger" type="button">Ignore Once</button>
+              <button id="preflight-cancel" class="secondary" type="button">Cancel</button>
+            </div>
           </div>
         </div>
       </section>

@@ -8,17 +8,18 @@ from . import codex_api
 from .chat_router import handle_chat
 from .config import FRONTEND_DIR, ROOT_DIR, SKILLS_DIR, TOOLS_DIR
 from .git_api import file_diff, git, git_changes
+from .git_workflow import GitWorkflow, redact_secrets
 from .models import (
     AuditResponse,
     ChatRequest,
     ChatResponse,
     ChangesResponse,
-    CommitRequest,
     DiffResponse,
-    GitActionResponse,
+    GitCommitPushRequest,
+    GitCommitPushResponse,
+    GitPreflightResponse,
     LogResponse,
     ProjectResponse,
-    PushRequest,
     RuntimeDryRunResponse,
     RuntimeExecuteResponse,
     RuntimeRequest,
@@ -51,6 +52,7 @@ app = FastAPI(title="Jarvis Dev v0.3")
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR / "static"), name="static")
 runtime_service = RuntimeService()
 photo_repository = PhotoRepository()
+git_workflow = GitWorkflow(git)
 CHAT_SERVER_ROLE = "admin"
 
 JARVIS_PRINCIPLE_CHECK = """\
@@ -1031,36 +1033,48 @@ async def get_changes() -> ChangesResponse:
 
 @app.get("/api/diff", response_model=DiffResponse)
 async def get_diff(path: str) -> DiffResponse:
-    return DiffResponse(path=path, diff=await file_diff(path))
+    return DiffResponse(path=path, diff=redact_secrets(await file_diff(path)))
 
 
-@app.post("/api/commit", response_model=GitActionResponse)
-async def commit_changes(request: CommitRequest) -> GitActionResponse:
+@app.get("/api/git/preflight", response_model=GitPreflightResponse)
+async def git_preflight() -> GitPreflightResponse:
     if codex_api.is_running():
         raise HTTPException(status_code=409, detail="Codex is still running.")
-
-    changes = await git_changes()
-    if not changes.files:
-        raise HTTPException(status_code=400, detail="No changes to commit.")
-
-    message = request.message.strip()
-    if not message:
-        raise HTTPException(status_code=400, detail="Commit message is required.")
-
-    await git("add", "-A")
-    output = await git("commit", "-m", message)
-    return GitActionResponse(ok=True, output=output)
+    report = await git_workflow.preflight()
+    runtime_service.audit_logger.append(
+        {
+            "event": "developer.git_preflight",
+            "success": report.ok,
+            "file_count": len(report.files),
+            "blockers": report.blockers,
+        }
+    )
+    return GitPreflightResponse(**report.as_dict())
 
 
-@app.post("/api/push", response_model=GitActionResponse)
-async def push_changes(request: PushRequest) -> GitActionResponse:
+@app.post("/api/git/commit_push", response_model=GitCommitPushResponse)
+async def git_commit_push(request: GitCommitPushRequest) -> GitCommitPushResponse:
     if codex_api.is_running():
         raise HTTPException(status_code=409, detail="Codex is still running.")
-    if not request.confirm or request.confirm_text != "PUSH":
-        raise HTTPException(status_code=400, detail="Push requires two confirmations.")
-
-    output = await git("push")
-    return GitActionResponse(ok=True, output=output)
+    if not request.confirm:
+        raise HTTPException(status_code=400, detail="Explicit UI confirmation is required.")
+    result = await git_workflow.commit_push(
+        request.expected_snapshot, request.ignored_finding_ids
+    )
+    runtime_service.audit_logger.append(
+        {
+            "event": "developer.git_commit_push",
+            "success": bool(result["ok"]),
+            "committed": bool(result["committed"]),
+            "pushed": bool(result["pushed"]),
+            "commit_hash": result.get("commit_hash", ""),
+            "blockers": result["blockers"],
+            "ignored_finding_ids": request.ignored_finding_ids,
+        }
+    )
+    if not result["ok"]:
+        raise HTTPException(status_code=409, detail="; ".join(result["blockers"]))
+    return GitCommitPushResponse(**result)
 
 
 @app.get("/api/service/status", response_model=ServiceResponse)

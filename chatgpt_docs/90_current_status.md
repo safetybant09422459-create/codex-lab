@@ -119,15 +119,16 @@ Repository / Adapter / Storage
 * `GET /api/logs`
 * `GET /api/changes`
 * `GET /api/diff?path=<path>`
-* `POST /api/commit`
-* `POST /api/push`
+* `GET /api/git/preflight`
+* `POST /api/git/commit_push`
 * `GET /api/service/status`
 * `POST /api/service/restart`
 
 注意:
 
 * この依頼ではgit commit / git pushは禁止。
-* Jarvis Dev UIにはCommit / Push機能があるが、人間の明示操作用である。
+* Jarvis Dev UIにはbackend preflight付きのCommit & Push機能があるが、人間の明示操作用である。
+* Codex CLIはcommit/push禁止のままであり、Git更新はUI確認後の専用APIだけが実行する。
 * Service restartは確認付きの管理操作として扱う。
 
 ## Travel API

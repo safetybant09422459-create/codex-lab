@@ -53,40 +53,96 @@ export async function refreshChanges() {
 }
 
 export function bindGitActions() {
-  elements.commitButton.addEventListener("click", async () => {
-    const message = elements.commitMessage.value.trim();
-    if (!message) {
-      setStatus(elements.gitMessage, "コミットメッセージを入力してください", true);
-      return;
-    }
+  let failedPreflight = null;
+
+  function closePreflightFailure() {
+    failedPreflight = null;
+    elements.preflightFailure.hidden = true;
+  }
+
+  function showPreflightFailure(preflight) {
+    failedPreflight = preflight;
+    elements.preflightBlockers.innerHTML = preflight.blockers.map((blocker) =>
+      `<p>${escapeHtml(blocker)}</p>`
+    ).join("");
+    elements.preflightFindings.innerHTML = preflight.findings.map((finding) => `
+      <article class="preflight-finding">
+        <dl>
+          <dt>Failed rule</dt><dd>${escapeHtml(finding.rule)}</dd>
+          <dt>File</dt><dd>${escapeHtml(finding.file)}</dd>
+          <dt>Line</dt><dd>${finding.line}</dd>
+          <dt>Detected</dt><dd><code>${escapeHtml(finding.detected_text)}</code></dd>
+          <dt>How to fix</dt><dd>${escapeHtml(finding.remediation)}</dd>
+        </dl>
+      </article>
+    `).join("");
+    elements.preflightIgnoreOnce.hidden = !preflight.findings.length
+      || preflight.findings.some((finding) => !finding.ignorable)
+      || preflight.blockers.some((blocker) =>
+        blocker !== "A possible secret was detected in the diff."
+      );
+    elements.preflightFailure.hidden = false;
+  }
+
+  async function commitPush(preflight, ignoredFindingIds) {
+    const data = await api("/api/git/commit_push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        confirm: true,
+        expected_snapshot: preflight.snapshot,
+        ignored_finding_ids: ignoredFindingIds,
+      }),
+    });
+    closePreflightFailure();
+    setStatus(elements.gitMessage, `成功: ${data.commit_hash}\n${data.push_output}`);
+    await refreshChanges();
+    await loadProject();
+  }
+
+  elements.preflightCancel.addEventListener("click", closePreflightFailure);
+  elements.preflightOpenDiff.addEventListener("click", () => {
+    if (!failedPreflight || !failedPreflight.findings.length) return;
+    const path = failedPreflight.findings[0].file;
+    const pre = Array.from(elements.diffList.querySelectorAll("[data-diff-path]"))
+      .find((item) => item.dataset.diffPath === path);
+    if (!pre) return;
+    const details = pre.closest("details");
+    if (details) details.open = true;
+    pre.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+  elements.preflightIgnoreOnce.addEventListener("click", async () => {
+    if (!failedPreflight) return;
+    const approved = confirm(
+      "Secret検出を今回だけ無視してcommit / pushします。内容をDiffで確認済みですか？"
+    );
+    if (!approved) return;
     try {
-      const data = await api("/api/commit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
-      });
-      setStatus(elements.gitMessage, data.output || "Committed");
-      await refreshChanges();
-      await loadProject();
+      await commitPush(
+        failedPreflight,
+        failedPreflight.findings.map((finding) => finding.id)
+      );
     } catch (error) {
       setStatus(elements.gitMessage, error.message, true);
     }
   });
 
-  elements.pushButton.addEventListener("click", async () => {
-    if (!confirm("git push を実行します。続行しますか？")) {
-      return;
-    }
-    const typed = prompt("二重確認: PUSH と入力してください");
+  elements.commitPushButton.addEventListener("click", async () => {
     try {
-      const data = await api("/api/push", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirm: true, confirm_text: typed || "" }),
-      });
-      setStatus(elements.gitMessage, data.output || "Pushed");
-      await refreshChanges();
-      await loadProject();
+      setStatus(elements.gitMessage, "安全チェックを実行中...");
+      const preflight = await api("/api/git/preflight");
+      if (!preflight.ok) {
+        showPreflightFailure(preflight);
+        setStatus(elements.gitMessage, "Preflight failed", true);
+        return;
+      }
+      const approved = confirm(
+        `以下をcommitして ${preflight.upstream} へpushします。\n\n`
+        + `${preflight.commit_message}\n\n${preflight.summary}\n\n`
+        + `${preflight.files.join("\n")}\n\n続行しますか？`
+      );
+      if (!approved) return;
+      await commitPush(preflight, []);
     } catch (error) {
       setStatus(elements.gitMessage, error.message, true);
     }

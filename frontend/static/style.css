@@ -742,6 +742,31 @@ textarea:focus {
   flex-wrap: wrap;
 }
 
+.preflight-failure {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #9d3d3d;
+  border-radius: 12px;
+  background: rgba(120, 24, 24, 0.12);
+}
+
+.preflight-finding {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.preflight-finding dl {
+  display: grid;
+  grid-template-columns: minmax(90px, 120px) 1fr;
+  gap: 8px 12px;
+  margin: 0;
+}
+
+.preflight-finding dt { color: var(--muted); }
+.preflight-finding dd { margin: 0; overflow-wrap: anywhere; }
+
 .runtime-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(120px, 180px);
