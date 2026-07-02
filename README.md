@@ -14,6 +14,7 @@ AI開発練習用
 - [Context Assembly](docs/context_assembly.md)
 - [Jarvis Memory Architecture](docs/memory_architecture.md)
 - [Knowledge Enrichment](docs/knowledge_enrichment.md)
+- [Conversation Quality Test](docs/conversation_quality_test.md)
 
 vNextの目標では、Webは複数Channelの一つであり、意味判断は単一のLLM Agent Loopへ集約する。
 現行のRouter、Planner、Entity Resolver、Answer Generator等は移行中の互換コンポーネントであり、

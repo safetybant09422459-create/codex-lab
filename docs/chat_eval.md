@@ -1,5 +1,9 @@
 # Jarvis Benchmark v0.3
 
+> Router、Planner、Answer Generator等の統合・削除後も、返答文ではなく責務、安全、根拠、Capability品質を
+> 継続評価する上位方針は[Conversation Quality Test](conversation_quality_test.md)を参照する。本書のBenchmarkは
+> 現行Travel実装を診断する既存基盤であり、Conversation Quality Test全体の実装を意味しない。
+
 Jarvis Benchmarkは、固定質問を既存Chat Orchestratorへ通し、従来Runtimeのread結果を基準に会話品質を継続比較する開発者向け評価基盤である。PASS/FAILだけでなく失敗レイヤーとRoot Causeを定量化し、次に改善する場所を決める。本番Chat APIの契約やBrowser挙動は変更しない。
 
 Benchmark Versionは`Jarvis Benchmark v0.3`である。v0.2までのJSONフィールドを維持したままRoot Cause分析フィールドを追加する。
