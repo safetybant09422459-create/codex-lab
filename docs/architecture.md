@@ -19,20 +19,21 @@ vNextの目標構造:
 
 ```text
 Channel
-  -> Agent Host
-  -> LLM Agent Loop
-  -> Action Gateway
-  -> Domain Capability
-  -> Grounded Fact
+  -> Jarvis Core boundary
+       -> LLM Agent Loop
+       -> Runtime
+       -> Skill
+       -> Repository
 
-Life Context -> Agent Host / LLM Agent Loop
-Recall Index -> unverified candidates only
+Memory -> permitted life context
+Activation RAG -> optional, unverified candidates only
 ```
 
-LLM Agent Loopが意図理解、Capability選択、arguments生成、Fact十分性、Clarification、最終回答を担う。
+LLM Agent Loopが意図理解、Skill / Tool選択、arguments生成、事実の十分性評価、Clarification、最終回答を担う。
 PythonはSession、Principal、budget、validation、authorization、confirmation、audit、execution、timeout、
-retry、redactionなどの決定的処理を担い、自然言語の意味判断を持たない。現行RuntimeはAction Gatewayへ、
-Activation RAGはRecall Indexへ段階移行する。
+retry、redactionなどの決定的処理をRuntime、Skill、Repository境界で担い、自然言語の意味判断を持たない。
+Action Gateway、Domain Capability、Recall Indexは既存責務の別名として必須化せず、Grounded Factは検証済み
+Tool結果のStateとして扱う。名称変更は責務移行後に必要性を再評価する。
 
 ```text
 Jarvis

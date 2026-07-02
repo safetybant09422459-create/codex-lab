@@ -17,7 +17,7 @@ AI開発練習用
 
 vNextの目標では、Webは複数Channelの一つであり、意味判断は単一のLLM Agent Loopへ集約する。
 現行のRouter、Planner、Entity Resolver、Answer Generator等は移行中の互換コンポーネントであり、
-完成形の独立層ではない。PythonはAgent Host / Action Gateway / Domain Capabilityの決定的処理を担う。
+完成形の独立層ではない。Pythonは既存のRuntime、Skill、Repository境界で決定的処理を担う。
 
 対象ディレクトリは固定で `/mnt/nas/projects/codex-lab`。
 本番旅行アプリ `/mnt/nas/projects/project` は対象外。
