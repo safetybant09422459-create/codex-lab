@@ -1151,16 +1151,13 @@ class ChatOrchestratorTest(unittest.TestCase):
             captured.update(kwargs)
             return "福岡旅行では、屋台でラーメンを食べた記録があります。", None
 
-        with patch.object(
-            chat_orchestrator.travel_answer_generator, "generate"
-        ) as travel_fallback:
-            result = chat_orchestrator.handle_travel_chat(
-                "福岡旅行のご飯何食べた？",
-                debug=True,
-                text_generator=json_generator(proposal),
-                final_answer_text_generator=final_generator,
-                runtime=runtime,
-            )
+        result = chat_orchestrator.handle_travel_chat(
+            "福岡旅行のご飯何食べた？",
+            debug=True,
+            text_generator=json_generator(proposal),
+            final_answer_text_generator=final_generator,
+            runtime=runtime,
+        )
 
         self.assertEqual(
             result["reply"],
@@ -1170,7 +1167,6 @@ class ChatOrchestratorTest(unittest.TestCase):
         self.assertTrue(result["debug"]["evidence_used"])
         self.assertEqual(result["debug"]["final_answer_source"], "llm")
         self.assertIsNone(result["debug"]["final_answer_fallback_reason"])
-        travel_fallback.assert_not_called()
         self.assertIn("屋台でラーメン", captured["input_text"])
         self.assertNotIn('"trips"', captured["input_text"])
         self.assertEqual(
@@ -1178,7 +1174,7 @@ class ChatOrchestratorTest(unittest.TestCase):
             ["get_trips", "get_trip_timeline"],
         )
 
-    def test_final_answer_failure_invokes_travel_generator_lazily(self) -> None:
+    def test_final_answer_failure_does_not_reinterpret_question_in_python(self) -> None:
         trip = {"id": "trip-fukuoka", "title": "福岡旅行"}
         runtime = FakeRuntimeService(
             response=[
@@ -1201,25 +1197,20 @@ class ChatOrchestratorTest(unittest.TestCase):
             "entity_query": "福岡旅行",
         }
 
-        with patch.object(
-            chat_orchestrator.travel_answer_generator,
-            "generate",
-            wraps=chat_orchestrator.travel_answer_generator.generate,
-        ) as travel_fallback:
-            result = chat_orchestrator.handle_travel_chat(
-                "福岡旅行のご飯何食べた？",
-                debug=True,
-                text_generator=json_generator(proposal),
-                final_answer_text_generator=lambda **_: (_ for _ in ()).throw(
-                    RuntimeError("unavailable")
-                ),
-                runtime=runtime,
-            )
+        result = chat_orchestrator.handle_travel_chat(
+            "福岡旅行のご飯何食べた？",
+            debug=True,
+            text_generator=json_generator(proposal),
+            final_answer_text_generator=lambda **_: (_ for _ in ()).throw(
+                RuntimeError("unavailable")
+            ),
+            runtime=runtime,
+        )
 
-        travel_fallback.assert_called_once()
+        self.assertEqual(result["reply"], "旅行タイムラインを取得しました。")
         self.assertEqual(
             result["debug"]["final_answer_source"],
-            "fallback_travel_answer_generator",
+            "fallback_static",
         )
         self.assertEqual(
             result["debug"]["final_answer_fallback_reason"],

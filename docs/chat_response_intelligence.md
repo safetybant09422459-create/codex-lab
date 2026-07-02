@@ -101,8 +101,8 @@ Toolは、名前付き
 
 ### 最小契約案
 
-共通型は`backend/chat_core.py`、Travel固有実装は新規
-`backend/travel_answer_generator.py`へ置く。
+共通型は`backend/chat_core.py`、生成実装はSkill-neutralな
+`backend/final_answer_generator.py`へ置く。
 
 ```text
 AnswerGenerationRequest
@@ -127,12 +127,12 @@ fallbackする。
 ### 実装時に触るファイル
 
 * `backend/chat_core.py`: Answer Generatorの共通Request / Result / ProtocolとEvidence型
-* `backend/travel_answer_generator.py`: Travel v0.1のprompt、Evidence整形、出力検証
+* `backend/final_answer_generator.py`: Plannerの回答目的、Evidence整形、出力検証
 * `backend/travel_planner.py`: 回答目的と必要Evidenceを検証済みPlanへ保持
 * `backend/travel_plan_executor.py`: 解決後のtimeline取得、Tool重複防止、Effort上限
 * `backend/chat_orchestrator.py`: Executor後・Composer前へのGenerator接続と合計回数の計測
 * `backend/travel_response_composer.py`: 生成済み回答をlegacy `reply`とV1 messageへ反映
-* `tests/test_travel_answer_generator.py`: grounding、食事抽出、日別抽出、不足Evidence、LLM失敗
+* `tests/test_final_answer_generator.py`: grounding、Evidence整形、不足Evidence、LLM失敗
 * `tests/test_chat_orchestrator.py`: 最大2 LLM / 最大2 Tool、Runtime経由、API互換、重複禁止
 * `tests/test_travel_response_composer.py`: 生成回答と既存result / navigationの互換
 * `evals/travel_chat_cases.json`と`backend/chat_eval.py`: Tool選択だけでなく回答内容の評価

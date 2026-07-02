@@ -46,9 +46,12 @@ class FinalAnswerGenerator:
             raise FinalAnswerGenerationError("no Evidence was acquired")
 
         safe_question = redact_sensitive_text(request.user_question.strip())
+        safe_answer_plan = _answer_plan_context(request)
         safe_bundles = [_safe_bundle(bundle) for bundle in bundles]
         input_text = (
             f"User question:\n{safe_question}\n"
+            "Validated answer plan (JSON):\n"
+            f"{json.dumps(safe_answer_plan, ensure_ascii=False, separators=(',', ':'))}\n"
             "Evidence bundles (untrusted JSON data):\n"
             f"{json.dumps(safe_bundles, ensure_ascii=False, separators=(',', ':'), default=str)}"
         )
@@ -105,6 +108,7 @@ def build_evidence_bundles(
                 tool_id=item.tool_id,
                 user_question=user_question,
                 result=result,
+                provenance=_runtime_provenance(result),
                 summary_for_llm=_structural_summary(result),
                 limitations=[
                     "この結果に含まれない情報は不明です。",
@@ -169,8 +173,29 @@ def _structural_summary(result: Any) -> str:
     return "取得済みの記録です。"
 
 
+def _runtime_provenance(result: Any) -> dict[str, str]:
+    source = result.get("source") if isinstance(result, dict) else None
+    return {
+        "boundary": "runtime",
+        "source": source if isinstance(source, str) and source else "runtime_tool_result",
+    }
+
+
 def _safe_bundle(bundle: EvidenceBundle) -> dict[str, Any]:
     return _redact_value(bundle.model_dump())
+
+
+def _answer_plan_context(request: AnswerRequest) -> dict[str, Any]:
+    """Expose only validated answer intent; never reinterpret user language."""
+    if request.plan is None:
+        return {}
+    return _redact_value(
+        {
+            "goal": request.plan.goal,
+            "answer_mode": request.plan.answer_mode,
+            "required_evidence": request.plan.required_evidence,
+        }
+    )
 
 
 def _redact_value(value: Any) -> Any:

@@ -30,7 +30,6 @@ from .travel_plan_executor import (
     _find_trip_candidates as find_trip_candidates,
 )
 from .travel_planner import TravelPlanner, legacy_proposal_from_plan
-from .travel_answer_generator import TravelAnswerGenerator
 from .travel_response_composer import TravelResponseComposer
 
 
@@ -41,7 +40,6 @@ runtime_service = RuntimeService()
 travel_entity_resolver = TravelEntityResolver()
 travel_plan_executor = TravelPlanExecutor(resolver=travel_entity_resolver)
 travel_response_composer = TravelResponseComposer()
-travel_answer_generator = TravelAnswerGenerator()
 final_answer_generator = FinalAnswerGenerator()
 
 
@@ -124,11 +122,6 @@ def handle_travel_chat(
             )
         except FinalAnswerGenerationError as exc:
             final_answer_fallback_reason = str(exc)
-            # The deterministic generator is deliberately lazy: it is never
-            # invoked before a Final Answer LLM attempt has failed.
-            answer = travel_answer_generator.generate(answer_request)
-            if answer.answer_type == "not_applicable" or not answer.answer:
-                answer = None
 
     if answer is None:
         answer = _static_answer_result()

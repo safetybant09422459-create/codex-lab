@@ -140,10 +140,24 @@ class FixedProposalGenerator:
 
 
 class FixedFinalAnswerGenerator:
-    """Exercise the deterministic fallback without an external LLM call."""
+    """Return case-owned fixture text without an external LLM call."""
+
+    def __init__(self, case: dict[str, Any]) -> None:
+        expected = case.get("expected_reply_contains")
+        alternatives = case.get("expected_reply_contains_any")
+        if isinstance(expected, str) and expected:
+            self.reply = expected
+        elif (
+            isinstance(alternatives, list)
+            and alternatives
+            and isinstance(alternatives[0], str)
+        ):
+            self.reply = alternatives[0]
+        else:
+            self.reply = "記録を確認しました。"
 
     def __call__(self, **_kwargs: str) -> tuple[str, None]:
-        raise RuntimeError("mock final answer unavailable")
+        return self.reply, None
 
 
 class TravelChatEvaluator:
@@ -254,7 +268,7 @@ class TravelChatEvaluator:
                     conversation_history=case.get("conversation_history", []),
                     text_generator=generator,
                     final_answer_text_generator=(
-                        FixedFinalAnswerGenerator() if mode == "mock" else None
+                        FixedFinalAnswerGenerator(case) if mode == "mock" else None
                     ),
                     runtime=self.runtime,
                 )

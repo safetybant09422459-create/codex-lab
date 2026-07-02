@@ -136,6 +136,11 @@ class ConversationQualityTest(unittest.TestCase):
         )
         self.assertTrue(all(call["confirmed"] is False for call in runtime.calls))
         self.assertIn('"source":"local_travel_read"', captured["input_text"])
+        self.assertIn(
+            '"provenance":{"boundary":"runtime","source":"local_travel_read"}',
+            captured["input_text"],
+        )
+        self.assertIn('"answer_mode":"meals"', captured["input_text"])
         self.assertIn("屋台ラーメン", captured["input_text"])
         self.assertNotIn("明太子", captured["input_text"])
 

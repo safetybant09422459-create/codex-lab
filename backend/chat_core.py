@@ -123,6 +123,7 @@ class EvidenceBundle(ChatCoreModel):
     tool_id: str
     user_question: str
     result: Any = None
+    provenance: dict[str, Any] = Field(default_factory=dict)
     summary_for_llm: str = ""
     limitations: list[str] = Field(default_factory=list)
     confidence: Literal["high", "medium", "low"] = "high"
@@ -187,7 +188,6 @@ class AnswerResult(ChatCoreModel):
     used_evidence: list[ExecutionEvidence] = Field(default_factory=list)
     source: Literal[
         "llm",
-        "fallback_travel_answer_generator",
         "fallback_static",
     ] = "fallback_static"
     evidence_used: bool = False
