@@ -19,7 +19,6 @@ WRITE_NOT_IMPLEMENTED_REPLY = (
 RUNTIME_ERROR_REPLY = "Toolの実行に失敗しました。時間をおいて再度お試しください。"
 PERMISSION_DENIED_REPLY = "この操作を実行する権限がありません。"
 MAX_STEPS_REPLY = "安全のため処理を中断しました。対象の旅行をもう少し具体的に指定してください。"
-PHOTO_EVIDENCE_REQUIRED_REPLY = "写真を探すには、対象体験の写真連携が必要です。"
 
 SUCCESS_REPLIES = {
     "get_trips": "旅行一覧を取得しました。",
@@ -78,19 +77,14 @@ class TravelResponseComposer:
                 "reply": WRITE_NOT_IMPLEMENTED_REPLY,
             }
         elif request.outcome == "needs_context":
-            default_reply = (
-                PHOTO_EVIDENCE_REQUIRED_REPLY
-                if request.plan is not None and request.plan.goal == "show_photos"
-                else "対象を指定してください。"
-            )
             response = {
                 "action": "needs_context",
                 # plan.reason is Planner LLM output; Python only supplies a
-                # bounded availability fallback when no reason is available.
+                # meaning-neutral fallback when no reason is available.
                 "reply": (
                     request.plan.reason
                     if request.plan is not None and request.plan.reason
-                    else default_reply
+                    else "対象を指定してください。"
                 ),
             }
         elif request.outcome in {"runtime_error", "permission_denied"}:

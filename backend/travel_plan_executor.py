@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 import unicodedata
 from time import perf_counter
 from typing import Any
@@ -41,11 +40,9 @@ class TravelPlanExecutor:
 
         candidate = plan.tool_candidates[0]
         tool_id, arguments, used_selected_trip = _apply_selected_trip_context(
-            request.user_message,
             candidate.tool_id,
             candidate.arguments,
             state,
-            required_evidence=plan.required_evidence,
         )
         execution_policy = get_chat_tool_execution_policy(tool_id)
         if execution_policy == "write_requires_pending_action":
@@ -274,41 +271,18 @@ class TravelPlanExecutor:
 
 
 def _apply_selected_trip_context(
-    message: str,
     tool_id: str,
     arguments: dict[str, Any],
     conversation_state: ConversationState,
-    *,
-    required_evidence: list[str] | None = None,
 ) -> tuple[str, dict[str, Any], bool]:
     """Use a selected Trip hint without accepting model-owned context writes."""
     entity = selected_trip_entity(conversation_state)
     if tool_id == "get_trips":
         return tool_id, arguments, False
-    if required_evidence:
-        intent = tool_id if tool_id in {"get_trip", "get_trip_timeline"} else None
-    else:
-        intent = _legacy_selected_trip_intent(message)
+    intent = tool_id if tool_id in {"get_trip", "get_trip_timeline"} else None
     if entity is None or intent is None:
         return tool_id, arguments, False
     return intent, {"trip_id": entity.entity_id}, True
-
-
-def _legacy_selected_trip_intent(message: Any) -> str | None:
-    """Pre-v2 compatibility only; validated Planner v2 fields are primary."""
-    if not isinstance(message, str):
-        return None
-    normalized = unicodedata.normalize("NFKC", message)
-    compact = "".join(character for character in normalized if not character.isspace())
-    if re.search(r"(?:[0-9]+|[一二三四五六七八九十]+)日目", compact):
-        return "get_trip_timeline"
-    if _is_legacy_answer_question(compact):
-        return "get_trip_timeline"
-    if "この旅行" in compact and any(
-        token in compact for token in ("詳細", "メモ", "情報", "見せ", "教えて", "開いて")
-    ):
-        return "get_trip"
-    return None
 
 
 def _is_legacy_answer_question(message: Any) -> bool:

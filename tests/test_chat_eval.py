@@ -155,18 +155,18 @@ class TravelChatEvaluatorTest(unittest.TestCase):
         )
 
         self.assertEqual(summary["total"], 57)
-        self.assertEqual(summary["passed"], 55)
-        self.assertEqual(summary["failed"], 2)
+        self.assertEqual(summary["passed"], 56)
+        self.assertEqual(summary["failed"], 1)
         self.assertEqual(
             summary["failure_categories"]["entity_resolution_missing"], 1
         )
-        self.assertEqual(summary["failure_categories"]["context_not_used"], 1)
-        self.assertEqual(sum(summary["failure_categories"].values()), 2)
+        self.assertEqual(summary["failure_categories"]["context_not_used"], 0)
+        self.assertEqual(sum(summary["failure_categories"].values()), 1)
         self.assertEqual(summary["benchmark_version"], "Jarvis Benchmark v0.3")
         self.assertEqual(summary["skill_id"], "travel")
         self.assertEqual(summary["skill_ids"], ["travel"])
         self.assertEqual(summary["layer_summary"]["travel"]["entity_resolution"], 1)
-        self.assertEqual(summary["layer_summary"]["travel"]["context"], 1)
+        self.assertEqual(summary["layer_summary"]["travel"]["context"], 0)
         self.assertEqual(summary["top_improvements"][0]["failure_layer"], "entity_resolution")
         self.assertEqual(summary["top_improvements"][0]["count"], 1)
         root_counts = {
@@ -178,7 +178,6 @@ class TravelChatEvaluatorTest(unittest.TestCase):
             root_counts,
             {
                 "ambiguous_expected_but_resolved": 1,
-                "context_slot_missing": 1,
             },
         )
         self.assertEqual(
