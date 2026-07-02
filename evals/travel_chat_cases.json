@@ -362,7 +362,7 @@
     "expected_reply_contains": "2日目は、屋台",
     "requires_context": "福岡旅行",
     "expected_classification": "context_follow_up",
-    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trip_timeline", "arguments": {"trip_id": "mock-context-id"}, "confidence": "high", "reply": "選択中の旅行の日程を取得します。"}
+    "mock_proposal": {"action": "tool_proposal", "goal": "summarize_day", "answer_mode": "day_summary", "required_evidence": ["trip", "timeline"], "tool_id": "get_trip_timeline", "arguments": {"trip_id": "mock-context-id"}, "confidence": "high", "reply": "選択中の旅行の日程を取得します。"}
   },
   {
     "id": "answer_named_trip_activities",
@@ -372,7 +372,7 @@
     "expected_tool": "get_trip_timeline",
     "expected_reply_contains": "屋台",
     "expected_classification": "travel_answer_generation",
-    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trips", "arguments": {}, "confidence": "medium", "reply": "福岡旅行を探します。"}
+    "mock_proposal": {"action": "tool_proposal", "goal": "summarize_trip", "answer_mode": "summary", "required_evidence": ["trip", "timeline"], "tool_id": "get_trips", "arguments": {}, "entity_query": "福岡旅行", "confidence": "medium", "reply": "福岡旅行を探します。"}
   },
   {
     "id": "goal_summary_fukuoka_natural",
@@ -416,7 +416,7 @@
     "expected_reply_contains": "屋台",
     "requires_context": "福岡旅行",
     "expected_classification": "travel_answer_generation",
-    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trip_timeline", "arguments": {"trip_id": "mock-context-id"}, "confidence": "high", "reply": "選択中の旅行の日程を取得します。"}
+    "mock_proposal": {"action": "tool_proposal", "goal": "summarize_trip", "answer_mode": "summary", "required_evidence": ["trip", "timeline"], "tool_id": "get_trip_timeline", "arguments": {"trip_id": "mock-context-id"}, "confidence": "high", "reply": "選択中の旅行の日程を取得します。"}
   },
   {
     "id": "answer_selected_trip_food_missing",
@@ -427,7 +427,7 @@
     "expected_reply_contains": "食事内容は含まれていません",
     "requires_context": "福岡旅行",
     "expected_classification": "travel_answer_generation",
-    "mock_proposal": {"action": "tool_proposal", "tool_id": "get_trip_timeline", "arguments": {"trip_id": "mock-context-id"}, "confidence": "high", "reply": "選択中の旅行の日程を取得します。"}
+    "mock_proposal": {"action": "tool_proposal", "goal": "summarize_meals", "answer_mode": "meals", "required_evidence": ["trip", "timeline"], "tool_id": "get_trip_timeline", "arguments": {"trip_id": "mock-context-id"}, "confidence": "high", "reply": "選択中の旅行の日程を取得します。"}
   },
   {
     "id": "context_day_three_kanji",

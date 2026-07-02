@@ -11,7 +11,17 @@ from backend.travel_answer_generator import TravelAnswerGenerator
 from backend.travel_chat_adapter import conversation_state_from_runtime_trip
 
 
-def generate(question: str, evidence: list[ExecutionEvidence]):
+def generate(
+    question: str,
+    evidence: list[ExecutionEvidence],
+    *,
+    answer_mode: str = "summary",
+):
+    goals = {
+        "summary": "summarize_trip",
+        "day_summary": "summarize_day",
+        "meals": "summarize_meals",
+    }
     execution = ExecutionResult(
         execution_status="success",
         evidence=evidence,
@@ -22,6 +32,12 @@ def generate(question: str, evidence: list[ExecutionEvidence]):
     return TravelAnswerGenerator().generate(
         AnswerRequest(
             user_question=question,
+            plan=Plan(
+                intent="get_trip_timeline",
+                goal=goals[answer_mode],
+                answer_mode=answer_mode,
+                required_evidence=["trip", "timeline"],
+            ),
             execution_result=execution,
             conversation_state=state,
             evidence=evidence,
@@ -97,6 +113,7 @@ class TravelAnswerGeneratorTest(unittest.TestCase):
                     },
                 )
             ],
+            answer_mode="meals",
         )
 
         self.assertEqual(result.answer_type, "food")
@@ -124,6 +141,7 @@ class TravelAnswerGeneratorTest(unittest.TestCase):
                     },
                 ),
             ],
+            answer_mode="day_summary",
         )
 
         self.assertEqual(result.answer_type, "day")
@@ -139,13 +157,14 @@ class TravelAnswerGeneratorTest(unittest.TestCase):
                     result={"items": [{"display_title": "水族館", "category": "spot"}]},
                 )
             ],
+            answer_mode="meals",
         )
 
         self.assertEqual(result.answer, "取得できた情報には食事内容は含まれていません。")
         self.assertEqual(result.confidence, "low")
         self.assertEqual(result.used_evidence, [])
 
-    def test_reports_when_no_evidence_was_acquired(self) -> None:
+    def test_planless_request_does_not_reclassify_user_text(self) -> None:
         result = TravelAnswerGenerator().generate(
             AnswerRequest(
                 user_question="何した？",
@@ -154,7 +173,8 @@ class TravelAnswerGeneratorTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result.answer, "取得できた情報がないため、回答できません。")
+        self.assertEqual(result.answer_type, "not_applicable")
+        self.assertEqual(result.answer, "")
         self.assertEqual(result.confidence, "low")
 
     def test_generator_has_no_runtime_or_tool_dependency(self) -> None:

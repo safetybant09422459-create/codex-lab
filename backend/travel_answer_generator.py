@@ -121,39 +121,22 @@ class TravelAnswerGenerator:
         )
 
 
-def _classify_question(question: str) -> tuple[str, int | None]:
-    normalized = unicodedata.normalize("NFKC", question or "")
-    compact = "".join(character for character in normalized if not character.isspace())
-    day_match = _DAY_PATTERN.search(compact)
-    if day_match:
-        return "day", _parse_day(day_match.group(1))
-    if any(token in compact for token in ("何食べた", "何を食べた", "何食べ", "食事は")):
-        return "food", None
-    if any(token in compact for token in ("何した", "何をした")):
-        return "activities", None
-    return "not_applicable", None
-
-
 def _answer_target(request: AnswerRequest) -> tuple[str, int | None]:
     day_match = _DAY_PATTERN.search(
         unicodedata.normalize("NFKC", request.user_question or "")
     )
     day_number = _parse_day(day_match.group(1)) if day_match else None
-    if request.plan is not None and (
-        request.plan.goal != "clarify"
-        or request.plan.answer_mode != "none"
-        or bool(request.plan.required_evidence)
-    ):
-        by_mode = {
-            "summary": "activities",
-            "day_summary": "day",
-            "meals": "food",
-        }
-        answer_type = by_mode.get(request.plan.answer_mode)
-        if answer_type is not None:
-            return answer_type, day_number
+    if request.plan is None:
         return "not_applicable", None
-    return _classify_question(request.user_question)
+    by_mode = {
+        "summary": "activities",
+        "day_summary": "day",
+        "meals": "food",
+    }
+    answer_type = by_mode.get(request.plan.answer_mode)
+    if answer_type is not None:
+        return answer_type, day_number
+    return "not_applicable", None
 
 
 def _parse_day(value: str) -> int:
