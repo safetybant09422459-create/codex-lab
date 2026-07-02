@@ -1,5 +1,10 @@
 # Jarvis Core Architecture
 
+> Jarvis vNextの採用済み目標Architectureは
+> [Jarvis vNext Single Agent Loop Architecture](decisions/2026-07-vnext-single-agent-loop-architecture.md)を参照する。
+> 本書のRouter、Planner、Entity Resolution、Response Composer等は現行実装または移行前の用語であり、
+> vNextでは独立した意味判断層にしない。
+
 ## 目的
 
 Jarvis Coreは、家庭用AIエージェントJarvisの中核である。
@@ -9,6 +14,25 @@ Jarvis Coreは、家庭用AIエージェントJarvisの中核である。
 ---
 
 ## 基本構造
+
+vNextの目標構造:
+
+```text
+Channel
+  -> Agent Host
+  -> LLM Agent Loop
+  -> Action Gateway
+  -> Domain Capability
+  -> Grounded Fact
+
+Life Context -> Agent Host / LLM Agent Loop
+Recall Index -> unverified candidates only
+```
+
+LLM Agent Loopが意図理解、Capability選択、arguments生成、Fact十分性、Clarification、最終回答を担う。
+PythonはSession、Principal、budget、validation、authorization、confirmation、audit、execution、timeout、
+retry、redactionなどの決定的処理を担い、自然言語の意味判断を持たない。現行RuntimeはAction Gatewayへ、
+Activation RAGはRecall Indexへ段階移行する。
 
 ```text
 Jarvis

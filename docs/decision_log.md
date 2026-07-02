@@ -112,3 +112,20 @@ AI人格の記憶と各モジュールのデータを分離する。
 * busy
 * family
 * shared
+
+---
+
+## Decision 0006
+
+### テーマ
+
+Jarvis vNextの意味判断と実行安全性をどこへ置くか？
+
+### 決定
+
+意味判断を単一のLLM Agent Loopへ集約し、PythonはAgent Host、Action Gateway、Domain Capabilityの
+決定的処理だけを担う。Activation RAGはRecall Index、EvidenceはGrounded Factへ整理する。
+
+### 詳細
+
+[Jarvis vNext Single Agent Loop Architecture](decisions/2026-07-vnext-single-agent-loop-architecture.md)を参照する。

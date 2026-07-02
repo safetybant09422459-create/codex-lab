@@ -8,11 +8,16 @@ AI開発練習用
 主要設計文書:
 
 - [AI Coding Agent作業ガイド](AGENTS.md)
+- [Jarvis vNext Single Agent Loop Architecture Decision](docs/decisions/2026-07-vnext-single-agent-loop-architecture.md)
 - [Jarvis Chat Core / Orchestrator v2](docs/chat_core.md)
 - [Jarvis Core Activation RAG](docs/activation_rag.md)
 - [Context Assembly](docs/context_assembly.md)
 - [Jarvis Memory Architecture](docs/memory_architecture.md)
 - [Knowledge Enrichment](docs/knowledge_enrichment.md)
+
+vNextの目標では、Webは複数Channelの一つであり、意味判断は単一のLLM Agent Loopへ集約する。
+現行のRouter、Planner、Entity Resolver、Answer Generator等は移行中の互換コンポーネントであり、
+完成形の独立層ではない。PythonはAgent Host / Action Gateway / Domain Capabilityの決定的処理を担う。
 
 対象ディレクトリは固定で `/mnt/nas/projects/codex-lab`。
 本番旅行アプリ `/mnt/nas/projects/project` は対象外。
