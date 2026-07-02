@@ -68,6 +68,7 @@ export function bindGitActions() {
     elements.preflightFindings.innerHTML = preflight.findings.map((finding) => `
       <article class="preflight-finding">
         <dl>
+          <dt>Result</dt><dd>${escapeHtml(finding.disposition)}</dd>
           <dt>Failed rule</dt><dd>${escapeHtml(finding.rule)}</dd>
           <dt>File</dt><dd>${escapeHtml(finding.file)}</dd>
           <dt>Line</dt><dd>${finding.line}</dd>

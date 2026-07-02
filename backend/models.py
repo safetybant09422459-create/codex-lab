@@ -111,6 +111,7 @@ class GitPreflightFinding(BaseModel):
     detected_text: str
     remediation: str
     ignorable: bool
+    disposition: Literal["blocked", "allowed test fixture"]
 
 
 class GitPreflightResponse(BaseModel):

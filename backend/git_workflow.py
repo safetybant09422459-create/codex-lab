@@ -28,6 +28,10 @@ SECRET_REMEDIATION = (
     "Remove the credential from the change, rotate it if it was real, and load it "
     "from an approved environment or secret store."
 )
+TEST_FIXTURE_MARKER = re.compile(r"#.*\btest fixture\b", re.IGNORECASE)
+OBVIOUS_TEST_VALUE = re.compile(
+    r"(?i)^(?:dummy|fake|example|test)(?:[-_./+=][A-Za-z0-9_./+=-]*)?$"
+)
 
 
 @dataclass(frozen=True)
@@ -39,6 +43,7 @@ class PreflightFinding:
     detected_text: str
     remediation: str
     ignorable: bool = False
+    disposition: str = "blocked"
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -49,6 +54,7 @@ class PreflightFinding:
             "detected_text": self.detected_text,
             "remediation": self.remediation,
             "ignorable": self.ignorable,
+            "disposition": self.disposition,
         }
 
 
@@ -118,13 +124,17 @@ class GitWorkflow:
 
         diff = await self._combined_diff(files)
         findings = await self._secret_findings(files, diff)
-        if findings:
+        blocking_findings = [finding for finding in findings if finding.disposition == "blocked"]
+        if blocking_findings:
             blockers.append("A possible secret was detected in the diff.")
 
         stat = await self._git("diff", "--stat", "HEAD", check=False)
         summary = f"{len(files)} changed file(s)"
         if stat.strip():
             summary = f"{summary}\n{stat.strip()}"
+        allowed_count = len(findings) - len(blocking_findings)
+        if allowed_count:
+            summary = f"{summary}\n{allowed_count} allowed test fixture finding(s)"
         message = _generate_commit_message(entries)
         snapshot = _snapshot(status, head, diff)
         return GitPreflight(
@@ -146,10 +156,13 @@ class GitWorkflow:
         async with self._lock:
             report = await self.preflight()
             ignored = set(ignored_finding_ids or [])
-            valid_ignored = {finding.id for finding in report.findings if finding.ignorable}
+            blocking_findings = [
+                finding for finding in report.findings if finding.disposition == "blocked"
+            ]
+            valid_ignored = {finding.id for finding in blocking_findings if finding.ignorable}
             remaining_blockers = list(report.blockers)
-            if report.findings and ignored and ignored <= valid_ignored:
-                if {finding.id for finding in report.findings} <= ignored:
+            if blocking_findings and ignored and ignored <= valid_ignored:
+                if {finding.id for finding in blocking_findings} <= ignored:
                     remaining_blockers = [
                         blocker for blocker in remaining_blockers
                         if blocker != "A possible secret was detected in the diff."
@@ -201,7 +214,10 @@ class GitWorkflow:
                     post_stage_blockers.extend(self._inspect_path(code, path))
             if current_head != report.head:
                 post_stage_blockers.append("HEAD changed while preparing the commit.")
-            staged_findings = _find_secrets_in_diff(staged_diff)
+            staged_findings = [
+                finding for finding in _find_secrets_in_diff(staged_diff)
+                if finding.disposition == "blocked"
+            ]
             if staged_findings and not {finding.id for finding in staged_findings} <= ignored:
                 post_stage_blockers.append("A possible secret was detected in the staged diff.")
             if post_stage_blockers:
@@ -354,16 +370,36 @@ def _find_secrets_in_line(path: str, line_number: int, line: str) -> list[Prefli
         finding_id = hashlib.sha256(
             f"{rule}\0{path}\0{line_number}\0{match.group(0)}".encode()
         ).hexdigest()[:20]
+        allowed_fixture = _is_allowed_test_fixture(path, line, match.group(0))
         findings.append(PreflightFinding(
             id=finding_id,
             rule=rule,
             file=path,
             line=line_number,
             detected_text=_mask_secret(match.group(0)),
-            remediation=SECRET_REMEDIATION,
-            ignorable=True,
+            remediation=(
+                "allowed test fixture: explicit non-secret value in tests/ with a "
+                "test fixture marker."
+                if allowed_fixture else SECRET_REMEDIATION
+            ),
+            ignorable=not allowed_fixture,
+            disposition="allowed test fixture" if allowed_fixture else "blocked",
         ))
     return findings
+
+
+def _is_allowed_test_fixture(path: str, line: str, matched_text: str) -> bool:
+    pure = PurePosixPath(path)
+    if not pure.parts or pure.parts[0] != "tests" or not TEST_FIXTURE_MARKER.search(line):
+        return False
+    assignment = re.match(r"(?i)^.*?[:=]\s*['\"]?([A-Za-z0-9_./+=-]+)", matched_text)
+    if assignment:
+        return bool(OBVIOUS_TEST_VALUE.fullmatch(assignment.group(1)))
+    provider_value = matched_text.lower()
+    return any(
+        provider_value.startswith(prefix)
+        for prefix in ("sk-test-", "ghp-test-", "github_pat-test-", "xoxb-test-")
+    )
 
 
 def _mask_secret(value: str) -> str:

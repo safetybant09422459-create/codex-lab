@@ -2,7 +2,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from backend.git_workflow import GitWorkflow, _generate_commit_message, redact_secrets
+from backend.git_workflow import (
+    GitWorkflow,
+    _find_secrets_in_line,
+    _generate_commit_message,
+    redact_secrets,
+)
 
 
 class FakeGit:
@@ -55,6 +60,25 @@ class GitWorkflowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(finding.detected_text, "api_key = [REDACTED]")
         self.assertNotIn("supersecretvalue", repr(report.as_dict()))
         self.assertTrue(finding.remediation)
+
+    async def test_preflight_allows_and_reports_explicit_dummy_test_fixture(self):
+        fake = FakeGit({
+            ("status", "--short"): " M tests/test_example.py\n",
+            ("rev-parse", "HEAD"): "abc123\n",
+            ("branch", "--show-current"): "main\n",
+            ("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"):
+                "origin/main\n",
+            ("diff", "HEAD", "--", "tests/test_example.py"):
+                "diff --git a/tests/test_example.py b/tests/test_example.py\n"
+                "--- a/tests/test_example.py\n+++ b/tests/test_example.py\n"
+                "@@ -0,0 +1 @@\n+api_key = 'dummy-api-key'  # test fixture\n",
+        })
+        with tempfile.TemporaryDirectory() as directory:
+            report = await GitWorkflow(fake, Path(directory)).preflight()
+        self.assertTrue(report.ok)
+        self.assertEqual(report.blockers, [])
+        self.assertEqual(report.findings[0].disposition, "allowed test fixture")
+        self.assertIn("allowed test fixture", report.summary)
 
     async def test_ignore_once_only_allows_current_secret_findings(self):
         status = " M config.py\n"
@@ -123,9 +147,41 @@ class GitWorkflowTest(unittest.IsolatedAsyncioTestCase):
         )
 
     def test_diff_redaction_never_returns_detected_secret(self):
-        redacted = redact_secrets("+token=supersecretvalue\n+safe=True\n")
+        redacted = redact_secrets("+token=fake-redaction-value\n+safe=True\n")  # test fixture
         self.assertEqual(redacted, "+token=[REDACTED]\n+safe=True\n")
-        self.assertNotIn("supersecretvalue", redacted)
+        self.assertNotIn("fake-redaction-value", redacted)
+
+    def test_explicit_dummy_test_fixture_is_allowed_and_reported(self):
+        findings = _find_secrets_in_line(
+            "tests/test_example.py",
+            10,
+            'api_key = "dummy-api-key"  # test fixture',
+        )
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].disposition, "allowed test fixture")
+        self.assertIn("allowed test fixture", findings[0].remediation)
+        self.assertFalse(findings[0].ignorable)
+
+    def test_dummy_value_without_fixture_marker_is_blocked(self):
+        finding = _find_secrets_in_line(
+            "tests/test_example.py", 10, 'api_key = "dummy-api-key"'  # test fixture
+        )[0]
+        self.assertEqual(finding.disposition, "blocked")
+
+    def test_dummy_fixture_outside_tests_is_blocked(self):
+        finding = _find_secrets_in_line(
+            "backend/config.py", 10, 'api_key = "dummy-api-key"  # test fixture'
+        )[0]
+        self.assertEqual(finding.disposition, "blocked")
+
+    def test_real_credential_in_test_fixture_is_blocked(self):
+        real_looking_value = "actual" + "secretvalue"
+        finding = _find_secrets_in_line(
+            "tests/test_example.py",
+            10,
+            f'password = "{real_looking_value}"  # test fixture',
+        )[0]
+        self.assertEqual(finding.disposition, "blocked")
 
 
 if __name__ == "__main__":
