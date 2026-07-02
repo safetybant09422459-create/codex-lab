@@ -107,7 +107,7 @@ class TravelAnswerGeneratorTest(unittest.TestCase):
                     tool_id="get_trip_timeline",
                     result={
                         "items": [
-                            {"display_title": "須磨シーワールド", "category": "spot"},
+                            {"display_title": "屋台ラーメン", "category": "spot"},
                             {"display_title": "明石焼き", "category": "food"},
                         ]
                     },
