@@ -191,7 +191,11 @@ class AgentHost:
             payload = self._build_payload(context, catalog, observations)
             raw_action = self.llm_client.complete(payload)
             events.append(TraceEvent(event="llm_called", metadata={"step": step}))
-            action = self._validate_action(raw_action, catalog)
+            action = self._validate_action(
+                raw_action,
+                catalog,
+                operation_call_allowed=step < 2,
+            )
             events.append(
                 TraceEvent(
                     event="action_validated",
@@ -199,7 +203,7 @@ class AgentHost:
                 )
             )
 
-            if not isinstance(action, CallOperationAction) or step == 2:
+            if not isinstance(action, CallOperationAction):
                 break
 
             runtime_result = self.runtime.execute_provider_operation(
@@ -269,13 +273,20 @@ class AgentHost:
 
     @staticmethod
     def _validate_action(
-        raw_action: dict[str, Any], catalog: dict[str, Any]
+        raw_action: dict[str, Any],
+        catalog: dict[str, Any],
+        *,
+        operation_call_allowed: bool,
     ) -> MessageAction | CallOperationAction:
         try:
             action = ACTION_ADAPTER.validate_python(raw_action)
         except ValidationError as exc:
             raise AgentContractError(f"Invalid LLM action: {exc}") from exc
         if isinstance(action, CallOperationAction):
+            if not operation_call_allowed:
+                raise AgentContractError(
+                    "LLM returned call_operation after the operation budget was exhausted"
+                )
             matching = [
                 operation
                 for provider in catalog.get("providers", [])
@@ -286,6 +297,11 @@ class AgentHost:
             if len(matching) != 1:
                 raise AgentContractError(
                     f"Action references unknown operation: "
+                    f"{action.provider_id}.{action.operation_id}"
+                )
+            if matching[0].get("availability") != "implemented":
+                raise AgentContractError(
+                    f"Action references non-executable operation: "
                     f"{action.provider_id}.{action.operation_id}"
                 )
         return action

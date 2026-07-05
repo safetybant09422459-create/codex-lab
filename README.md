@@ -99,7 +99,8 @@ Capability Catalog、Memory RAG、複数Skill連携は未実装である。
 
 `backend/agent_host.py`のAgent HostはSingle Agent Loop v0である。現時点ではFake LLM Clientを使い、
 最大2stepのObservation Loop（`call_operation -> Runtime -> Observation -> answer`）のみ実装済みである。
-2step目のAction種別にかかわらずそこで終了し、1turnのOperation実行は最大1回に制限する。
+1turnのOperation実行は最大1回であり、2step目は終端Actionでなければならない。2step目の
+`call_operation`と、Catalog上で`planned`のOperation呼び出しは契約違反として実行前に拒否する。
 `/api/chat`には未接続で、会話状態永続化、実LLM呼び出し、Confirmation再開、汎用的な反復は未実装である。
 
 Activation RAGはTravel専用検索ではなく、Jarvis Coreが正本Entityを思い出すためのread-only索引である。

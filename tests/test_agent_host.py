@@ -91,7 +91,12 @@ class AgentHostTest(unittest.TestCase):
             "providers": [
                 {
                     "provider_id": "calendar",
-                    "operations": [{"operation_id": "list_events"}],
+                    "operations": [
+                        {
+                            "operation_id": "list_events",
+                            "availability": "implemented",
+                        }
+                    ],
                 }
             ],
         }
@@ -129,14 +134,38 @@ class AgentHostTest(unittest.TestCase):
         second_observations = llm.payloads[1].prior_observations
         self.assertEqual(second_observations, result.observations)
 
-    def test_loop_stops_after_two_llm_steps(self) -> None:
+    def test_second_operation_call_is_rejected_after_budget_is_exhausted(self) -> None:
         llm = FakeLLMClient([call_action(), call_action()])
 
-        result = AgentHost(llm, self.runtime).run_turn(self.turn_input)
+        with self.assertRaisesRegex(AgentContractError, "budget was exhausted"):
+            AgentHost(llm, self.runtime).run_turn(self.turn_input)
 
-        self.assertEqual(result.action.action, "call_operation")
         self.assertEqual(len(llm.payloads), 2)
         self.repository.get_trips.assert_called_once_with()
+
+    def test_planned_operation_is_rejected_before_runtime(self) -> None:
+        runtime = Mock()
+        runtime.get_operation_catalog.return_value = {
+            "contract_version": "1",
+            "providers": [
+                {
+                    "provider_id": "travel",
+                    "operations": [
+                        {
+                            "operation_id": "search_trip",
+                            "availability": "planned",
+                        }
+                    ],
+                }
+            ],
+        }
+
+        with self.assertRaisesRegex(AgentContractError, "non-executable operation"):
+            AgentHost(
+                FakeLLMClient(call_action("travel", "search_trip")), runtime
+            ).run_turn(self.turn_input)
+
+        runtime.execute_provider_operation.assert_not_called()
 
     def test_trace_records_both_loop_steps(self) -> None:
         result = AgentHost(
@@ -197,7 +226,12 @@ class AgentHostTest(unittest.TestCase):
             "providers": [
                 {
                     "provider_id": "calendar",
-                    "operations": [{"operation_id": "list_events"}],
+                    "operations": [
+                        {
+                            "operation_id": "list_events",
+                            "availability": "implemented",
+                        }
+                    ],
                 }
             ],
         }
@@ -205,7 +239,13 @@ class AgentHostTest(unittest.TestCase):
         voice_input = self.turn_input.model_copy(update={"channel": "voice"})
 
         AgentHost(
-            FakeLLMClient(call_action("calendar", "list_events")), runtime
+            FakeLLMClient(
+                [
+                    call_action("calendar", "list_events"),
+                    answer_action("予定はありません。"),
+                ]
+            ),
+            runtime,
         ).run_turn(voice_input)
 
         runtime.execute_provider_operation.assert_called_once()
