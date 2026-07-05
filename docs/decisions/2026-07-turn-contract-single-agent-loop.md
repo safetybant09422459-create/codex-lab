@@ -18,6 +18,9 @@ ChannelとSkillを扱う。入口や能力ごとにAgent Loop、Router、Planner
 LLM Agent Loopへ集約する責務境界を採用した。本Decisionはその判断を変更せず、Jarvis Coreが全Channelで共有する
 1ターンのデータ契約、反復、Runtimeとの制御境界を具体化する。
 
+Turn内でLLMへ渡す入力と、LLMが返すActionの詳細は
+[Jarvis Core LLM Contract](2026-07-llm-contract.md)が定める。
+
 ## 決定
 
 Jarvis Coreに、Channel、Skill、Domain Providerを横断して共有するAgent Loopを一つだけ置く。各Channelは入力を
@@ -140,8 +143,9 @@ freshness、不完全性、stub、planned、redaction等の制約を表す。値
 8. LLMが`final_response`を生成し、Channelが意味を変えず媒体固有形式へ変換する。
 
 Clarificationは会話上の不足を埋める新しいturnである。ConfirmationはRuntime-owned pending operationを再開する
-安全手続きであり、同じものではない。確認後は保存済みのprovider、operation、arguments、principal、policyとの
-一致をRuntimeが検証し、ユーザーの「はい」を新しい意図分類へ流用しない。
+安全手続きであり、同じものではない。確認への返答という意味判断はLLMが行うが、確認後は保存済みのprovider、
+operation、arguments、principal、policyとの一致をRuntimeが検証する。LLMの判断やユーザーの「はい」だけを
+実行許可にしない。
 
 Runtimeは最大Operation回数、token / time budget、timeout、cancellation、retry、idempotencyを強制する。
 budget超過や回復不能errorはObservationとしてLoopへ返し、Pythonで固定の最終回答を組み立てない。

@@ -164,3 +164,22 @@ Provider結果はprovenance、visibility、limitationsを持つObservationとし
 ### 詳細
 
 [Turn Contract / Single Agent Loop](decisions/2026-07-turn-contract-single-agent-loop.md)を参照する。
+
+---
+
+## Decision 0009
+
+### テーマ
+
+Jarvis CoreはLLMへ何を渡し、LLMから何を受け取るか？
+
+### 決定
+
+全Channel、Skill、Domain Providerで一つのLLM Contractを共有する。Coreは共通contextとconversation stateを
+LLMへ渡し、LLMは`answer`、`ask_clarification`、`call_operation`、`request_confirmation`、`refuse`の
+いずれか一つだけを返す。会話継続と話題転換もLLMがAction内で外部化し、Pythonはschema validationと
+Runtime接続だけを担う。内部思考やchain-of-thoughtは契約、保存、監査の対象にしない。
+
+### 詳細
+
+[Jarvis Core LLM Contract](decisions/2026-07-llm-contract.md)を参照する。

@@ -4,6 +4,8 @@
 > [Jarvis vNext Single Agent Loop Architecture](decisions/2026-07-vnext-single-agent-loop-architecture.md)を参照する。
 > 全Channelが共有する1ターンの具体契約は
 > [Turn Contract / Single Agent Loop](decisions/2026-07-turn-contract-single-agent-loop.md)を参照する。
+> CoreからLLMへ渡すcontextと、LLMが返す5種類のActionは
+> [Jarvis Core LLM Contract](decisions/2026-07-llm-contract.md)を参照する。
 > 本書のRouter、Planner、Entity Resolution、Response Composer等は現行実装または移行前の用語であり、
 > vNextでは独立した意味判断層にしない。
 
