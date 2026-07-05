@@ -169,9 +169,64 @@ def _strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return schema
 
 
+def _inline_local_refs(schema: dict[str, Any]) -> dict[str, Any]:
+    """Expand local JSON pointers before nesting the schema in an API envelope."""
+    root = json.loads(json.dumps(schema))
+
+    def resolve_pointer(reference: str) -> Any:
+        if not reference.startswith("#/"):
+            raise ValueError(f"Unsupported JSON Schema reference: {reference}")
+        target: Any = root
+        for raw_part in reference[2:].split("/"):
+            part = raw_part.replace("~1", "/").replace("~0", "~")
+            if not isinstance(target, dict) or part not in target:
+                raise ValueError(f"Unresolved JSON Schema reference: {reference}")
+            target = target[part]
+        return target
+
+    def expand(node: Any, resolving: tuple[str, ...] = ()) -> Any:
+        if isinstance(node, list):
+            return [expand(item, resolving) for item in node]
+        if not isinstance(node, dict):
+            return node
+
+        reference = node.get("$ref")
+        if reference is not None:
+            if not isinstance(reference, str):
+                raise ValueError("JSON Schema $ref must be a string")
+            if reference in resolving:
+                raise ValueError(f"Circular JSON Schema reference: {reference}")
+            expanded = expand(
+                json.loads(json.dumps(resolve_pointer(reference))),
+                (*resolving, reference),
+            )
+            if not isinstance(expanded, dict):
+                raise ValueError(f"JSON Schema reference is not an object: {reference}")
+            siblings = {
+                key: expand(value, resolving)
+                for key, value in node.items()
+                if key != "$ref"
+            }
+            expanded.update(siblings)
+            return expanded
+
+        return {
+            key: expand(value, resolving)
+            for key, value in node.items()
+            if key not in {"$defs", "definitions"}
+        }
+
+    expanded = expand(root)
+    if not isinstance(expanded, dict):
+        raise ValueError("Expanded JSON Schema root must be an object")
+    return expanded
+
+
 def _action_output_schema() -> dict[str, Any]:
     """Wrap the discriminated union because strict output requires a root object."""
-    action_schema = _strict_json_schema(ACTION_ADAPTER.json_schema())
+    action_schema = _strict_json_schema(
+        _inline_local_refs(ACTION_ADAPTER.json_schema())
+    )
     return {
         "type": "object",
         "additionalProperties": False,

@@ -66,6 +66,22 @@ class OpenAIAdapterTest(unittest.TestCase):
     def structured_answer(cls) -> str:
         return json.dumps({"llm_action": cls.answer_action()})
 
+    def assert_schema_has_no_references(self, node: object) -> None:
+        if isinstance(node, dict):
+            self.assertNotIn("$ref", node)
+            self.assertNotIn("$defs", node)
+            self.assertNotIn("definitions", node)
+            for value in node.values():
+                self.assert_schema_has_no_references(value)
+        elif isinstance(node, list):
+            for value in node:
+                self.assert_schema_has_no_references(value)
+
+    @staticmethod
+    def action_schema_branches() -> list[dict[str, object]]:
+        schema = openai_adapter._action_output_schema()
+        return schema["properties"]["llm_action"]["anyOf"]
+
     def test_llm_client_request_contains_contract_payload_and_schema(self) -> None:
         client = FakeClient()
         client.responses.create = lambda **kwargs: (
@@ -95,8 +111,65 @@ class OpenAIAdapterTest(unittest.TestCase):
         output_schema = request["text"]["format"]["schema"]
         self.assertEqual(output_schema["type"], "object")
         self.assertIn("llm_action", output_schema["properties"])
+        self.assert_schema_has_no_references(output_schema)
         self.assertNotIn("test-secret", repr(request))
         self.assertEqual(result["action"], "answer")
+
+    def test_action_output_schema_is_self_contained(self) -> None:
+        self.assert_schema_has_no_references(openai_adapter._action_output_schema())
+
+    def test_answer_action_is_represented_and_rejects_hidden_fields(self) -> None:
+        message_branch = next(
+            branch
+            for branch in self.action_schema_branches()
+            if "answer" in branch["properties"]["action"].get("enum", [])
+        )
+
+        self.assertIn("message", message_branch["required"])
+        self.assertIn("conversation_update", message_branch["required"])
+        self.assertFalse(message_branch["additionalProperties"])
+        self.assertNotIn("reasoning", message_branch["properties"])
+        self.assertNotIn("analysis", message_branch["properties"])
+        self.assertNotIn("hidden_thought", message_branch["properties"])
+
+    def test_output_schema_represents_all_llm_actions(self) -> None:
+        represented: set[str] = set()
+        for branch in self.action_schema_branches():
+            action_schema = branch["properties"]["action"]
+            if "const" in action_schema:
+                represented.add(action_schema["const"])
+            represented.update(action_schema.get("enum", []))
+
+        self.assertEqual(
+            represented,
+            {
+                "answer",
+                "ask_clarification",
+                "call_operation",
+                "request_confirmation",
+                "refuse",
+            },
+        )
+
+    def test_call_operation_action_is_represented_in_output_schema(self) -> None:
+        operation_branch = next(
+            branch
+            for branch in self.action_schema_branches()
+            if branch["properties"]["action"].get("const") == "call_operation"
+        )
+
+        self.assertEqual(
+            set(operation_branch["required"]),
+            {
+                "contract_version",
+                "action",
+                "provider_id",
+                "operation_id",
+                "arguments",
+                "conversation_update",
+            },
+        )
+        self.assertFalse(operation_branch["additionalProperties"])
 
     def test_call_operation_action_is_returned_without_semantic_changes(self) -> None:
         client = FakeClient()
