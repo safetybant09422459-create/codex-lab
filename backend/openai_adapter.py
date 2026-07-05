@@ -155,8 +155,12 @@ def _strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
             if "oneOf" in node:
                 node["anyOf"] = node.pop("oneOf")
             node.pop("discriminator", None)
-            properties = node.get("properties")
-            if isinstance(properties, dict):
+            if node.get("type") == "object":
+                properties = node.get("properties")
+                if not isinstance(properties, dict):
+                    properties = {}
+                    node["properties"] = properties
+                node["additionalProperties"] = False
                 node["required"] = list(properties)
             node.pop("default", None)
             for value in node.values():

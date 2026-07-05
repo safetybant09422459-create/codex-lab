@@ -77,6 +77,27 @@ class OpenAIAdapterTest(unittest.TestCase):
             for value in node:
                 self.assert_schema_has_no_references(value)
 
+    def assert_all_object_schemas_are_strict(self, node: object) -> None:
+        if isinstance(node, dict):
+            if node.get("type") == "object":
+                self.assertIs(
+                    node.get("additionalProperties"),
+                    False,
+                    msg=f"Object schema is not closed: {node}",
+                )
+                properties = node.get("properties")
+                self.assertIsInstance(properties, dict)
+                self.assertEqual(
+                    node.get("required"),
+                    list(properties),
+                    msg=f"Object required keys do not match properties: {node}",
+                )
+            for value in node.values():
+                self.assert_all_object_schemas_are_strict(value)
+        elif isinstance(node, list):
+            for value in node:
+                self.assert_all_object_schemas_are_strict(value)
+
     @staticmethod
     def action_schema_branches() -> list[dict[str, object]]:
         schema = openai_adapter._action_output_schema()
@@ -117,6 +138,37 @@ class OpenAIAdapterTest(unittest.TestCase):
 
     def test_action_output_schema_is_self_contained(self) -> None:
         self.assert_schema_has_no_references(openai_adapter._action_output_schema())
+
+    def test_action_output_schema_normalizes_every_object(self) -> None:
+        self.assert_all_object_schemas_are_strict(
+            openai_adapter._action_output_schema()
+        )
+
+    def test_strict_schema_closes_nested_array_and_any_of_objects(self) -> None:
+        schema = openai_adapter._strict_json_schema(
+            {
+                "type": "object",
+                "properties": {
+                    "nested": {
+                        "type": "object",
+                        "properties": {"value": {"type": "string"}},
+                        "required": ["missing"],
+                    },
+                    "items": {
+                        "type": "array",
+                        "items": {"type": "object", "properties": {}},
+                    },
+                    "choice": {
+                        "anyOf": [
+                            {"type": "object", "properties": {}},
+                            {"type": "null"},
+                        ]
+                    },
+                },
+            }
+        )
+
+        self.assert_all_object_schemas_are_strict(schema)
 
     def test_answer_action_is_represented_and_rejects_hidden_fields(self) -> None:
         message_branch = next(
@@ -170,6 +222,9 @@ class OpenAIAdapterTest(unittest.TestCase):
             },
         )
         self.assertFalse(operation_branch["additionalProperties"])
+        arguments_schema = operation_branch["properties"]["arguments"]
+        self.assertEqual(arguments_schema["properties"], {})
+        self.assertEqual(arguments_schema["required"], [])
 
     def test_call_operation_action_is_returned_without_semantic_changes(self) -> None:
         client = FakeClient()
