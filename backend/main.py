@@ -1,4 +1,5 @@
 import json
+import logging
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query
@@ -67,6 +68,7 @@ runtime_service = RuntimeService()
 agent_host = AgentHost(OpenAIModelProviderAdapter(), runtime_service)
 photo_repository = PhotoRepository()
 git_workflow = GitWorkflow(git)
+logger = logging.getLogger(__name__)
 
 JARVIS_PRINCIPLE_CHECK = """\
 
@@ -160,9 +162,11 @@ async def get_skills() -> list[SkillResponse]:
             data = json.loads(skill_file.read_text(encoding="utf-8"))
             skills.append(SkillResponse(**data))
         except (OSError, json.JSONDecodeError, ValueError) as exc:
+            skill_path = skill_file.relative_to(ROOT_DIR)
+            logger.error("Invalid skill definition %s: %s", skill_path, exc)
             raise HTTPException(
                 status_code=500,
-                detail=f"Invalid skill definition: {skill_file.relative_to(ROOT_DIR)}",
+                detail=f"Invalid skill definition: {skill_path}",
             ) from exc
     return skills
 

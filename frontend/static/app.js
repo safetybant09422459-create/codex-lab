@@ -75,7 +75,9 @@ Promise.allSettled(initialLoads.map(([, load]) => load())).then((results) => {
   );
   setStatus(
     elements.runStatus,
-    `初期読み込み失敗: ${failures.map(({ name }) => name).join(", ")}`,
+    `初期読み込み失敗: ${failures.map(({ name, result }) =>
+      `${name} (${result.reason && result.reason.message ? result.reason.message : "詳細不明"})`
+    ).join(", ")}`,
     true,
   );
 });

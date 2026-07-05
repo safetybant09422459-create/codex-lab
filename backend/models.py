@@ -146,8 +146,8 @@ class SkillResponse(BaseModel):
     id: str
     name: str
     description: str
-    status: Literal["idea", "planned", "active", "deprecated"]
-    type: Literal["module", "tool", "mcp"]
+    status: Literal["idea", "planned", "active", "implemented", "deprecated"]
+    type: Literal["core", "module", "tool", "mcp"]
     version: str
     mode: Literal["read", "write", "mixed"]
     risk_level: Literal["low", "medium", "high"]

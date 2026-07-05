@@ -5,22 +5,27 @@ let servicePolling = null;
 let restartMessageUntil = 0;
 
 export async function refreshSkills() {
-  const skills = await api("/api/skills");
-  elements.skillsList.innerHTML = skills.map((skill) => `
-    <div class="skill-row">
-      <div>
-        <strong>${escapeHtml(skill.name)}</strong>
-        <p>${escapeHtml(skill.description)}</p>
+  try {
+    const skills = await api("/api/skills");
+    elements.skillsList.innerHTML = skills.map((skill) => `
+      <div class="skill-row">
+        <div>
+          <strong>${escapeHtml(skill.name)}</strong>
+          <p>${escapeHtml(skill.description)}</p>
+        </div>
+        <div class="skill-meta">
+          <span class="pill">${escapeHtml(skill.status)}</span>
+          <span class="pill">${escapeHtml(skill.type)}</span>
+          <span class="pill">${escapeHtml(skill.mode)}</span>
+          <span class="pill">${escapeHtml(skill.risk_level)}</span>
+        </div>
       </div>
-      <div class="skill-meta">
-        <span class="pill">${escapeHtml(skill.status)}</span>
-        <span class="pill">${escapeHtml(skill.type)}</span>
-        <span class="pill">${escapeHtml(skill.mode)}</span>
-        <span class="pill">${escapeHtml(skill.risk_level)}</span>
-      </div>
-    </div>
-  `).join("") || "Skillは登録されていません。";
-  setStatus(elements.skillsMessage, `${skills.length} skills`);
+    `).join("") || "Skillは登録されていません。";
+    setStatus(elements.skillsMessage, `${skills.length} skills`);
+  } catch (error) {
+    setStatus(elements.skillsMessage, `読み込み失敗: ${error.message}`, true);
+    throw error;
+  }
 }
 
 export async function refreshTools() {
