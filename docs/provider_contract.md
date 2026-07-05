@@ -123,6 +123,12 @@ Jarvis Status Providerの`get_capabilities`、`get_provider_status`、`get_opera
 Providerへ移すものではない。「何ができる？」という発話をPythonで`get_capabilities`へ固定routingせず、LLMが
 Operation Catalogから必要性を判断し、Observationを基に回答する。
 
+ユーザー目線のCapability Descriptionは各Providerに対応する`skills/<provider_id>/skill.json`の`capabilities`が
+宣言する。Jarvis Status ProviderはCapability Catalogを決定的に集約するだけで、Provider別説明、優先順位、
+ユーザー意図に基づく選択を持たない。metadataがないSkillには汎用的な未宣言表示を返す。Operation Catalogは
+従来どおりOperation実行契約を返し、Capability Catalogとは分離する。この境界はCatalog Principleと
+Conversation Quality / Python Brain Regression Guardに従う。
+
 ## 今回復旧しないもの
 
 * `/api/chat`からのOperation選択・実行

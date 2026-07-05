@@ -65,7 +65,12 @@ class RuntimeService:
             if (tools_dir / "travel").is_dir():
                 provider_registry.register(TravelProvider())
             if (tools_dir / "jarvis").is_dir():
-                provider_registry.register(JarvisProvider(provider_registry.catalog))
+                provider_registry.register(
+                    JarvisProvider(
+                        provider_registry.catalog,
+                        provider_registry.capability_catalog,
+                    )
+                )
         self.provider_registry = provider_registry
         self.executor_registry = executor_registry or ExecutorRegistry()
         if executor_registry is None and (tools_dir / "travel").is_dir():

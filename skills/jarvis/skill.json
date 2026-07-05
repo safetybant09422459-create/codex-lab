@@ -2,6 +2,13 @@
   "id": "jarvis",
   "name": "Jarvis Status",
   "description": "Read-only status and capability information about Jarvis",
+  "capabilities": [
+    {
+      "id": "inspect_jarvis_status",
+      "description": "Jarvisの状態や使える機能を確認できます",
+      "availability": "available"
+    }
+  ],
   "status": "implemented",
   "type": "core",
   "version": "0.1.0",

@@ -2,6 +2,13 @@
   "id": "photo",
   "name": "Photo",
   "description": "Photo organization and workflows",
+  "capabilities": [
+    {
+      "id": "photo_features_in_preparation",
+      "description": "写真機能は一部準備中です",
+      "availability": "partial"
+    }
+  ],
   "status": "idea",
   "type": "module",
   "version": "0.1.0",

@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from .config import ROOT_DIR, TOOLS_DIR
+from .config import ROOT_DIR, SKILLS_DIR, TOOLS_DIR
 from .domain_provider import DomainProvider, ProviderOperationSpec
 
 
@@ -50,8 +50,11 @@ class OperationDefinition:
 class ProviderRegistry:
     """Discovers providers and projects Tool JSON into an agent-facing catalog."""
 
-    def __init__(self, tools_dir: Path = TOOLS_DIR) -> None:
+    def __init__(
+        self, tools_dir: Path = TOOLS_DIR, skills_dir: Path = SKILLS_DIR
+    ) -> None:
         self.tools_dir = tools_dir
+        self.skills_dir = skills_dir
         self._providers: dict[str, DomainProvider] = {}
         self._operations: dict[tuple[str, str], OperationDefinition] = {}
 
@@ -102,6 +105,33 @@ class ProviderRegistry:
                 for provider_id in sorted(self._providers)
             ],
         }
+
+    def capability_catalog(self) -> dict[str, Any]:
+        """Return provider-owned human-facing descriptions without selecting them."""
+        providers: list[dict[str, Any]] = []
+        for skill_file in sorted(self.skills_dir.glob("*/skill.json")):
+            data = self._load_json(skill_file, "skill definition")
+            provider_id = data.get("id")
+            if not provider_id:
+                continue
+            capabilities = data.get("capabilities")
+            if not isinstance(capabilities, list) or not capabilities:
+                capabilities = [
+                    {
+                        "id": "description_unavailable",
+                        "description": "User-facing capability descriptions are not declared.",
+                    }
+                ]
+            providers.append(
+                {
+                    "provider_id": str(provider_id),
+                    "name": data.get("name"),
+                    "status": data.get("status"),
+                    "registered": provider_id in self._providers,
+                    "capabilities": capabilities,
+                }
+            )
+        return {"contract_version": "1", "providers": providers}
 
     def _build_definitions(
         self, provider: DomainProvider
@@ -183,16 +213,18 @@ class ProviderRegistry:
     def _load_tools(self, provider_id: str) -> dict[str, dict[str, Any]]:
         tools: dict[str, dict[str, Any]] = {}
         for tool_file in sorted(self.tools_dir.glob("*/*.json")):
-            try:
-                data = json.loads(tool_file.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as exc:
-                try:
-                    relative_path = tool_file.relative_to(ROOT_DIR)
-                except ValueError:
-                    relative_path = tool_file
-                raise ProviderRegistryError(
-                    f"Invalid tool definition: {relative_path}"
-                ) from exc
+            data = self._load_json(tool_file, "tool definition")
             if data.get("skill_id") == provider_id:
                 tools[data.get("id", "")] = data
         return tools
+
+    @staticmethod
+    def _load_json(path: Path, kind: str) -> dict[str, Any]:
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            try:
+                relative_path = path.relative_to(ROOT_DIR)
+            except ValueError:
+                relative_path = path
+            raise ProviderRegistryError(f"Invalid {kind}: {relative_path}") from exc

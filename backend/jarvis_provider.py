@@ -12,8 +12,13 @@ class JarvisProvider(DomainProvider):
 
     provider_id = "jarvis"
 
-    def __init__(self, catalog_supplier: Callable[[], dict[str, Any]]) -> None:
+    def __init__(
+        self,
+        catalog_supplier: Callable[[], dict[str, Any]],
+        capability_catalog_supplier: Callable[[], dict[str, Any]],
+    ) -> None:
         self._catalog_supplier = catalog_supplier
+        self._capability_catalog_supplier = capability_catalog_supplier
 
     def operation_specs(self) -> tuple[ProviderOperationSpec, ...]:
         return (
@@ -73,9 +78,11 @@ class JarvisProvider(DomainProvider):
 
         if operation.operation_id == "get_capabilities":
             catalog = self._catalog_supplier()
+            capability_catalog = self._capability_catalog_supplier()
             operations = self._implemented_operations(catalog)
             return {
                 "chat_status": "active_single_agent_loop_v0",
+                "capability_catalog": capability_catalog,
                 "available_providers": self._active_provider_ids(catalog),
                 "available_operations": operations,
                 "disabled_or_planned_features": [
@@ -97,35 +104,10 @@ class JarvisProvider(DomainProvider):
             }
 
         if operation.operation_id == "get_provider_status":
-            active = set(self._active_provider_ids(self._catalog_supplier()))
-            status = [
-                self._provider_status("jarvis", "active", active),
-                self._provider_status("travel", "active", active),
-                {
-                    "provider_id": "photo",
-                    "status": "partial",
-                    "detail": "Photo API and executor exist; Domain Provider is not registered.",
-                },
-                {
-                    "provider_id": "weather",
-                    "status": "partial",
-                    "detail": "Local Runtime executor exists; Domain Provider is not registered.",
-                },
-                {
-                    "provider_id": "developer",
-                    "status": "partial",
-                    "detail": "Developer UI exists; Domain Provider is not registered.",
-                },
-                *(
-                    {
-                        "provider_id": provider_id,
-                        "status": "planned",
-                        "detail": "Domain Provider is not registered.",
-                    }
-                    for provider_id in ("calendar", "garden", "home")
-                ),
-            ]
-            return {"providers": status, "source": "jarvis_status"}
+            return {
+                "providers": self._capability_catalog_supplier().get("providers", []),
+                "source": "capability_catalog",
+            }
 
         if operation.operation_id == "get_operation_catalog":
             catalog = self._catalog_supplier()
@@ -171,23 +153,6 @@ class JarvisProvider(DomainProvider):
             for operation in provider.get("operations", [])
             if operation.get("availability") == "implemented"
         ]
-
-    @staticmethod
-    def _provider_status(
-        provider_id: str, registered_status: str, active: set[str]
-    ) -> dict[str, str]:
-        if provider_id in active:
-            return {
-                "provider_id": provider_id,
-                "status": registered_status,
-                "detail": "Registered in the current Operation Catalog.",
-            }
-        return {
-            "provider_id": provider_id,
-            "status": "unavailable",
-            "detail": "Expected provider is not registered in the current Operation Catalog.",
-        }
-
 
 class JarvisExecutor(BaseExecutor):
     """Runtime adapter for the Jarvis Status Provider."""

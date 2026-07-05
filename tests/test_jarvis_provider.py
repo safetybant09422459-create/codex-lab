@@ -1,8 +1,12 @@
 import inspect
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from backend.agent_host import AgentHost, TurnInput
 from backend.jarvis_provider import JarvisProvider
+from backend.provider_registry import ProviderRegistry
 from backend.runtime import RuntimeService
 from tests.fake_llm_client import FakeLLMClient
 
@@ -29,19 +33,31 @@ class JarvisProviderTest(unittest.TestCase):
         self.assertIn(
             "jarvis.get_capabilities", result["available_operations"]
         )
+        capabilities = {
+            item["provider_id"]: item["capabilities"]
+            for item in result["capability_catalog"]["providers"]
+        }
+        self.assertEqual(
+            capabilities["jarvis"][0]["description"],
+            "Jarvisの状態や使える機能を確認できます",
+        )
+        self.assertIn("旅行を振り返れます", capabilities["travel"][0]["description"])
+        self.assertEqual(
+            capabilities["photo"][0]["description"], "写真機能は一部準備中です"
+        )
+        self.assertEqual(capabilities["travel"][0]["availability"], "available")
+        self.assertEqual(capabilities["photo"][0]["availability"], "partial")
 
     def test_get_provider_status_executes_through_runtime(self) -> None:
         result = self._execute("get_provider_status")
-        statuses = {
-            item["provider_id"]: item["status"] for item in result["providers"]
+        providers = {
+            item["provider_id"]: item for item in result["providers"]
         }
 
-        self.assertEqual(statuses["jarvis"], "active")
-        self.assertEqual(statuses["travel"], "active")
-        self.assertEqual(statuses["photo"], "partial")
-        self.assertEqual(statuses["calendar"], "planned")
-        self.assertEqual(statuses["garden"], "planned")
-        self.assertEqual(statuses["home"], "planned")
+        self.assertTrue(providers["jarvis"]["registered"])
+        self.assertTrue(providers["travel"]["registered"])
+        self.assertFalse(providers["photo"]["registered"])
+        self.assertIn("capabilities", providers["calendar"])
 
     def test_get_operation_catalog_executes_through_runtime(self) -> None:
         result = self._execute("get_operation_catalog")
@@ -58,6 +74,31 @@ class JarvisProviderTest(unittest.TestCase):
                 "get_provider_status",
                 "get_operation_catalog",
             },
+        )
+        self.assertNotIn("capability_catalog", result)
+
+    def test_missing_capability_metadata_uses_generic_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skills_dir = Path(temp_dir) / "skills"
+            skill_dir = skills_dir / "example"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "skill.json").write_text(
+                json.dumps({"id": "example", "name": "Example", "status": "idea"}),
+                encoding="utf-8",
+            )
+            registry = ProviderRegistry(skills_dir=skills_dir)
+
+            entry = registry.capability_catalog()["providers"][0]
+
+        self.assertEqual(entry["provider_id"], "example")
+        self.assertEqual(
+            entry["capabilities"],
+            [
+                {
+                    "id": "description_unavailable",
+                    "description": "User-facing capability descriptions are not declared.",
+                }
+            ],
         )
 
     def test_catalog_marks_jarvis_operations_read_only_and_low_risk(self) -> None:
@@ -120,6 +161,9 @@ class JarvisProviderTest(unittest.TestCase):
         )
         self.assertNotIn("user_text", source)
         self.assertNotIn("compose_answer", source)
+        self.assertNotIn('provider_id == "travel"', source)
+        self.assertNotIn('provider_id == "photo"', source)
+        self.assertNotIn('"何ができる"', source)
 
 
 if __name__ == "__main__":

@@ -2,6 +2,13 @@
   "id": "travel",
   "name": "Travel",
   "description": "Travel planning and management",
+  "capabilities": [
+    {
+      "id": "review_travel_memories",
+      "description": "旅行の一覧や旅行中の出来事を確認し、旅行を振り返れます",
+      "availability": "available"
+    }
+  ],
   "status": "idea",
   "type": "module",
   "version": "0.1.0",
