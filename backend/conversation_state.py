@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from threading import RLock
 from typing import Any
 
@@ -27,6 +28,7 @@ class InMemoryConversationStateStore:
             raise ValueError("max_turns must be at least 1")
         self.max_turns = max_turns
         self._sessions: dict[str, list[ConversationTurnState]] = {}
+        self._session_started_at: dict[str, str] = {}
         self._lock = RLock()
 
     def get_turns(self, session_id: str) -> list[ConversationTurnState]:
@@ -35,7 +37,13 @@ class InMemoryConversationStateStore:
 
     def append_turn(self, session_id: str, turn: ConversationTurnState) -> None:
         with self._lock:
+            self.get_or_create_started_at(session_id)
             turns = self._sessions.setdefault(session_id, [])
             turns.append(deepcopy(turn))
             del turns[:-self.max_turns]
 
+    def get_or_create_started_at(self, session_id: str) -> str:
+        with self._lock:
+            return self._session_started_at.setdefault(
+                session_id, datetime.now(timezone.utc).isoformat()
+            )

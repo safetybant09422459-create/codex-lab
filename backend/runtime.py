@@ -95,6 +95,9 @@ class RuntimeService:
     def get_operation_catalog(self) -> dict[str, Any]:
         return self.provider_registry.catalog()
 
+    def get_capability_catalog(self) -> dict[str, Any]:
+        return self.provider_registry.capability_catalog()
+
     def execute_provider_operation(
         self,
         provider_id: str,

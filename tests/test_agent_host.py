@@ -70,6 +70,19 @@ class AgentHostTest(unittest.TestCase):
         self.assertEqual(catalog["contract_version"], "1")
         self.assertEqual(catalog["providers"][0]["provider_id"], "travel")
 
+    def test_capability_descriptions_are_included_in_llm_payload(self) -> None:
+        llm = FakeLLMClient(answer_action())
+
+        AgentHost(llm, self.runtime).run_turn(self.turn_input)
+
+        capability_ids = {
+            capability["provider_id"]
+            for capability in llm.payloads[0].capability_context
+        }
+        self.assertIn("travel", capability_ids)
+        self.assertTrue(llm.payloads[0].session_info["conversation_started_at"])
+        self.assertEqual(llm.payloads[0].context_version, "1")
+
     def test_fake_llm_client_implements_interface(self) -> None:
         llm: LLMClient = FakeLLMClient(answer_action())
 

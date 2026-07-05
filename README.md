@@ -91,10 +91,11 @@ Implemented:
 - Agent Host経由のJarvis Chat v1最小経路（LLM → Runtime → Provider → Observation → LLM）
 - FastAPI Chat API v0.1 (`POST /api/chat`)
 - Conversation State v0（session単位のin-memory短期状態）
+- Conversation Context Builder v0（StateからLLM Contextへの決定的な整形、制限、redaction、visibility filter）
 
 Not Yet Implemented:
 
-- Jarvis Chat Core / Orchestrator v2（Context Assembly、Capability Catalog）
+- Jarvis Chat Core / Orchestrator v2の完全版（Current World、Memory Context、永続State、section別budget）
 - Agent Hostの汎用的な複数Action反復、会話状態の永続化
 - Memory RAG / Memory Capability
 - Knowledge Enrichment Engine

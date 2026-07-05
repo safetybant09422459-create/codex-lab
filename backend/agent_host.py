@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
+from .conversation_context import ConversationContextBuilder
 from .conversation_state import (
     ConversationTurnState,
     InMemoryConversationStateStore,
@@ -34,6 +35,7 @@ class TurnInput(ContractModel):
 
 
 class TurnContext(ContractModel):
+    context_version: str
     turn_id: str
     session_id: str
     principal: Principal
@@ -44,6 +46,8 @@ class TurnContext(ContractModel):
     persona_context: dict[str, Any] = Field(default_factory=dict)
     memory_context: list[dict[str, Any]] = Field(default_factory=list)
     activation_candidates: list[dict[str, Any]] = Field(default_factory=list)
+    session_info: dict[str, Any]
+    capability_context: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class Observation(ContractModel):
@@ -55,6 +59,7 @@ class Observation(ContractModel):
 
 class LLMInputPayload(ContractModel):
     contract_version: Literal["1"] = "1"
+    context_version: Literal["1"] = "1"
     turn_id: str
     session_id: str
     principal: Principal
@@ -65,6 +70,8 @@ class LLMInputPayload(ContractModel):
     persona_context: dict[str, Any]
     memory_context: list[dict[str, Any]]
     activation_candidates: list[dict[str, Any]]
+    session_info: dict[str, Any] = Field(default_factory=dict)
+    capability_context: list[dict[str, Any]] = Field(default_factory=list)
     available_operations: dict[str, Any]
     runtime_policy: dict[str, Any]
     prior_observations: list[Observation]
@@ -140,6 +147,8 @@ class AgentTurnResult(ContractModel):
 class AgentRuntime(Protocol):
     def get_operation_catalog(self) -> dict[str, Any]: ...
 
+    def get_capability_catalog(self) -> dict[str, Any]: ...
+
     def execute_provider_operation(
         self,
         provider_id: str,
@@ -162,12 +171,14 @@ class AgentHost:
         llm_client: LLMClient,
         runtime: AgentRuntime,
         conversation_store: InMemoryConversationStateStore | None = None,
+        context_builder: ConversationContextBuilder | None = None,
     ) -> None:
         self.llm_client = llm_client
         self.runtime = runtime
         self.conversation_store = (
             conversation_store or InMemoryConversationStateStore()
         )
+        self.context_builder = context_builder or ConversationContextBuilder()
 
     def run_turn(self, turn_input: TurnInput) -> AgentTurnResult:
         turn_id = str(uuid4())
@@ -240,32 +251,35 @@ class AgentHost:
 
     def _assemble_context(self, turn_id: str, turn_input: TurnInput) -> TurnContext:
         previous_turns = self.conversation_store.get_turns(turn_input.session_id)
-        last_turn = previous_turns[-1] if previous_turns else None
+        capability_catalog = self.runtime.get_capability_catalog()
+        if not isinstance(capability_catalog, dict):
+            capability_catalog = {"providers": []}
+        assembled = self.context_builder.build(
+            session_id=turn_input.session_id,
+            channel=turn_input.channel,
+            conversation_started_at=self.conversation_store.get_or_create_started_at(
+                turn_input.session_id
+            ),
+            previous_turns=previous_turns,
+            capabilities=capability_catalog.get("providers", []),
+            allowed_visibilities=self._allowed_visibilities(turn_input.principal.role),
+        )
         return TurnContext(
             turn_id=turn_id,
             session_id=turn_input.session_id,
             principal=turn_input.principal,
             channel=turn_input.channel,
             normalized_input=turn_input.normalized_input,
-            conversation_context=[
-                {
-                    "user_input": turn.user_input,
-                    "assistant_final_response": turn.assistant_final_response,
-                }
-                for turn in previous_turns
-            ],
-            conversation_state={
-                "last_llm_action": (
-                    deepcopy(last_turn.last_llm_action) if last_turn else None
-                ),
-                "last_observations": (
-                    deepcopy(last_turn.last_observations) if last_turn else []
-                ),
-                "active_entities": (
-                    deepcopy(last_turn.active_entities) if last_turn else []
-                ),
-            },
+            **assembled,
         )
+
+    @staticmethod
+    def _allowed_visibilities(role: str) -> frozenset[str]:
+        return {
+            "admin": frozenset({"public", "shared", "family", "private", "unknown"}),
+            "family": frozenset({"public", "shared", "family", "unknown"}),
+            "guest": frozenset({"public", "shared", "unknown"}),
+        }[role]
 
     def _remember_turn(
         self, turn_input: TurnInput, result: AgentTurnResult
