@@ -22,8 +22,8 @@ Channel
   -> Jarvis Core boundary
        -> LLM Agent Loop
        -> Runtime
-       -> Skill
-       -> Repository
+       -> Skill / Domain Provider contract
+            -> Repository / External Adapter
 
 Memory -> permitted life context
 Activation RAG -> optional, unverified candidates only
@@ -95,6 +95,36 @@ DB / 外部API
 ```
 
 詳細は[Skill Standard Architecture](skill_standard_architecture.md)に置く。
+
+## Skill / Domain Providerの関係
+
+`Skill` はTravel、Photo、Calendar、Garden、Homeなど、ユーザーから見える能力・機能単位であり、名称は
+当面維持する。`Domain Provider` は、そのSkillがJarvis Coreへ能力を提供する契約境界である。Providerは
+新しい頭脳、画面、必須microservice、またはSkillと並ぶ第七のトップレベル責務ではない。
+
+```text
+Skill（ユーザーから見える能力領域）
+└ Domain Provider contract（Coreから見える能力境界）
+   ├ Operation / Tool contract
+   └ Provider implementation
+      ├ Repository
+      ├ Storage / DB
+      └ External Adapter / API
+```
+
+ProviderはCRUD、検索、正本データ取得、外部API呼び出し、Operation実行、Repository等の隠蔽、
+ドメイン不変条件や正規化を担う。内部実装のdispatch、Repository選択、fallbackも決定的であればよい。
+
+Providerは、ユーザー意図の解釈、Provider / Operationの会話上の選択、複数Providerを使う計画、結果の
+意味評価、Clarification、Persona、会話状態、最終回答を担わない。これらはLLM Agent Loopが担う。
+Runtimeは選択済みOperationを検証し、Permission、Confirmation、Auditを適用する。
+
+ProviderのtransportはMCP、REST API、Local Serviceのいずれでもよい。MCPを現時点の第一候補とするが、
+Coreはtransportや内部実装へ依存しない。Web UIとJarvis Chatも、画面専用・Chat専用のドメイン処理を
+増やさず、同じProvider OperationをRuntime経由で利用する。
+
+本書やActivation RAG文書にある `Provider` は文脈を明示する。能力提供境界は `Domain Provider`、AIモデルの
+提供元は `AI Model Provider`、検索文書供給実装は `Activation RAG Provider` と呼ぶ。
 
 Module / MCP Tool候補：
 

@@ -129,3 +129,20 @@ Jarvis vNextの意味判断と実行安全性をどこへ置くか？
 ### 詳細
 
 [Jarvis vNext Single Agent Loop Architecture](decisions/2026-07-vnext-single-agent-loop-architecture.md)を参照する。
+
+---
+
+## Decision 0007
+
+### テーマ
+
+SkillとProviderの責務をどう分けるか？
+
+### 決定
+
+Skillはユーザーから見える能力・機能単位、Domain ProviderはCoreが利用する能力提供境界とする。
+ProviderはSkillとは別の頭脳や必須microserviceではなく、MCP、REST API、Local Serviceで交換可能な契約面である。
+
+### 詳細
+
+[Domain Provider Responsibility Boundary](decisions/2026-07-domain-provider-boundary.md)を参照する。

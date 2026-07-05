@@ -208,6 +208,22 @@ AIモデル提供元。
 
 Jarvisは特定Providerに依存しない。
 
+曖昧さを避ける場合は `AI Model Provider` と呼ぶ。
+
+---
+
+## Domain Provider
+
+SkillがJarvis Coreへドメイン能力を提供する契約境界。
+
+Skillはユーザーから見える能力・機能単位、Domain ProviderはCoreから見えるOperation境界である。
+CRUD、検索、Repository / DBアクセス、外部API、決定的ドメインロジックを担当し、ユーザー意図の解釈、
+Provider / Operation選択、会話、最終回答は担当しない。
+
+MCP、REST API、Local Serviceのいずれでも実装できる。MCPを第一候補とするがMCPには依存しない。
+
+Activation RAG内部の検索文書供給実装は `Activation RAG Provider` と呼び、Domain Providerと区別する。
+
 ---
 
 ## Idea Backlog

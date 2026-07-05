@@ -8,6 +8,10 @@
 
 Accepted（目標Architecture。現行実装は段階移行中）
 
+> SkillのCore向け契約面をDomain Providerと呼ぶ語彙整理は、後続の
+> [Domain Provider Responsibility Boundary](2026-07-domain-provider-boundary.md)で採用した。Providerは本Decisionの
+> Skill責務を分割する第七の判断主体ではない。
+
 ## 背景
 
 JarvisはWebアプリではなく、Web、Voice、Camera、Chat、Notification、MCPなど複数Channelから使う

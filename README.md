@@ -9,6 +9,7 @@ AI開発練習用
 
 - [AI Coding Agent作業ガイド](AGENTS.md)
 - [Jarvis vNext Single Agent Loop Architecture Decision](docs/decisions/2026-07-vnext-single-agent-loop-architecture.md)
+- [Domain Provider Responsibility Boundary Decision](docs/decisions/2026-07-domain-provider-boundary.md)
 - [Jarvis Chat Core / Orchestrator v2](docs/chat_core.md)
 - [Jarvis Core Activation RAG](docs/activation_rag.md)
 - [Context Assembly](docs/context_assembly.md)
@@ -19,7 +20,9 @@ AI開発練習用
 
 vNextの目標では、Webは複数Channelの一つであり、意味判断は単一のLLM Agent Loopへ集約する。
 現行のRouter、Planner、Entity Resolver、Answer Generator等は移行中の互換コンポーネントであり、
-完成形の独立層ではない。Pythonは既存のRuntime、Skill、Repository境界で決定的処理を担う。
+完成形の独立層ではない。Pythonは既存のRuntime、Skill / Domain Provider、Repository境界で決定的処理を担う。
+Skillはユーザーから見える能力単位、Domain ProviderはCoreが利用する能力提供境界である。Providerは
+MCP、REST API、Local Serviceへ交換可能で、ユーザー意図の解釈や最終回答を担わない。
 
 対象ディレクトリは固定で `/mnt/nas/projects/codex-lab`。
 本番旅行アプリ `/mnt/nas/projects/project` は対象外。

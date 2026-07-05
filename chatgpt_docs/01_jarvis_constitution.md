@@ -89,7 +89,7 @@ Jarvisはチャットだけではなく、触れるWeb UIを持つ。
 
 技術的に美しい抽象よりも、家族が理解でき、信頼でき、確認できる設計を優先する。
 
-### 6. Provider Independent
+### 6. AI Model Provider Independent
 
 Jarvisは特定のAI Providerに依存しない。
 
@@ -209,6 +209,15 @@ Knowledge Enrichmentは本体DBを更新しない。候補は出所、confidence
 現実世界やデータへ作用するAction Toolと、既存Entityを探すMemory / Domain Searchを分ける。
 Capability Usage RAGを将来検討する場合も、利用例の想起はCapability選択の補助に留め、Tool call、引数、
 権限、実行許可を生成しない。
+
+### 20. Domain Provider Boundary
+
+Skillはユーザーから見える能力・機能単位、Domain ProviderはJarvis Coreから利用する能力提供境界である。
+ProviderはCRUD、Repository / DBアクセス、検索、外部API、Operation実行、決定的ドメインロジックを担当する。
+
+Providerは頭脳ではない。ユーザー意図の解釈、Provider / Operation選択、複数Providerの組み合わせ、
+Clarification、Persona、会話、最終回答はLLM Agent Loopが担う。ProviderはMCP、REST API、Local Serviceの
+いずれでも同じ契約を提供できるようにし、writeはRuntimeのValidation、Permission、Confirmation、Auditを通す。
 
 ## 開発前チェック
 
