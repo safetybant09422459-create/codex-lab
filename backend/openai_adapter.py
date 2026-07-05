@@ -39,6 +39,18 @@ class OpenAIResponseValidationError(OpenAIRequestError):
     """Raised when structured model output is not a valid LLM Action."""
 
 
+class OpenAITimeoutError(OpenAIRequestError):
+    """Raised when the AI model provider request exceeds its timeout."""
+
+
+class OpenAIModelRefusalError(OpenAIRequestError):
+    """Raised when the provider refuses to produce the structured output."""
+
+
+class OpenAIIncompleteResponseError(OpenAIRequestError):
+    """Raised when the provider reports an incomplete response."""
+
+
 class OpenAIModelProviderAdapter:
     """OpenAI Responses API implementation of the provider-neutral LLMClient."""
 
@@ -48,8 +60,11 @@ class OpenAIModelProviderAdapter:
         try:
             response = _get_client().responses.create(**request)
         except Exception as exc:
+            if _is_timeout_exception(exc):
+                raise OpenAITimeoutError(_safe_exception_message(exc)) from None
             raise OpenAIRequestError(_safe_exception_message(exc)) from None
 
+        _raise_for_unsuccessful_action_response(response)
         try:
             structured_output = json.loads(_extract_response_text(response))
             raw_action = structured_output["llm_action"]
@@ -118,6 +133,9 @@ def _build_action_request(payload: LLMInputPayload) -> dict[str, Any]:
         "instructions": (
             "Return exactly one Jarvis LLM Action matching the supplied JSON "
             "schema. Use only the supplied context and operation catalog. "
+            "Select call_operation when an available operation is needed to "
+            "answer the user. After a prior observation, use that observation "
+            "to return a terminal action and do not call another operation. "
             "Do not include reasoning, analysis, or hidden thought."
         ),
         "input": json.dumps(payload.model_dump(mode="json"), ensure_ascii=False),
@@ -319,6 +337,29 @@ def _empty_response_details(response: Any) -> str:
     if reason:
         details.append(f"reason={reason}")
     return f" ({', '.join(details)})" if details else ""
+
+
+def _raise_for_unsuccessful_action_response(response: Any) -> None:
+    status = _get_value(response, "status")
+    if status == "incomplete":
+        details = _empty_response_details(response)
+        raise OpenAIIncompleteResponseError(
+            "OpenAI returned an incomplete response" + details
+        )
+
+    for item in _get_value(response, "output") or []:
+        for content in _get_value(item, "content") or []:
+            if _get_value(content, "type") == "refusal":
+                raise OpenAIModelRefusalError("OpenAI model refused the request")
+
+
+def _is_timeout_exception(exc: Exception) -> bool:
+    return isinstance(exc, TimeoutError) or exc.__class__.__name__ in {
+        "APITimeoutError",
+        "ConnectTimeout",
+        "ReadTimeout",
+        "TimeoutException",
+    }
 
 
 def _safe_exception_message(exc: Exception) -> str:

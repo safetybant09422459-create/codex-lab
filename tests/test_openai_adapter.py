@@ -167,6 +167,76 @@ class OpenAIAdapterTest(unittest.TestCase):
                     self.action_payload()
                 )
 
+    def test_action_request_timeout_has_distinct_error(self) -> None:
+        client = FakeClient()
+
+        class APITimeoutError(Exception):
+            pass
+
+        client.responses.create = lambda **_kwargs: (_ for _ in ()).throw(
+            APITimeoutError("request timed out")
+        )
+        with (
+            patch.object(openai_adapter, "OPENAI_API_KEY", "test-secret"),
+            patch.object(openai_adapter, "OPENAI_MODEL", "test-model"),
+            patch.object(openai_adapter, "_create_client", return_value=client),
+        ):
+            with self.assertRaises(openai_adapter.OpenAITimeoutError):
+                openai_adapter.OpenAIModelProviderAdapter().complete(
+                    self.action_payload()
+                )
+
+    def test_action_incomplete_response_has_distinct_error(self) -> None:
+        client = FakeClient()
+        client.responses.create = lambda **_kwargs: SimpleNamespace(
+            output_text="",
+            output=[],
+            status="incomplete",
+            incomplete_details=SimpleNamespace(reason="max_output_tokens"),
+        )
+        with (
+            patch.object(openai_adapter, "OPENAI_API_KEY", "test-secret"),
+            patch.object(openai_adapter, "OPENAI_MODEL", "test-model"),
+            patch.object(openai_adapter, "_create_client", return_value=client),
+        ):
+            with self.assertRaisesRegex(
+                openai_adapter.OpenAIIncompleteResponseError,
+                "max_output_tokens",
+            ):
+                openai_adapter.OpenAIModelProviderAdapter().complete(
+                    self.action_payload()
+                )
+
+    def test_action_refusal_has_distinct_error_without_refusal_text(self) -> None:
+        client = FakeClient()
+        client.responses.create = lambda **_kwargs: SimpleNamespace(
+            output_text="",
+            status="completed",
+            output=[
+                SimpleNamespace(
+                    content=[
+                        SimpleNamespace(
+                            type="refusal",
+                            refusal="provider refusal detail",
+                        )
+                    ]
+                )
+            ],
+        )
+        with (
+            patch.object(openai_adapter, "OPENAI_API_KEY", "test-secret"),
+            patch.object(openai_adapter, "OPENAI_MODEL", "test-model"),
+            patch.object(openai_adapter, "_create_client", return_value=client),
+        ):
+            with self.assertRaises(
+                openai_adapter.OpenAIModelRefusalError
+            ) as context:
+                openai_adapter.OpenAIModelProviderAdapter().complete(
+                    self.action_payload()
+                )
+
+        self.assertNotIn("provider refusal detail", str(context.exception))
+
     def test_llm_client_error_redacts_api_key(self) -> None:
         api_key = "sk-adapter-super-secret"
         with (
