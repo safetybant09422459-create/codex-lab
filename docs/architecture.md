@@ -127,6 +127,25 @@ ProviderのtransportはMCP、REST API、Local Serviceのいずれでもよい。
 Coreはtransportや内部実装へ依存しない。Web UIとJarvis Chatも、画面専用・Chat専用のドメイン処理を
 増やさず、同じProvider OperationをRuntime経由で利用する。
 
+## Catalog境界
+
+Catalogは宣言であり、判断ロジックではない。Operation CatalogはLLMがProvider Operationを選ぶための契約、
+Capability Catalogは利用者向けの能力説明、Dashboard CatalogはUIが描画可能な候補metadataとして分離する。
+
+```text
+Domain Provider -> Operation / Capability / Dashboard declaration
+                       -> deterministic validation and visibility filter
+                       -> LLM / Core selects what to call, explain, or show
+                       -> Runtime executes / UI renders
+```
+
+LLM / Coreは意図解釈、Provider / Operation選択、能力説明、現在表示するDashboard候補を判断する。Pythonは読込、
+schema validation、principal / permission / visibility filter、Runtime safety、transport mappingを担う。UIは選択済み
+候補を描画し、Providerは自分の候補とOperationを宣言するが、どちらもユーザー意図を判断しない。
+
+MCP Tool metadataはimplemented Operation Catalogから投影できるが、MCPはprotocol / transportであり判断層ではない。
+詳細と禁止事項は[Catalog Principle / Guardrail](decisions/2026-07-catalog-principle.md)を参照する。
+
 本書やActivation RAG文書にある `Provider` は文脈を明示する。能力提供境界は `Domain Provider`、AIモデルの
 提供元は `AI Model Provider`、検索文書供給実装は `Activation RAG Provider` と呼ぶ。
 

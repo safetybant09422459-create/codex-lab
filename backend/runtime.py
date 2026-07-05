@@ -58,11 +58,14 @@ class RuntimeService:
         self.audit_logger = audit_logger or AuditLogger()
         self.confirmation_engine = confirmation_engine or ConfirmationEngine()
         if provider_registry is None:
+            from .jarvis_provider import JarvisProvider
             from .travel_executor import TravelProvider
 
             provider_registry = ProviderRegistry(tools_dir=tools_dir)
             if (tools_dir / "travel").is_dir():
                 provider_registry.register(TravelProvider())
+            if (tools_dir / "jarvis").is_dir():
+                provider_registry.register(JarvisProvider(provider_registry.catalog))
         self.provider_registry = provider_registry
         self.executor_registry = executor_registry or ExecutorRegistry()
         if executor_registry is None and (tools_dir / "travel").is_dir():
@@ -71,6 +74,13 @@ class RuntimeService:
             self.executor_registry.register_skill(
                 "travel",
                 TravelExecutor(provider=self.provider_registry.get_provider("travel")),
+            )
+        if executor_registry is None and (tools_dir / "jarvis").is_dir():
+            from .jarvis_provider import JarvisExecutor
+
+            self.executor_registry.register_skill(
+                "jarvis",
+                JarvisExecutor(provider=self.provider_registry.get_provider("jarvis")),
             )
         self.permission_engine = permission_engine or PermissionEngine()
 

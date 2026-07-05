@@ -54,6 +54,11 @@ Provider Catalogが異なるriskを宣言する二重管理を避ける。空の
 
 `planned` Operationは発見できるが、Runtimeは実行を拒否する。Catalog記載だけで実装済みとは扱わない。
 
+Operation Catalogは宣言であり、発話からProvider / Operationを選ぶrouting tableではない。Capability Catalogは
+人間向け能力説明、Dashboard Catalogは描画候補metadataとして別に扱う。Providerは3種類の候補を宣言できるが、
+選択はLLM / Coreが行う。関係とguardrailは
+[Catalog Principle / Guardrail](decisions/2026-07-catalog-principle.md)を参照する。
+
 ## Provider Registry
 
 `backend/provider_registry.py`がProvider一覧、ProviderごとのOperation一覧、Operation解決を担う。v1では
@@ -109,6 +114,14 @@ planned:
 MCP adapterはimplemented Catalog entryの`provider_id.operation_id`をTool名、`description`と能力説明をTool説明、
 `input_schema`をMCP input schemaとして投影できる。MCP handlerは同じRuntime入口へ渡し、Providerを直接実行
 しない。MCP transport、session、認証方式はv1範囲外であり、MCP接続自体を権限や確認の証拠にしない。
+MCPはTool選択を担わず、MCP化後もLLM / CoreがOperationを選択する。
+
+## Jarvis Status Provider
+
+Jarvis Status Providerの`get_capabilities`、`get_provider_status`、`get_operation_catalog`は、CatalogやProvider状態の
+許可されたread viewを構造化して返す。これはユーザー意図の解釈、Operation選択、Capability説明の最終回答生成を
+Providerへ移すものではない。「何ができる？」という発話をPythonで`get_capabilities`へ固定routingせず、LLMが
+Operation Catalogから必要性を判断し、Observationを基に回答する。
 
 ## 今回復旧しないもの
 

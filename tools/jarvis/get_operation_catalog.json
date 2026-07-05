@@ -1,0 +1,18 @@
+{
+  "id": "get_operation_catalog",
+  "skill_id": "jarvis",
+  "name": "Get Operation Catalog",
+  "description": "Get a deterministic summary of the current Operation Catalog.",
+  "status": "implemented",
+  "mode": "read",
+  "risk_level": "low",
+  "confirmation_required": false,
+  "audit_required": false,
+  "input_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "output_schema": {
+    "type": "object"
+  }
+}

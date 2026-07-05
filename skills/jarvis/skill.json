@@ -1,0 +1,24 @@
+{
+  "id": "jarvis",
+  "name": "Jarvis Status",
+  "description": "Read-only status and capability information about Jarvis",
+  "status": "implemented",
+  "type": "core",
+  "version": "0.1.0",
+  "mode": "read",
+  "risk_level": "low",
+  "confirmation_required": false,
+  "audit_required": false,
+  "input_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "output_schema": {
+    "type": "object"
+  },
+  "invocation_examples": [
+    "何ができる？",
+    "今使える機能は？",
+    "プロバイダー一覧を教えて"
+  ]
+}

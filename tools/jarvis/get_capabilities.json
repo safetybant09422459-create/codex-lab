@@ -1,0 +1,18 @@
+{
+  "id": "get_capabilities",
+  "skill_id": "jarvis",
+  "name": "Get Jarvis Capabilities",
+  "description": "Get structured facts about current Jarvis capabilities and limitations.",
+  "status": "implemented",
+  "mode": "read",
+  "risk_level": "low",
+  "confirmation_required": false,
+  "audit_required": false,
+  "input_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "output_schema": {
+    "type": "object"
+  }
+}

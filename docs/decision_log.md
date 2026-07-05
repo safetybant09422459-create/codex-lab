@@ -183,3 +183,21 @@ Runtime接続だけを担う。内部思考やchain-of-thoughtは契約、保存
 ### 詳細
 
 [Jarvis Core LLM Contract](decisions/2026-07-llm-contract.md)を参照する。
+
+---
+
+## Decision 0010
+
+### テーマ
+
+Catalogへ何を置き、何を置かないか？
+
+### 決定
+
+Catalogは宣言であり判断ロジックではない。Operation、Capability、Dashboard Catalogを分離し、ユーザー意図、
+Provider / Operation選択、回答、現在の表示候補はLLM / Jarvis Coreが判断する。Pythonは読込、validation、
+principal / permission / visibility filter、Runtime safety、transport mappingを担う。
+
+### 詳細
+
+[Catalog Principle / Guardrail](decisions/2026-07-catalog-principle.md)を参照する。

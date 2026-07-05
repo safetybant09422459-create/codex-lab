@@ -1,0 +1,18 @@
+{
+  "id": "get_provider_status",
+  "skill_id": "jarvis",
+  "name": "Get Provider Status",
+  "description": "Get the status of known Jarvis Domain Provider areas.",
+  "status": "implemented",
+  "mode": "read",
+  "risk_level": "low",
+  "confirmation_required": false,
+  "audit_required": false,
+  "input_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "output_schema": {
+    "type": "object"
+  }
+}
