@@ -68,6 +68,7 @@ OPENAI_VERBOSITY = os.environ.get("OPENAI_VERBOSITY", "").strip()
 OPENAI_MAX_OUTPUT_TOKENS = os.environ.get(
     "OPENAI_MAX_OUTPUT_TOKENS", "256"
 ).strip()
+OPENAI_TIMEOUT_SECONDS = os.environ.get("OPENAI_TIMEOUT_SECONDS", "30").strip()
 
 GUARD_PROMPT = """\
 You are running from Jarvis Dev v0.3.

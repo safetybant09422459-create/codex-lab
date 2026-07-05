@@ -1,13 +1,18 @@
+import json
 import re
 from threading import Lock
 from time import perf_counter
 from typing import Any
 
+from pydantic import ValidationError
+
+from .agent_host import ACTION_ADAPTER, LLMInputPayload
 from .config import (
     OPENAI_API_KEY,
     OPENAI_MAX_OUTPUT_TOKENS,
     OPENAI_MODEL,
     OPENAI_REASONING_EFFORT,
+    OPENAI_TIMEOUT_SECONDS,
     OPENAI_VERBOSITY,
 )
 
@@ -30,6 +35,42 @@ class OpenAIRequestError(RuntimeError):
         self.timings_ms = dict(timings_ms) if timings_ms is not None else None
 
 
+class OpenAIResponseValidationError(OpenAIRequestError):
+    """Raised when structured model output is not a valid LLM Action."""
+
+
+class OpenAIModelProviderAdapter:
+    """OpenAI Responses API implementation of the provider-neutral LLMClient."""
+
+    def complete(self, payload: LLMInputPayload) -> dict[str, Any]:
+        _validate_configuration()
+        request = _build_action_request(payload)
+        try:
+            response = _get_client().responses.create(**request)
+        except Exception as exc:
+            raise OpenAIRequestError(_safe_exception_message(exc)) from None
+
+        try:
+            structured_output = json.loads(_extract_response_text(response))
+            raw_action = structured_output["llm_action"]
+            action = ACTION_ADAPTER.validate_python(raw_action)
+        except (
+            json.JSONDecodeError,
+            KeyError,
+            TypeError,
+            ValidationError,
+            ValueError,
+        ) as exc:
+            raise OpenAIResponseValidationError(
+                f"OpenAI returned an invalid LLM Action: {_safe_exception_message(exc)}"
+            ) from None
+        return action.model_dump(mode="json")
+
+
+# Explicit generic name for configuration code that selects this provider.
+AIModelProviderAdapter = OpenAIModelProviderAdapter
+
+
 def _create_client() -> Any:
     try:
         from openai import OpenAI
@@ -38,7 +79,87 @@ def _create_client() -> Any:
             "OpenAI SDK is not installed; run: pip install openai"
         ) from exc
 
-    return OpenAI(api_key=OPENAI_API_KEY)
+    return OpenAI(api_key=OPENAI_API_KEY, timeout=_timeout_seconds())
+
+
+def _timeout_seconds() -> float:
+    try:
+        timeout = float(OPENAI_TIMEOUT_SECONDS)
+    except ValueError:
+        raise OpenAIConfigurationError(
+            "OPENAI_TIMEOUT_SECONDS must be a positive number"
+        ) from None
+    if timeout <= 0:
+        raise OpenAIConfigurationError(
+            "OPENAI_TIMEOUT_SECONDS must be a positive number"
+        )
+    return timeout
+
+
+def _validate_configuration() -> None:
+    if not OPENAI_API_KEY:
+        raise OpenAIConfigurationError("OPENAI_API_KEY is not configured")
+    if not OPENAI_MODEL:
+        raise OpenAIConfigurationError("OPENAI_MODEL is not configured")
+    _timeout_seconds()
+
+
+def _build_action_request(payload: LLMInputPayload) -> dict[str, Any]:
+    inference_settings = _inference_settings()
+    text_settings = dict(inference_settings.pop("text", {}))
+    text_settings["format"] = {
+        "type": "json_schema",
+        "name": "jarvis_llm_action_v1",
+        "strict": True,
+        "schema": _action_output_schema(),
+    }
+    request = {
+        "model": OPENAI_MODEL,
+        "instructions": (
+            "Return exactly one Jarvis LLM Action matching the supplied JSON "
+            "schema. Use only the supplied context and operation catalog. "
+            "Do not include reasoning, analysis, or hidden thought."
+        ),
+        "input": json.dumps(payload.model_dump(mode="json"), ensure_ascii=False),
+        "store": False,
+        "text": text_settings,
+    }
+    request.update(inference_settings)
+    return request
+
+
+def _strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Apply the Responses API strict-schema requirement mechanically."""
+    schema = json.loads(json.dumps(schema))
+
+    def visit(node: Any) -> None:
+        if isinstance(node, dict):
+            if "oneOf" in node:
+                node["anyOf"] = node.pop("oneOf")
+            node.pop("discriminator", None)
+            properties = node.get("properties")
+            if isinstance(properties, dict):
+                node["required"] = list(properties)
+            node.pop("default", None)
+            for value in node.values():
+                visit(value)
+        elif isinstance(node, list):
+            for value in node:
+                visit(value)
+
+    visit(schema)
+    return schema
+
+
+def _action_output_schema() -> dict[str, Any]:
+    """Wrap the discriminated union because strict output requires a root object."""
+    action_schema = _strict_json_schema(ACTION_ADAPTER.json_schema())
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {"llm_action": action_schema},
+        "required": ["llm_action"],
+    }
 
 
 def _get_client() -> Any:
@@ -70,10 +191,7 @@ def generate_text_with_timings(
         "response_text_extraction": 0.0,
         "total": 0.0,
     }
-    if not OPENAI_API_KEY:
-        raise OpenAIConfigurationError("OPENAI_API_KEY is not configured")
-    if not OPENAI_MODEL:
-        raise OpenAIConfigurationError("OPENAI_MODEL is not configured")
+    _validate_configuration()
 
     try:
         api_started = perf_counter()

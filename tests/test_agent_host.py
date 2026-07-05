@@ -11,7 +11,8 @@ from backend.agent_host import (
 )
 from backend.audit import AuditLogger
 from backend.executors import ExecutorRegistry
-from backend.llm_client import AIModelProviderAdapter, LLMClient
+from backend.llm_client import LLMClient
+from backend.openai_adapter import OpenAIModelProviderAdapter
 from backend.provider_registry import ProviderRegistry
 from backend.runtime import RuntimeService
 from backend.travel_executor import TravelExecutor, TravelProvider
@@ -82,14 +83,12 @@ class AgentHostTest(unittest.TestCase):
 
         self.assertIs(annotation, LLMClient)
 
-    def test_ai_model_provider_adapter_stub_can_be_injected(self) -> None:
-        adapter: LLMClient = AIModelProviderAdapter()
+    def test_openai_adapter_can_be_injected_through_interface(self) -> None:
+        adapter: LLMClient = OpenAIModelProviderAdapter()
         host = AgentHost(adapter, self.runtime)
 
         self.assertIs(host.llm_client, adapter)
         self.assertIsInstance(adapter, LLMClient)
-        with self.assertRaisesRegex(NotImplementedError, "not implemented"):
-            host.run_turn(self.turn_input)
 
     def test_fake_llm_answer_action_is_returned_without_runtime_call(self) -> None:
         runtime = Mock()

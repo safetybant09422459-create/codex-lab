@@ -1,8 +1,10 @@
+import json
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from backend import openai_adapter
+from backend.agent_host import LLMInputPayload, Principal
 
 
 class FakeResponses:
@@ -25,6 +27,172 @@ class OpenAIAdapterTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         openai_adapter._client = None
+
+    @staticmethod
+    def action_payload() -> LLMInputPayload:
+        return LLMInputPayload(
+            turn_id="turn-1",
+            session_id="session-1",
+            principal=Principal(role="guest"),
+            channel="chat",
+            normalized_input={"text": "旅行一覧を見せて"},
+            conversation_context=[],
+            conversation_state={},
+            persona_context={},
+            memory_context=[],
+            activation_candidates=[],
+            available_operations={"contract_version": "1", "providers": []},
+            runtime_policy={"max_steps": 2},
+            prior_observations=[],
+        )
+
+    @staticmethod
+    def answer_action() -> dict[str, object]:
+        return {
+            "contract_version": "1",
+            "action": "answer",
+            "message": "了解しました。",
+            "conversation_update": {
+                "transition": "start_request",
+                "current_topic": None,
+                "previous_topic": None,
+                "active_entities": None,
+                "pending_question": None,
+                "unresolved_intent": None,
+            },
+        }
+
+    @classmethod
+    def structured_answer(cls) -> str:
+        return json.dumps({"llm_action": cls.answer_action()})
+
+    def test_llm_client_request_contains_contract_payload_and_schema(self) -> None:
+        client = FakeClient()
+        client.responses.create = lambda **kwargs: (
+            client.responses.calls.append(kwargs)
+            or SimpleNamespace(output_text=self.structured_answer())
+        )
+
+        with (
+            patch.object(openai_adapter, "OPENAI_API_KEY", "test-secret"),
+            patch.object(openai_adapter, "OPENAI_MODEL", "test-model"),
+            patch.object(openai_adapter, "OPENAI_REASONING_EFFORT", ""),
+            patch.object(openai_adapter, "OPENAI_VERBOSITY", ""),
+            patch.object(openai_adapter, "_create_client", return_value=client),
+        ):
+            result = openai_adapter.OpenAIModelProviderAdapter().complete(
+                self.action_payload()
+            )
+
+        request = client.responses.calls[0]
+        sent_payload = json.loads(str(request["input"]))
+        self.assertEqual(sent_payload["contract_version"], "1")
+        self.assertEqual(sent_payload["normalized_input"]["text"], "旅行一覧を見せて")
+        self.assertEqual(request["model"], "test-model")
+        self.assertFalse(request["store"])
+        self.assertEqual(request["text"]["format"]["type"], "json_schema")
+        self.assertTrue(request["text"]["format"]["strict"])
+        output_schema = request["text"]["format"]["schema"]
+        self.assertEqual(output_schema["type"], "object")
+        self.assertIn("llm_action", output_schema["properties"])
+        self.assertNotIn("test-secret", repr(request))
+        self.assertEqual(result["action"], "answer")
+
+    def test_call_operation_action_is_returned_without_semantic_changes(self) -> None:
+        client = FakeClient()
+        action = {
+            "contract_version": "1",
+            "action": "call_operation",
+            "provider_id": "travel",
+            "operation_id": "get_trips",
+            "arguments": {},
+            "conversation_update": {
+                "transition": "continue_unresolved_intent",
+                "current_topic": None,
+                "previous_topic": None,
+                "active_entities": None,
+                "pending_question": None,
+                "unresolved_intent": None,
+            },
+        }
+        client.responses.create = lambda **_kwargs: SimpleNamespace(
+            output_text=json.dumps({"llm_action": action})
+        )
+
+        with (
+            patch.object(openai_adapter, "OPENAI_API_KEY", "test-secret"),
+            patch.object(openai_adapter, "OPENAI_MODEL", "test-model"),
+            patch.object(openai_adapter, "_create_client", return_value=client),
+        ):
+            result = openai_adapter.OpenAIModelProviderAdapter().complete(
+                self.action_payload()
+            )
+
+        self.assertEqual(result, action)
+
+    def test_provider_reasoning_item_is_not_returned_or_saved(self) -> None:
+        client = FakeClient()
+        client.responses.create = lambda **_kwargs: SimpleNamespace(
+            output_text=self.structured_answer(),
+            output=[SimpleNamespace(type="reasoning", content="hidden thought")],
+        )
+
+        with (
+            patch.object(openai_adapter, "OPENAI_API_KEY", "test-secret"),
+            patch.object(openai_adapter, "OPENAI_MODEL", "test-model"),
+            patch.object(openai_adapter, "_create_client", return_value=client),
+        ):
+            result = openai_adapter.OpenAIModelProviderAdapter().complete(
+                self.action_payload()
+            )
+
+        self.assertNotIn("reasoning", result)
+        self.assertNotIn("hidden thought", repr(result))
+
+    def test_invalid_structured_action_raises_validation_error(self) -> None:
+        client = FakeClient()
+        invalid = self.answer_action()
+        invalid["reasoning"] = "must not enter the contract"
+        client.responses.create = lambda **_kwargs: SimpleNamespace(
+            output_text=json.dumps({"llm_action": invalid})
+        )
+
+        with (
+            patch.object(openai_adapter, "OPENAI_API_KEY", "test-secret"),
+            patch.object(openai_adapter, "OPENAI_MODEL", "test-model"),
+            patch.object(openai_adapter, "_create_client", return_value=client),
+        ):
+            with self.assertRaises(openai_adapter.OpenAIResponseValidationError):
+                openai_adapter.OpenAIModelProviderAdapter().complete(
+                    self.action_payload()
+                )
+
+    def test_llm_client_error_redacts_api_key(self) -> None:
+        api_key = "sk-adapter-super-secret"
+        with (
+            patch.object(openai_adapter, "OPENAI_API_KEY", api_key),
+            patch.object(openai_adapter, "OPENAI_MODEL", "test-model"),
+            patch.object(
+                openai_adapter,
+                "_create_client",
+                side_effect=RuntimeError(f"Bearer {api_key}"),
+            ),
+        ):
+            with self.assertRaises(openai_adapter.OpenAIRequestError) as context:
+                openai_adapter.OpenAIModelProviderAdapter().complete(
+                    self.action_payload()
+                )
+
+        self.assertNotIn(api_key, str(context.exception))
+
+    def test_llm_client_without_api_key_fails_before_request(self) -> None:
+        with patch.object(openai_adapter, "OPENAI_API_KEY", ""):
+            with self.assertRaisesRegex(
+                openai_adapter.OpenAIConfigurationError, "OPENAI_API_KEY"
+            ):
+                openai_adapter.OpenAIModelProviderAdapter().complete(
+                    self.action_payload()
+                )
 
     def test_generate_text_reuses_client_within_process(self) -> None:
         client = FakeClient()
