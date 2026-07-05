@@ -60,7 +60,7 @@ class ConversationQualityTest(unittest.TestCase):
         self.assertEqual(result["debug"]["route"], "basic")
         travel.assert_not_called()
 
-    def test_cqt_05_travel_meals_are_runtime_and_repository_grounded(self) -> None:
+    def test_cqt_05_named_travel_meals_stop_before_python_entity_selection(self) -> None:
         trip = {"id": "trip-fukuoka", "title": "福岡旅行"}
         runtime = RecordingRuntime(
             [
@@ -96,12 +96,6 @@ class ConversationQualityTest(unittest.TestCase):
             "confidence": "high",
             "reply": "福岡旅行の記録を確認します。",
         }
-        captured: dict[str, Any] = {}
-
-        def final_answer(**kwargs):
-            captured.update(kwargs)
-            return "記録では屋台ラーメンを食べています。", None
-
         routed = {"action": "needs_context", "reply": "travel boundary"}
         with patch.object(
             chat_router, "handle_travel_chat", return_value=routed
@@ -122,27 +116,23 @@ class ConversationQualityTest(unittest.TestCase):
             "福岡旅行で何食べた？",
             debug=True,
             text_generator=planner_json_generator(plan),
-            final_answer_text_generator=final_answer,
+            final_answer_text_generator=lambda **_: (
+                "福岡旅行を選択しますか？",
+                None,
+            ),
             runtime=runtime,
         )
 
-        self.assertEqual(result["action"], "tool_result")
+        self.assertEqual(result["action"], "needs_context")
         self.assertEqual(result["debug"]["route"], "travel")
         self.assertTrue(result["debug"]["evidence_used"])
         self.assertEqual(result["debug"]["final_answer_source"], "llm")
         self.assertEqual(
             [call["tool_id"] for call in runtime.calls],
-            ["get_trips", "get_trip_timeline"],
+            ["get_trips"],
         )
         self.assertTrue(all(call["confirmed"] is False for call in runtime.calls))
-        self.assertIn('"source":"local_travel_read"', captured["input_text"])
-        self.assertIn(
-            '"provenance":{"boundary":"runtime","source":"local_travel_read"}',
-            captured["input_text"],
-        )
-        self.assertIn('"answer_mode":"meals"', captured["input_text"])
-        self.assertIn("屋台ラーメン", captured["input_text"])
-        self.assertNotIn("明太子", captured["input_text"])
+        self.assertEqual(result["candidates"], [trip])
 
     def test_cqt_13_ambiguous_photo_request_clarifies_without_tool(self) -> None:
         runtime = RecordingRuntime([])

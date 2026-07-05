@@ -14,6 +14,12 @@ from backend.travel_planner import TravelPlanner, legacy_proposal_from_plan
 
 def json_generator(payload: dict[str, object]):
     def generate(**_kwargs: str) -> str:
+        if not {"goal", "answer_mode", "required_evidence"}.issubset(payload):
+            payload.update(
+                goal="open_trip",
+                answer_mode="none",
+                required_evidence=["trip"],
+            )
         return json.dumps(payload, ensure_ascii=False)
 
     return generate
@@ -36,6 +42,23 @@ class PlanContractTest(unittest.TestCase):
 class TravelPlannerTest(unittest.TestCase):
     def setUp(self) -> None:
         self.planner: Planner = TravelPlanner()
+
+    def test_planner_v1_proposal_is_rejected_without_python_defaults(self) -> None:
+        plan = self.planner.create_plan(
+            "旅行一覧を見せて",
+            text_generator=lambda **_: json.dumps(
+                {
+                    "action": "tool_proposal",
+                    "tool_id": "get_trips",
+                    "arguments": {},
+                    "confidence": "high",
+                    "reply": "旅行一覧を取得します。",
+                }
+            ),
+        )
+
+        self.assertTrue(plan.requires_context)
+        self.assertEqual(plan.tool_candidates, [])
 
     def test_valid_llm_proposal_is_converted_to_plan(self) -> None:
         plan = self.planner.create_plan(

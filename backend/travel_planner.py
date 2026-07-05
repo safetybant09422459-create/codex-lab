@@ -327,9 +327,6 @@ def legacy_proposal_from_plan(plan: Plan, *, debug: bool = False) -> dict[str, A
 def _normalize_goal_contract(proposal: dict[str, Any]) -> dict[str, Any]:
     """Allow only Travel's declared goal tuple; never infer it from user text."""
     goal = proposal.get("goal")
-    # Missing v2 fields are normalized by the legacy proposal validator.
-    if goal == "clarify" and proposal.get("answer_mode") == "none":
-        return proposal
     contract = _GOAL_CONTRACT.get(goal)
     if contract is None:
         raise ValueError("unsupported Travel goal")

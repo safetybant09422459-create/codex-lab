@@ -24,11 +24,7 @@ from .travel_chat_adapter import (
     legacy_context_from_conversation_state,
 )
 from .travel_entity_resolver import TravelEntityResolver
-from .travel_plan_executor import (
-    TravelPlanExecutor,
-    _extract_trip_name,
-    _find_trip_candidates as find_trip_candidates,
-)
+from .travel_plan_executor import TravelPlanExecutor
 from .travel_planner import TravelPlanner, legacy_proposal_from_plan
 from .travel_response_composer import TravelResponseComposer
 
@@ -232,18 +228,6 @@ def _static_answer_result() -> AnswerResult:
         answer_type="not_applicable",
         source="fallback_static",
         evidence_used=False,
-    )
-
-
-def _find_trip_candidates(
-    runtime_result: Any,
-    normalized_query: str,
-) -> list[dict[str, Any]]:
-    """Compatibility facade for callers that only need matched Trip values."""
-    return find_trip_candidates(
-        runtime_result,
-        normalized_query,
-        resolver=travel_entity_resolver,
     )
 
 

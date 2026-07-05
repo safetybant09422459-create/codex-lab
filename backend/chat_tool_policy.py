@@ -142,10 +142,6 @@ def validate_chat_proposal(value: Any) -> dict[str, Any]:
 
 def _validate_planning_fields(value: dict[str, Any]) -> dict[str, Any]:
     present = _PLANNING_FIELDS.intersection(value)
-    if not present:
-        # Compatibility for pre-Planner-v2 callers. This is intentionally not
-        # semantic classification of the user's words.
-        return {"goal": "clarify", "answer_mode": "none", "required_evidence": []}
     if present != _PLANNING_FIELDS:
         raise ProposalValidationError("planning fields must be supplied together")
 

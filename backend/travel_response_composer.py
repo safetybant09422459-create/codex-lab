@@ -51,12 +51,7 @@ class TravelResponseComposer:
                     "status": "candidates",
                     "clarification": clarification_reply,
                     "candidate_list": request.candidates,
-                    "reason": (
-                        "query_too_broad"
-                        if request.plan is not None
-                        and request.plan.answer_mode == "clarification"
-                        else "multiple_candidates"
-                    ),
+                    "reason": "missing_context",
                     "recommended_action": "select_candidate",
                 },
             }

@@ -110,7 +110,7 @@ class TravelResponseComposerTest(unittest.TestCase):
                 "status": "candidates",
                 "clarification": "2件の候補があります。どれを開きますか？",
                 "candidate_list": candidates,
-                "reason": "multiple_candidates",
+                "reason": "missing_context",
                 "recommended_action": "select_candidate",
             },
         )

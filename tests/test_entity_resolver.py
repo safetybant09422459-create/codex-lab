@@ -51,23 +51,23 @@ class TravelEntityResolverTest(unittest.TestCase):
             entity_types=("trip",),
         )
 
-    def test_zero_candidates_is_not_found(self) -> None:
+    def test_zero_candidates_needs_llm_context(self) -> None:
         result = self.resolver.resolve(self.request, trips=[])
 
-        self.assertEqual(result.status, "not_found")
+        self.assertEqual(result.status, "needs_context")
         self.assertEqual(result.candidates, [])
         self.assertIsNone(result.resolved_entity)
 
-    def test_one_candidate_is_resolved(self) -> None:
+    def test_one_candidate_is_not_auto_resolved(self) -> None:
         trip = {"id": "trip-suma", "title": "須磨", "prefectures": "兵庫県"}
 
         result = self.resolver.resolve(self.request, trips=[trip])
 
-        self.assertEqual(result.status, "resolved")
-        self.assertEqual(result.resolved_entity.entity_id, "trip-suma")
-        self.assertEqual(result.diagnostics["candidate_count"], 1)
+        self.assertEqual(result.status, "needs_context")
+        self.assertIsNone(result.resolved_entity)
+        self.assertEqual(result.diagnostics["candidate_count"], 0)
 
-    def test_multiple_candidates_is_ambiguous(self) -> None:
+    def test_multiple_candidates_are_not_ranked(self) -> None:
         trips = [
             {"id": "trip-suma", "title": "須磨", "prefectures": "兵庫県"},
             {"id": "trip-awaji", "title": "淡路", "prefectures": "兵庫県"},
@@ -75,18 +75,18 @@ class TravelEntityResolverTest(unittest.TestCase):
 
         result = self.resolver.resolve(self.request, trips=trips)
 
-        self.assertEqual(result.status, "ambiguous")
-        self.assertEqual(len(result.candidates), 2)
+        self.assertEqual(result.status, "needs_context")
+        self.assertEqual(result.candidates, [])
         self.assertIsNone(result.resolved_entity)
 
-    def test_runtime_get_trips_result_is_accepted(self) -> None:
+    def test_runtime_get_trips_result_is_not_semantically_resolved(self) -> None:
         trip = {"id": "trip-suma", "title": "須磨", "prefectures": "兵庫県"}
 
         result = self.resolver.resolve(
             self.request, runtime_result={"trips": [trip]}
         )
 
-        self.assertEqual(result.status, "resolved")
+        self.assertEqual(result.status, "needs_context")
 
 
 if __name__ == "__main__":

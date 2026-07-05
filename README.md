@@ -15,6 +15,7 @@ AI開発練習用
 - [Jarvis Memory Architecture](docs/memory_architecture.md)
 - [Knowledge Enrichment](docs/knowledge_enrichment.md)
 - [Conversation Quality Test](docs/conversation_quality_test.md)
+- [Jarvis Simplification Phase](docs/jarvis_simplification_phase.md)
 
 vNextの目標では、Webは複数Channelの一つであり、意味判断は単一のLLM Agent Loopへ集約する。
 現行のRouter、Planner、Entity Resolver、Answer Generator等は移行中の互換コンポーネントであり、
@@ -172,16 +173,11 @@ Chat API:
 `travel`なら既存Travel Chatへ委譲する。BrowserへOpenAI API Keyを渡さず、BrowserからOpenAI APIへ
 直接接続しない。read-only ToolはTravel Chatの検証後にRuntime経由で実行し、write proposalは実行しない。
 
-Travel名解決のmulti-step v0.1では、LLMは最初のToolを提案するだけで、server-side
-Orchestratorが最大3回のbounded loopを管理する。`福岡旅行を開いて` のような入力で
-LLMが`get_trips`を提案した場合、Chat Tool Policyを通してRuntimeで一覧を取得し、
-タイトル部分一致で候補を解決する。一致が1件なら、再度Policyを確認してRuntimeで
-`get_trip`を実行する。0件は安全なnot-found応答、複数件は自動選択せず
-`candidates`を返す。各Runtime呼び出しは従来通りPermission、Audit、
-ExecutorRegistryを通る。
-
-名前の比較は空白を除去し、Unicode NFKCで全角・半角を正規化して、英字を小文字化
-する。fuzzy検索やExperience名解決は行わない。
+Travel名解決の旧Python multi-step処理はSimplification Phaseで停止した。`福岡旅行を開いて`
+のような入力でLLMが`get_trips + entity_query`を提案した場合、Runtimeで正本一覧を取得するが、
+Pythonは発話やqueryを解釈せず、自動選択・`get_trip`連鎖を行わない。候補選択後のcanonical IDを
+使う次のTool callは将来の単一LLM Agent Loopで再構築する。詳細と機能低下は
+[Jarvis Simplification Phase](docs/jarvis_simplification_phase.md)を参照する。
 
 Request:
 
