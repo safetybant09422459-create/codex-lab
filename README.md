@@ -13,6 +13,7 @@ AI開発練習用
 - [Jarvis vNext Single Agent Loop Architecture Decision](docs/decisions/2026-07-vnext-single-agent-loop-architecture.md)
 - [Domain Provider Responsibility Boundary Decision](docs/decisions/2026-07-domain-provider-boundary.md)
 - [Catalog Principle / Guardrail Decision](docs/decisions/2026-07-catalog-principle.md)
+- [Conversation Quality / Python Brain Regression Guard Decision](docs/decisions/2026-07-conversation-quality-python-brain-regression-guard.md)
 - [Domain Provider Contract](docs/provider_contract.md)
 - [Jarvis Chat Core / Orchestrator v2](docs/chat_core.md)
 - [Jarvis Core Activation RAG](docs/activation_rag.md)
