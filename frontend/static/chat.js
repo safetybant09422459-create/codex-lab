@@ -5,6 +5,8 @@ var chatComposing = false;
 var currentContext = null;
 var conversationHistory = [];
 var maxConversationTurns = 5;
+var chatSessionId =
+  "web-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
 
 function rememberConversationTurn(role, content) {
   conversationHistory.push({ role: role, content: content.slice(0, 2000) });
@@ -200,6 +202,7 @@ async function sendChat(elements, message) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message: message,
+        session_id: chatSessionId,
         conversation_history: historyForRequest,
         context: currentContext,
       }),

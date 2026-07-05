@@ -89,11 +89,12 @@ Implemented:
 - Activation RAG Travel Provider PoC（read-only候補想起。正本はSQLite / Repository）
 - Agent Host経由のJarvis Chat v1最小経路（LLM → Runtime → Provider → Observation → LLM）
 - FastAPI Chat API v0.1 (`POST /api/chat`)
+- Conversation State v0（session単位のin-memory短期状態）
 
 Not Yet Implemented:
 
 - Jarvis Chat Core / Orchestrator v2（Context Assembly、Capability Catalog）
-- Agent Hostの汎用的な複数Action反復、会話状態永続化
+- Agent Hostの汎用的な複数Action反復、会話状態の永続化
 - Memory RAG / Memory Capability
 - Knowledge Enrichment Engine
 - Confirmation UI
@@ -102,6 +103,18 @@ Not Yet Implemented:
 `POST /api/chat`はAgent Hostに接続し、`LLMClient` InterfaceのOpenAI Adapterから共通Runtime / Provider
 Operationを利用する。これはTravel Chat専用復旧ではなく、Jarvis Chat v1の最小経路である。
 Capability Catalogの完成形、Memory RAG、複数Skill連携は未実装である。
+
+### Conversation State v0
+
+Conversation State v0は、同一プロセス内で`session_id`ごとに直近5ターンだけを保持する短期状態である。
+保持対象はuser input、assistantの最終応答、直近LLM Action、直近Observation、LLMが返した
+`active_entities`である。次ターンのLLM Contract payloadへこれらを渡すことで、「それ」「さっきの」
+「続き」や直前のProvider結果をLLMが判断できるようにする。
+
+Pythonは話題継続、参照解決、話題転換、Provider / Operation選択を行わず、履歴を解釈しない。
+状態はin-memory / short-term onlyで、再起動時に消える。DB、家族共有、長期記憶、Memory Provider、
+write operationとの接続は含まない。永続Memoryは次フェーズで、認証・visibility・retentionを含めて
+別途設計する。
 
 Jarvis Status Providerは、Travelより期待値が明確な最初のProvider-first検証用Providerである。
 `jarvis.get_capabilities`、`jarvis.get_provider_status`、`jarvis.get_operation_catalog`をread-only / low-riskで
@@ -207,11 +220,13 @@ Request:
 ```json
 {
   "message": "旅行一覧を見せて",
+  "session_id": "web-session-example",
   "debug": false
 }
 ```
 
 - `message`: ユーザーの発話
+- `session_id`: 短期状態を分離するsession識別子。省略時はリクエスト単位となり文脈を引き継がない
 - `role`: deprecated互換入力。指定されても無視する
 - `debug`: 省略時は `false`。`true` の場合だけresponseへtimingを含める
 

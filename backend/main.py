@@ -97,7 +97,7 @@ async def index() -> FileResponse:
 )
 async def chat(request: ChatRequest) -> ChatResponse:
     turn_input = TurnInput(
-        session_id=str(uuid4()),
+        session_id=request.session_id or str(uuid4()),
         channel="web_chat",
         normalized_input={"text": request.message},
     )

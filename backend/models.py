@@ -15,12 +15,13 @@ class RunResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
+    session_id: str | None = Field(default=None, min_length=1, max_length=128)
     conversation_history: list[ConversationTurn] = Field(
         default_factory=list,
         max_length=5,
         description=(
-            "Bounded compatibility input. Jarvis Chat v1 does not yet persist "
-            "or inject conversation history into the Agent Host context."
+            "Deprecated bounded compatibility input. Conversation State v0 "
+            "uses server-side in-memory state keyed by session_id."
         ),
     )
     role: str | None = Field(

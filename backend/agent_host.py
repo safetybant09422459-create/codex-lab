@@ -6,6 +6,10 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
+from .conversation_state import (
+    ConversationTurnState,
+    InMemoryConversationStateStore,
+)
 from .llm_client import LLMClient
 
 
@@ -153,9 +157,17 @@ class AgentHost:
     never interprets natural language or chooses providers and operations.
     """
 
-    def __init__(self, llm_client: LLMClient, runtime: AgentRuntime) -> None:
+    def __init__(
+        self,
+        llm_client: LLMClient,
+        runtime: AgentRuntime,
+        conversation_store: InMemoryConversationStateStore | None = None,
+    ) -> None:
         self.llm_client = llm_client
         self.runtime = runtime
+        self.conversation_store = (
+            conversation_store or InMemoryConversationStateStore()
+        )
 
     def run_turn(self, turn_input: TurnInput) -> AgentTurnResult:
         turn_id = str(uuid4())
@@ -218,20 +230,63 @@ class AgentHost:
                 TraceEvent(event="observation_recorded", metadata={"step": step})
             )
 
-        return AgentTurnResult(
+        result = AgentTurnResult(
             action=action,
             observations=observations,
             trace=AgentTrace(turn_id=turn_id, events=events),
         )
+        self._remember_turn(turn_input, result)
+        return result
 
-    @staticmethod
-    def _assemble_context(turn_id: str, turn_input: TurnInput) -> TurnContext:
+    def _assemble_context(self, turn_id: str, turn_input: TurnInput) -> TurnContext:
+        previous_turns = self.conversation_store.get_turns(turn_input.session_id)
+        last_turn = previous_turns[-1] if previous_turns else None
         return TurnContext(
             turn_id=turn_id,
             session_id=turn_input.session_id,
             principal=turn_input.principal,
             channel=turn_input.channel,
             normalized_input=turn_input.normalized_input,
+            conversation_context=[
+                {
+                    "user_input": turn.user_input,
+                    "assistant_final_response": turn.assistant_final_response,
+                }
+                for turn in previous_turns
+            ],
+            conversation_state={
+                "last_llm_action": (
+                    deepcopy(last_turn.last_llm_action) if last_turn else None
+                ),
+                "last_observations": (
+                    deepcopy(last_turn.last_observations) if last_turn else []
+                ),
+                "active_entities": (
+                    deepcopy(last_turn.active_entities) if last_turn else []
+                ),
+            },
+        )
+
+    def _remember_turn(
+        self, turn_input: TurnInput, result: AgentTurnResult
+    ) -> None:
+        action = result.action
+        if not isinstance(action, MessageAction):
+            return
+        self.conversation_store.append_turn(
+            turn_input.session_id,
+            ConversationTurnState(
+                user_input=deepcopy(turn_input.normalized_input),
+                assistant_final_response=action.message,
+                last_llm_action=action.model_dump(mode="json"),
+                last_observations=[
+                    observation.model_dump(mode="json")
+                    for observation in result.observations
+                ],
+                active_entities=deepcopy(
+                    action.conversation_update.active_entities or []
+                ),
+            ),
         )
 
     @staticmethod
