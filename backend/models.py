@@ -19,8 +19,8 @@ class ChatRequest(BaseModel):
         default_factory=list,
         max_length=5,
         description=(
-            "Recent user/assistant messages used only as ephemeral LLM "
-            "working context; not persisted as Memory."
+            "Bounded compatibility input. Jarvis Chat v1 does not yet persist "
+            "or inject conversation history into the Agent Host context."
         ),
     )
     role: str | None = Field(

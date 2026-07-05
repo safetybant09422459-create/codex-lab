@@ -4,8 +4,8 @@ from unittest.mock import patch
 from backend.basic_chat import handle_basic_chat
 
 
-class ConversationQualityTest(unittest.TestCase):
-    """Downgrade contract while the single LLM Agent Loop is absent."""
+class BasicChatFallbackTest(unittest.TestCase):
+    """Legacy fallback stays Tool-free and is not the /api/chat route."""
 
     def test_greeting_remains_a_direct_llm_answer(self) -> None:
         result = handle_basic_chat(
@@ -13,7 +13,7 @@ class ConversationQualityTest(unittest.TestCase):
         )
         self.assertEqual(result, {"action": "direct_answer", "reply": "こんにちは。"})
 
-    def test_travel_request_cannot_trigger_runtime_from_chat(self) -> None:
+    def test_travel_request_cannot_trigger_runtime_from_legacy_fallback(self) -> None:
         result = handle_basic_chat(
             "福岡旅行を開いて",
             text_generator=lambda **_: (

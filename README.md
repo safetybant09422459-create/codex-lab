@@ -83,28 +83,29 @@ Implemented:
 - LLMClient Interface / OpenAI AI Model Provider Adapter（Responses API structured output）
 - Agent Host Single Agent Loop v0（LLMClient Interface経由、共通Turn開始、最大2step、LLM Action検証、Runtime Observation再入力、Trace）
 - Activation RAG Travel Provider PoC（read-only候補想起。正本はSQLite / Repository）
-- ToolなしBasic Chat（単一LLM Agent Loop実装までの暫定ダウングレード）
+- Agent Host経由のJarvis Chat v1最小経路（LLM → Runtime → Provider → Observation → LLM）
 - FastAPI Chat API v0.1 (`POST /api/chat`)
 
 Not Yet Implemented:
 
 - Jarvis Chat Core / Orchestrator v2（Context Assembly、Capability Catalog）
-- Agent Hostの汎用的な複数Action反復、会話状態永続化、実LLM Client接続
+- Agent Hostの汎用的な複数Action反復、会話状態永続化
 - Memory RAG / Memory Capability
 - Knowledge Enrichment Engine
 - Confirmation UI
 - External API / DB-backed Real Tool Execution
 
-`POST /api/chat`はToolなしBasic Chatへダウングレード中であり、Agent Hostにはまだ接続していない。
-Capability Catalog、Memory RAG、複数Skill連携は未実装である。
+`POST /api/chat`はAgent Hostに接続し、`LLMClient` InterfaceのOpenAI Adapterから共通Runtime / Provider
+Operationを利用する。これはTravel Chat専用復旧ではなく、Jarvis Chat v1の最小経路である。
+Capability Catalogの完成形、Memory RAG、複数Skill連携は未実装である。
 
 `backend/agent_host.py`のAgent HostはSingle Agent Loop v0である。Agent Hostは`LLMClient` Interfaceだけに依存し、
-OpenAI Adapterは`LLMClient`実装として追加済みだが、Agent Hostと`/api/chat`を生成するcomposition rootは
-まだ未接続である。Fake LLM ClientはContract Test専用であり、意図判断や固定回答を追加して賢くしない。
+composition rootの`backend/main.py`がOpenAI Adapterと共通Runtimeを注入して`/api/chat`へ接続する。
+Fake LLM ClientはContract Test専用であり、意図判断や固定回答を追加して賢くしない。
 最大2stepのObservation Loop（`call_operation -> Runtime -> Observation -> answer`）のみ実装済みである。
 1turnのOperation実行は最大1回であり、2step目は終端Actionでなければならない。2step目の
 `call_operation`と、Catalog上で`planned`のOperation呼び出しは契約違反として実行前に拒否する。
-`/api/chat`には未接続で、会話状態永続化、実LLM呼び出し、Confirmation再開、汎用的な反復は未実装である。
+`/api/chat`からはこの最大2stepの経路を使う。会話状態永続化、Confirmation再開、汎用的な反復は未実装である。
 
 Activation RAGはTravel専用検索ではなく、Jarvis Coreが正本Entityを思い出すためのread-only索引である。
 DBやRuntimeを置き換えず、Entity Resolutionへ未検証候補を渡す。Travelは最初のProvider / PoCであり、
@@ -185,11 +186,10 @@ Chat API:
 
 - `POST /api/chat`
 
-`POST /api/chat` は単一LLM Agent Loop実装までToolなしBasic Chatへダウングレードしている。
-Travel Tool実行、Entity選択、候補提示、deep link、Travel固有回答生成は行わない。BrowserへOpenAI API Keyを
-渡さず、BrowserからOpenAI APIへ直接接続しない。Travel OperationはRuntime APIまたはTravel APIから利用する。
-詳細と機能低下は
-[Jarvis Simplification Phase](docs/jarvis_simplification_phase.md)を参照する。
+`POST /api/chat` はWeb Chat入力を共通Agent Hostへ渡す。LLMが`answer`を返した場合は
+Runtimeを呼ばず、`call_operation`を返した場合は共通RuntimeでOperationを実行し、Observationを
+同じLLMへ戻して最終回答を得る。Travel専用Router / Planner / Entity Resolverは使わない。
+BrowserへOpenAI API Keyを渡さず、BrowserからOpenAI APIへ直接接続しない。
 
 Request:
 
@@ -208,21 +208,21 @@ Request:
 
 ```json
 {
-  "action": "direct_answer",
-  "reply": "Travel操作は現在Chatから利用できません。"
+  "action": "answer",
+  "reply": "こんにちは。今日はどうしましたか？"
 }
 ```
 
-ChatがTravel Runtimeを呼ばないことの手動確認:
+Travel Operationを含む手動確認:
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8001/api/chat \
   -H "Content-Type: application/json" \
-  -d '{"message":"福岡旅行を開いて","debug":true}' \
+  -d '{"message":"旅行一覧見せて","debug":true}' \
   | python -m json.tool
 ```
 
-`action: direct_answer`であり、`tool_id`、`result`、`navigation`を含まないことを確認する。
+LLMの最終`answer`と、Runtime経由の`travel.get_trips`結果が返ることを確認する。
 
 `POST /api/runtime/execute` は Runtime v0.1 の安全境界を通してToolを実行する。Weather は `local_weather_stub`、Travel read は `local_travel_read`、その他の未実装Toolは必要に応じて `stub` または planned として扱う。Travel read の成功実行もAudit Log対象で、現在の `event_type` は `runtime.execute_stub` のままだが、`execution_mode` には `local_travel_read` が記録される。
 
@@ -245,15 +245,17 @@ Codex CLI の引数を変えたい場合は `CODEX_ARGS` を指定する。
 CODEX_ARGS="exec" uvicorn backend.main:app --host 0.0.0.0 --port 8001
 ```
 
-OpenAI疎通確認はサーバー側からのみ実行する。プロジェクトルートの `.env` に
+`/api/chat`で実LLMを利用するには`OPENAI_API_KEY`が必要である。未設定時はChat APIが
+`503` と安全な設定エラーを返す。OpenAI疎通確認はサーバー側からのみ実行する。
+プロジェクトルートの `.env` に
 `OPENAI_API_KEY` と、必要に応じて `OPENAI_MODEL`（既定値は
 `gpt-5.4-nano`）を設定してから実行する。API Keyをログやコマンドラインへ
 出力しないこと。
 
 Jarvis Agent Host向けには`OpenAIModelProviderAdapter`がResponses APIのstructured
 outputで既存LLM Action schemaを要求し、返却Actionを同じschemaで再検証する。OpenAI固有処理は
-Adapter内に閉じており、Agent Hostは`LLMClient` Interfaceだけに依存する。現時点では
-`/api/chat`へ接続していないため、設定してもWeb Chatから実LLM Agent Loopは呼ばれない。
+Adapter内に閉じており、Agent Hostは`LLMClient` Interfaceだけに依存する。
+`/api/chat`もこのInterface経由で実LLM Agent Loopを呼び出す。
 
 Tool Proposal の推論設定は `.env` で変更できる。短いJSON提案を低レイテンシで
 返す `gpt-5.4-mini` の推奨設定例は次のとおり。

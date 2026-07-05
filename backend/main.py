@@ -1,11 +1,12 @@
 import json
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import codex_api
-from .basic_chat import handle_basic_chat
+from .agent_host import AgentContractError, AgentHost, TurnInput
 from .config import FRONTEND_DIR, ROOT_DIR, SKILLS_DIR, TOOLS_DIR
 from .git_api import file_diff, git, git_changes
 from .git_workflow import GitWorkflow, redact_secrets
@@ -46,6 +47,11 @@ from .models import (
 )
 from .photo_immich_adapter import ImmichAPIError, ImmichConfigurationError
 from .photo_repository import PhotoRepository
+from .openai_adapter import (
+    OpenAIConfigurationError,
+    OpenAIModelProviderAdapter,
+    OpenAIRequestError,
+)
 from .runtime import InvalidToolDefinitionError, RuntimeService, ToolNotFoundError
 from .provider_registry import (
     OperationNotExecutableError,
@@ -58,6 +64,7 @@ from .service_api import schedule_restart, systemctl
 app = FastAPI(title="Jarvis Dev v0.3")
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR / "static"), name="static")
 runtime_service = RuntimeService()
+agent_host = AgentHost(OpenAIModelProviderAdapter(), runtime_service)
 photo_repository = PhotoRepository()
 git_workflow = GitWorkflow(git)
 
@@ -87,12 +94,40 @@ async def index() -> FileResponse:
     response_model_exclude_none=True,
 )
 async def chat(request: ChatRequest) -> ChatResponse:
-    result = handle_basic_chat(
-        request.message,
-        conversation_history=request.conversation_history,
-        debug=request.debug,
+    turn_input = TurnInput(
+        session_id=str(uuid4()),
+        channel="web_chat",
+        normalized_input={"text": request.message},
     )
-    return ChatResponse(**result)
+    try:
+        turn = agent_host.run_turn(turn_input)
+    except OpenAIConfigurationError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Jarvis Chat is not configured: {exc}",
+        ) from exc
+    except (OpenAIRequestError, AgentContractError) as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Jarvis Chat could not complete the LLM turn: {exc}",
+        ) from exc
+
+    action = turn.action
+    response: dict = {
+        "action": action.action,
+        "reply": action.message,
+    }
+    if turn.observations:
+        runtime_result = turn.observations[-1].result
+        response["tool_id"] = runtime_result.get("tool_id")
+        response["result"] = runtime_result.get("result")
+    if request.debug:
+        response["debug"] = {
+            "route": "agent_host",
+            "turn_id": turn.trace.turn_id,
+            "events": [event.event for event in turn.trace.events],
+        }
+    return ChatResponse(**response)
 
 
 @app.post("/api/run", response_model=RunResponse)
