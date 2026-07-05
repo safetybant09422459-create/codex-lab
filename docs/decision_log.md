@@ -146,3 +146,21 @@ ProviderはSkillとは別の頭脳や必須microserviceではなく、MCP、REST
 ### 詳細
 
 [Domain Provider Responsibility Boundary](decisions/2026-07-domain-provider-boundary.md)を参照する。
+
+---
+
+## Decision 0008
+
+### テーマ
+
+複数ChannelとProviderが共有する1ターンの処理契約をどう定めるか？
+
+### 決定
+
+Jarvis CoreにAgent Loopを一つだけ置き、全Channelを共通Turn Contractへ正規化する。LLMがOperation選択、
+結果評価、質問、最終回答を担い、Runtimeが検証、Permission、Confirmation、Audit、実行を担う。
+Provider結果はprovenance、visibility、limitationsを持つObservationとして同じLoopへ戻す。
+
+### 詳細
+
+[Turn Contract / Single Agent Loop](decisions/2026-07-turn-contract-single-agent-loop.md)を参照する。

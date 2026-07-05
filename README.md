@@ -8,6 +8,7 @@ AI開発練習用
 主要設計文書:
 
 - [AI Coding Agent作業ガイド](AGENTS.md)
+- [Turn Contract / Single Agent Loop Decision](docs/decisions/2026-07-turn-contract-single-agent-loop.md)
 - [Jarvis vNext Single Agent Loop Architecture Decision](docs/decisions/2026-07-vnext-single-agent-loop-architecture.md)
 - [Domain Provider Responsibility Boundary Decision](docs/decisions/2026-07-domain-provider-boundary.md)
 - [Domain Provider Contract](docs/provider_contract.md)
