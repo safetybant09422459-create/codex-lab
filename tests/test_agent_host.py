@@ -16,11 +16,11 @@ from backend.runtime import RuntimeService
 from backend.travel_executor import TravelExecutor, TravelProvider
 
 
-def answer_action() -> dict:
+def answer_action(message: str = "了解しました。") -> dict:
     return {
         "contract_version": "1",
         "action": "answer",
-        "message": "了解しました。",
+        "message": message,
         "conversation_update": {"transition": "start_request"},
     }
 
@@ -73,8 +73,11 @@ class AgentHostTest(unittest.TestCase):
             "contract_version": "1",
             "providers": [],
         }
+        greeting_input = self.turn_input.model_copy(
+            update={"normalized_input": {"text": "こんにちは"}}
+        )
         result = AgentHost(FakeLLMClient(answer_action()), runtime).run_turn(
-            self.turn_input
+            greeting_input
         )
 
         self.assertEqual(result.action.action, "answer")
@@ -98,22 +101,69 @@ class AgentHostTest(unittest.TestCase):
         }
 
         result = AgentHost(
-            FakeLLMClient(call_action("calendar", "list_events")), runtime
+            FakeLLMClient(
+                [
+                    call_action("calendar", "list_events"),
+                    answer_action("予定はありません。"),
+                ]
+            ),
+            runtime,
         ).run_turn(self.turn_input)
 
-        self.assertEqual(result.action.action, "call_operation")
+        self.assertEqual(result.action.action, "answer")
         runtime.execute_provider_operation.assert_called_once_with(
             "calendar", "list_events", {}, confirmed=False, role="guest"
         )
         self.assertEqual(result.observations[0].result["result"], {"events": []})
 
     def test_real_runtime_provider_path_executes_provider_operation(self) -> None:
-        result = AgentHost(FakeLLMClient(call_action()), self.runtime).run_turn(
-            self.turn_input
+        travel_input = self.turn_input.model_copy(
+            update={"normalized_input": {"text": "旅行一覧見せて"}}
         )
+        llm = FakeLLMClient([call_action(), answer_action("旅行は1件あります。")])
+        result = AgentHost(llm, self.runtime).run_turn(travel_input)
 
         self.assertTrue(result.observations[0].result["success"])
         self.repository.get_trips.assert_called_once_with()
+        self.assertEqual(len(llm.payloads), 2)
+        second_observations = llm.payloads[1].prior_observations
+        self.assertEqual(second_observations, result.observations)
+
+    def test_loop_stops_after_two_llm_steps(self) -> None:
+        llm = FakeLLMClient([call_action(), call_action()])
+
+        result = AgentHost(llm, self.runtime).run_turn(self.turn_input)
+
+        self.assertEqual(result.action.action, "call_operation")
+        self.assertEqual(len(llm.payloads), 2)
+        self.repository.get_trips.assert_called_once_with()
+
+    def test_trace_records_both_loop_steps(self) -> None:
+        result = AgentHost(
+            FakeLLMClient([call_action(), answer_action()]), self.runtime
+        ).run_turn(self.turn_input)
+
+        loop_events = [
+            (event.event, event.metadata.get("step"))
+            for event in result.trace.events
+            if event.event in {
+                "llm_called",
+                "action_validated",
+                "runtime_called",
+                "observation_recorded",
+            }
+        ]
+        self.assertEqual(
+            loop_events,
+            [
+                ("llm_called", 1),
+                ("action_validated", 1),
+                ("runtime_called", 1),
+                ("observation_recorded", 1),
+                ("llm_called", 2),
+                ("action_validated", 2),
+            ],
+        )
 
     def test_invalid_action_is_rejected_before_runtime(self) -> None:
         invalid = answer_action()
@@ -128,6 +178,17 @@ class AgentHostTest(unittest.TestCase):
             AgentHost(FakeLLMClient(invalid), runtime).run_turn(self.turn_input)
 
         runtime.execute_provider_operation.assert_not_called()
+
+    def test_invalid_second_action_stops_without_another_runtime_call(self) -> None:
+        invalid = answer_action()
+        invalid["reasoning"] = "must be rejected"
+        llm = FakeLLMClient([call_action(), invalid])
+
+        with self.assertRaises(AgentContractError):
+            AgentHost(llm, self.runtime).run_turn(self.turn_input)
+
+        self.repository.get_trips.assert_called_once_with()
+        self.assertEqual(len(llm.payloads), 2)
 
     def test_host_is_channel_and_provider_neutral(self) -> None:
         runtime = Mock()

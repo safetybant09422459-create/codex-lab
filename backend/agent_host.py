@@ -151,13 +151,19 @@ class AgentRuntime(Protocol):
 class FakeLLMClient:
     """Deterministic test adapter. It performs no language interpretation."""
 
-    def __init__(self, action: dict[str, Any]) -> None:
-        self.action = deepcopy(action)
+    def __init__(self, actions: dict[str, Any] | list[dict[str, Any]]) -> None:
+        if isinstance(actions, list):
+            if not actions:
+                raise ValueError("Fake LLM requires at least one action")
+            self.actions = deepcopy(actions)
+        else:
+            self.actions = [deepcopy(actions)]
         self.payloads: list[LLMInputPayload] = []
 
     def complete(self, payload: LLMInputPayload) -> dict[str, Any]:
         self.payloads.append(payload.model_copy(deep=True))
-        return deepcopy(self.action)
+        index = min(len(self.payloads) - 1, len(self.actions) - 1)
+        return deepcopy(self.actions[index])
 
 
 class AgentHost:
@@ -179,17 +185,23 @@ class AgentHost:
 
         catalog = self.runtime.get_operation_catalog()
         events.append(TraceEvent(event="catalog_loaded"))
-        payload = self._build_payload(context, catalog)
-
-        raw_action = self.llm_client.complete(payload)
-        events.append(TraceEvent(event="llm_called"))
-        action = self._validate_action(raw_action, catalog)
-        events.append(
-            TraceEvent(event="action_validated", metadata={"action": action.action})
-        )
-
         observations: list[Observation] = []
-        if isinstance(action, CallOperationAction):
+        action: MessageAction | CallOperationAction
+        for step in range(1, 3):
+            payload = self._build_payload(context, catalog, observations)
+            raw_action = self.llm_client.complete(payload)
+            events.append(TraceEvent(event="llm_called", metadata={"step": step}))
+            action = self._validate_action(raw_action, catalog)
+            events.append(
+                TraceEvent(
+                    event="action_validated",
+                    metadata={"step": step, "action": action.action},
+                )
+            )
+
+            if not isinstance(action, CallOperationAction) or step == 2:
+                break
+
             runtime_result = self.runtime.execute_provider_operation(
                 action.provider_id,
                 action.operation_id,
@@ -201,6 +213,7 @@ class AgentHost:
                 TraceEvent(
                     event="runtime_called",
                     metadata={
+                        "step": step,
                         "provider_id": action.provider_id,
                         "operation_id": action.operation_id,
                     },
@@ -217,7 +230,9 @@ class AgentHost:
                     limitations=self._runtime_limitations(runtime_result),
                 )
             )
-            events.append(TraceEvent(event="observation_recorded"))
+            events.append(
+                TraceEvent(event="observation_recorded", metadata={"step": step})
+            )
 
         return AgentTurnResult(
             action=action,
@@ -237,13 +252,19 @@ class AgentHost:
 
     @staticmethod
     def _build_payload(
-        context: TurnContext, catalog: dict[str, Any]
+        context: TurnContext,
+        catalog: dict[str, Any],
+        observations: list[Observation],
     ) -> LLMInputPayload:
         return LLMInputPayload(
             **context.model_dump(),
             available_operations=deepcopy(catalog),
-            runtime_policy={"max_operations": 1, "confirmation_source": "runtime"},
-            prior_observations=[],
+            runtime_policy={
+                "max_steps": 2,
+                "max_operations": 1,
+                "confirmation_source": "runtime",
+            },
+            prior_observations=deepcopy(observations),
         )
 
     @staticmethod
