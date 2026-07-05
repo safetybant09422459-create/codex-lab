@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .chat_core import EntityCandidate, EntityRef
+from .core_models import EntityCandidate, EntityRef
 
 
 class SearchModel(BaseModel):

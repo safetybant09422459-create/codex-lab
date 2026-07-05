@@ -5,11 +5,10 @@ from datetime import date, datetime
 from typing import Any
 
 from .search_engine import SearchDocument, SearchKeyword, normalize_search_text
-from .travel_chat_adapter import (
-    RUNTIME_SOURCE,
-    TRAVEL_SKILL_ID,
-    TRIP_ENTITY_TYPE,
-)
+
+RUNTIME_SOURCE = "runtime"
+TRAVEL_SKILL_ID = "travel"
+TRIP_ENTITY_TYPE = "trip"
 
 
 class TravelDocumentBuilder:

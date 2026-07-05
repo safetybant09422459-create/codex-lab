@@ -2,7 +2,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from .chat_core import ConversationTurn
+from .core_models import ConversationTurn
 
 
 class RunRequest(BaseModel):
@@ -19,7 +19,7 @@ class ChatRequest(BaseModel):
         default_factory=list,
         max_length=5,
         description=(
-            "Recent user/assistant messages used only as ephemeral Planner "
+            "Recent user/assistant messages used only as ephemeral LLM "
             "working context; not persisted as Memory."
         ),
     )

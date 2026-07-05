@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from typing import Any
 
-from .chat_core import EntityCandidate
+from .core_models import EntityCandidate
 from .search_engine import SearchEngine
 from .travel_document_builder import TravelDocumentBuilder
 from .travel_search_expansion import (

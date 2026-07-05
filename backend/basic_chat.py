@@ -6,7 +6,7 @@ from datetime import datetime
 from time import perf_counter
 from typing import Any
 
-from .chat_core import ConversationTurn
+from .core_models import ConversationTurn
 from .openai_adapter import generate_text_with_timings, redact_sensitive_text
 
 

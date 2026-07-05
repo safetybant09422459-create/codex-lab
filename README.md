@@ -10,6 +10,7 @@ AI開発練習用
 - [AI Coding Agent作業ガイド](AGENTS.md)
 - [Jarvis vNext Single Agent Loop Architecture Decision](docs/decisions/2026-07-vnext-single-agent-loop-architecture.md)
 - [Domain Provider Responsibility Boundary Decision](docs/decisions/2026-07-domain-provider-boundary.md)
+- [Domain Provider Contract](docs/provider_contract.md)
 - [Jarvis Chat Core / Orchestrator v2](docs/chat_core.md)
 - [Jarvis Core Activation RAG](docs/activation_rag.md)
 - [Context Assembly](docs/context_assembly.md)
@@ -19,8 +20,8 @@ AI開発練習用
 - [Jarvis Simplification Phase](docs/jarvis_simplification_phase.md)
 
 vNextの目標では、Webは複数Channelの一つであり、意味判断は単一のLLM Agent Loopへ集約する。
-現行のRouter、Planner、Entity Resolver、Answer Generator等は移行中の互換コンポーネントであり、
-完成形の独立層ではない。Pythonは既存のRuntime、Skill / Domain Provider、Repository境界で決定的処理を担う。
+旧Router、Planner、Entity Resolver、Answer Generator等のTravel Chat互換コンポーネントは削除した。
+Pythonは既存のRuntime、Skill / Domain Provider、Repository境界で決定的処理を担う。
 Skillはユーザーから見える能力単位、Domain ProviderはCoreが利用する能力提供境界である。Providerは
 MCP、REST API、Local Serviceへ交換可能で、ユーザー意図の解釈や最終回答を担わない。
 
@@ -73,17 +74,16 @@ Implemented:
 - Permission Engine v0.1
 - Weather Executor v0.1 (`execution_mode: local_weather_stub`)
 - Travel Runtime Read v0.1 (`execution_mode: local_travel_read`)
+- Domain Provider / OperationContext最小契約
+- TravelProvider（既存Travel Tool IDをOperation IDとして実行）
 - Activation RAG Travel Provider PoC（read-only候補想起。正本はSQLite / Repository）
-- Chat Core v0.2 Foundation（[設計原則と責務](docs/chat_core.md)、既存Chat API互換）
-- Clarification & Candidate Fallback v0.1（曖昧質問への候補提示、最新3件、Reason Trace）
-- Jarvis Benchmark v0.3（[Root Cause分析、Improvement Opportunities、Diff、Baseline、Regression検知](docs/chat_eval.md)）
-- Basic Chat Router v0.1（通常会話とTravel SkillをLLM判定で分離）
-- Chat Orchestrator v0.1（Travel read-only Tool実行、writeは提案のみ）
+- ToolなしBasic Chat（単一LLM Agent Loop実装までの暫定ダウングレード）
 - FastAPI Chat API v0.1 (`POST /api/chat`)
 
 Not Yet Implemented:
 
 - Jarvis Chat Core / Orchestrator v2（Context Assembly、Capability Catalog）
+- 単一LLM Agent LoopとAgent用Operation Catalog view
 - Memory RAG / Memory Capability
 - Knowledge Enrichment Engine
 - Confirmation UI
@@ -171,15 +171,10 @@ Chat API:
 
 - `POST /api/chat`
 
-`POST /api/chat` はBrowserから受け取った自然文をserver-sideの
-`backend.chat_router.handle_chat()` へ渡す。RouterのLLM判定が`basic`ならToolなしで直接回答し、
-`travel`なら既存Travel Chatへ委譲する。BrowserへOpenAI API Keyを渡さず、BrowserからOpenAI APIへ
-直接接続しない。read-only ToolはTravel Chatの検証後にRuntime経由で実行し、write proposalは実行しない。
-
-Travel名解決の旧Python multi-step処理はSimplification Phaseで停止した。`福岡旅行を開いて`
-のような入力でLLMが`get_trips + entity_query`を提案した場合、Runtimeで正本一覧を取得するが、
-Pythonは発話やqueryを解釈せず、自動選択・`get_trip`連鎖を行わない。候補選択後のcanonical IDを
-使う次のTool callは将来の単一LLM Agent Loopで再構築する。詳細と機能低下は
+`POST /api/chat` は単一LLM Agent Loop実装までToolなしBasic Chatへダウングレードしている。
+Travel Tool実行、Entity選択、候補提示、deep link、Travel固有回答生成は行わない。BrowserへOpenAI API Keyを
+渡さず、BrowserからOpenAI APIへ直接接続しない。Travel OperationはRuntime APIまたはTravel APIから利用する。
+詳細と機能低下は
 [Jarvis Simplification Phase](docs/jarvis_simplification_phase.md)を参照する。
 
 Request:
@@ -192,50 +187,19 @@ Request:
 ```
 
 - `message`: ユーザーの発話
-- `role`: deprecated互換入力。指定されても無視する。認証未実装期間はserver側固定
-  `admin`を使い、将来は認証済みセッションからserver-sideで決定する
+- `role`: deprecated互換入力。指定されても無視する
 - `debug`: 省略時は `false`。`true` の場合だけresponseへtimingを含める
 
 成功Response例:
 
 ```json
 {
-  "action": "tool_result",
-  "tool_id": "get_trips",
-  "arguments": {},
-  "reply": "旅行一覧を取得しました。",
-  "result": {
-    "tool_id": "get_trips",
-    "trips": []
-  }
+  "action": "direct_answer",
+  "reply": "Travel操作は現在Chatから利用できません。"
 }
 ```
 
-旅行名を開く場合のResponse例:
-
-```json
-{
-  "action": "tool_result",
-  "tool_id": "get_trip",
-  "arguments": {"trip_id": "trip-fukuoka"},
-  "reply": "福岡旅行を開きます。",
-  "result": {
-    "tool_id": "get_trip",
-    "trip": {"id": "trip-fukuoka", "title": "福岡旅行"}
-  },
-  "navigation": {
-    "type": "travel_trip",
-    "target": "#travel?trip_id=trip-fukuoka",
-    "trip_id": "trip-fukuoka",
-    "label": "Travelで開く"
-  }
-}
-```
-
-Jarvis Homeは`navigation`を受け取ると「Travelで開く」導線を表示する。
-`trip_id`付きdeep linkでTravel画面の該当Tripを開く。
-
-multi-step名解決の手動確認（起動中プロセスへの反映後）:
+ChatがTravel Runtimeを呼ばないことの手動確認:
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8001/api/chat \
@@ -244,8 +208,7 @@ curl -sS -X POST http://127.0.0.1:8001/api/chat \
   | python -m json.tool
 ```
 
-`action: tool_result`、`tool_id: get_trip`、Trip詳細、`navigation`、および
-`debug.steps`内の`get_trips`と`get_trip`を確認する。
+`action: direct_answer`であり、`tool_id`、`result`、`navigation`を含まないことを確認する。
 
 `POST /api/runtime/execute` は Runtime v0.1 の安全境界を通してToolを実行する。Weather は `local_weather_stub`、Travel read は `local_travel_read`、その他の未実装Toolは必要に応じて `stub` または planned として扱う。Travel read の成功実行もAudit Log対象で、現在の `event_type` は `runtime.execute_stub` のままだが、`execution_mode` には `local_travel_read` が記録される。
 
@@ -312,7 +275,11 @@ Uvicornを複数workerで起動した場合は、workerごとにclientが1つ作
 'OK'
 ```
 
-### Chat Orchestrator v0.1 / Runtime read実行
+### 削除済み: Chat Orchestrator v0.1 / Runtime read実行
+
+以下の節は旧設計の履歴であり、記載されたPython moduleと確認コマンドは現在存在しない。Travel Chat互換、
+Planner v1、Python Entity解決は2026-07-05に削除した。復旧は旧moduleの復元ではなく、
+[Domain Provider Contract](docs/provider_contract.md)を使う単一LLM Agent Loopで行う。
 
 Chat Core v0.2 Foundationの責務、型、contextとroleの信頼境界は
 [docs/chat_core.md](docs/chat_core.md)を参照する。Conversation State / Entity Resolution /

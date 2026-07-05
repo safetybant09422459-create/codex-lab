@@ -1,43 +1,49 @@
 from typing import Any
 
+from .domain_provider import DomainProvider, OperationContext
 from .executors import BaseExecutor
 from .travel_repository import TravelRepository
 
 
-class TravelExecutor(BaseExecutor):
+class TravelProvider(DomainProvider):
+    provider_id = "travel"
+
     def __init__(self, repository: TravelRepository | None = None) -> None:
         self.repository = repository or TravelRepository()
 
-    def execute(self, tool: Any, params: dict[str, Any]) -> dict[str, Any]:
-        if tool.id == "get_trips":
+    def execute(
+        self, operation: OperationContext, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        operation_id = operation.operation_id
+        if operation_id == "get_trips":
             return {
-                "tool_id": tool.id,
+                "tool_id": operation_id,
                 "trips": self.repository.get_trips(),
                 "source": "local_travel_read",
             }
 
-        if tool.id == "get_trip":
+        if operation_id == "get_trip":
             trip_id = self._trip_id(params)
             return {
-                "tool_id": tool.id,
+                "tool_id": operation_id,
                 "trip": self.repository.get_trip(trip_id),
                 "source": "local_travel_read",
             }
 
-        if tool.id == "get_trip_timeline":
+        if operation_id == "get_trip_timeline":
             trip_id = self._trip_id(params)
             return {
-                "tool_id": tool.id,
+                "tool_id": operation_id,
                 "trip_id": trip_id,
                 "items": self.repository.get_trip_timeline(trip_id),
                 "source": "local_travel_read",
             }
 
-        if tool.id == "get_spot":
+        if operation_id == "get_spot":
             timeline_item_id = self._timeline_item_id(params)
             experience = self.repository.get_spot(timeline_item_id)
             return {
-                "tool_id": tool.id,
+                "tool_id": operation_id,
                 "experience_id": timeline_item_id,
                 "experience_type": self._experience_type(experience),
                 "timeline_item_id": timeline_item_id,
@@ -46,20 +52,20 @@ class TravelExecutor(BaseExecutor):
                 "source": "local_travel_read",
             }
 
-        if tool.id == "get_experience":
+        if operation_id == "get_experience":
             experience_id = self._experience_id(params)
             return {
-                "tool_id": tool.id,
+                "tool_id": operation_id,
                 "experience_id": experience_id,
                 "experience": (experience := self.repository.get_experience(experience_id)),
                 "experience_type": self._experience_type(experience),
                 "source": "local_travel_read",
             }
 
-        if tool.id == "get_trip_photos":
+        if operation_id == "get_trip_photos":
             trip_id = self._trip_id(params)
             return {
-                "tool_id": tool.id,
+                "tool_id": operation_id,
                 **self.repository.get_trip_photos(
                     trip_id,
                     limit=params.get("limit", 50),
@@ -68,10 +74,10 @@ class TravelExecutor(BaseExecutor):
                 "source": "photo_skill",
             }
 
-        if tool.id == "get_spot_photos":
+        if operation_id == "get_spot_photos":
             timeline_item_id = self._timeline_item_id(params)
             return {
-                "tool_id": tool.id,
+                "tool_id": operation_id,
                 **self.repository.get_spot_photos(
                     timeline_item_id,
                     limit=params.get("limit", 50),
@@ -80,10 +86,10 @@ class TravelExecutor(BaseExecutor):
                 "source": "photo_skill",
             }
 
-        if tool.id == "get_experience_photos":
+        if operation_id == "get_experience_photos":
             experience_id = self._experience_id(params)
             return {
-                "tool_id": tool.id,
+                "tool_id": operation_id,
                 **self.repository.get_experience_photos(
                     experience_id,
                     limit=params.get("limit", 50),
@@ -92,10 +98,10 @@ class TravelExecutor(BaseExecutor):
                 "source": "photo_skill",
             }
 
-        if tool.id == "get_experience_photo_search":
+        if operation_id == "get_experience_photo_search":
             experience_id = self._experience_id(params)
             return {
-                "tool_id": tool.id,
+                "tool_id": operation_id,
                 **self.repository.search_experience_photos(
                     experience_id,
                     from_at=params.get("from"),
@@ -106,19 +112,19 @@ class TravelExecutor(BaseExecutor):
                 "source": "photo_skill",
             }
 
-        if tool.id == "get_experience_photo_links":
+        if operation_id == "get_experience_photo_links":
             experience_id = self._experience_id(params)
             return {
-                "tool_id": tool.id,
+                "tool_id": operation_id,
                 **self.repository.get_experience_photo_links(
                     experience_id,
                     status=params.get("status", "active"),
                 ),
             }
 
-        if tool.id == "create_trip":
+        if operation_id == "create_trip":
             return {
-                "tool_id": tool.id,
+                "tool_id": operation_id,
                 "trip": self.repository.create_trip(
                     title=params.get("title"),
                     start_date=params.get("start_date"),
@@ -132,7 +138,7 @@ class TravelExecutor(BaseExecutor):
                 "source": "local_travel_write",
             }
 
-        if tool.id == "create_timeline_item":
+        if operation_id == "create_timeline_item":
             item = self.repository.create_timeline_item(
                 trip_id=params.get("trip_id"),
                 item_type=params.get("item_type"),
@@ -148,7 +154,7 @@ class TravelExecutor(BaseExecutor):
                 status=params.get("status"),
             )
             return {
-                "tool_id": tool.id,
+                "tool_id": operation_id,
                 "experience": item,
                 "item": item,
                 "experience_id": item.get("experience_id"),
@@ -157,7 +163,7 @@ class TravelExecutor(BaseExecutor):
                 "source": "local_travel_write",
             }
 
-        if tool.id == "create_experience":
+        if operation_id == "create_experience":
             experience = self.repository.create_experience(
                 trip_id=params.get("trip_id"),
                 experience_type=params.get("experience_type"),
@@ -173,7 +179,7 @@ class TravelExecutor(BaseExecutor):
                 status=params.get("status"),
             )
             return {
-                "tool_id": tool.id,
+                "tool_id": operation_id,
                 "experience": experience,
                 "experience_id": experience.get("experience_id"),
                 "experience_type": experience.get("experience_type"),
@@ -181,7 +187,7 @@ class TravelExecutor(BaseExecutor):
                 "source": "local_travel_write",
             }
 
-        if tool.id == "update_experience":
+        if operation_id == "update_experience":
             experience = self.repository.update_experience(
                 experience_id=self._experience_id(params),
                 experience_type=params.get("experience_type"),
@@ -198,7 +204,7 @@ class TravelExecutor(BaseExecutor):
                 cover_image_id=params.get("cover_image_id"),
             )
             return {
-                "tool_id": tool.id,
+                "tool_id": operation_id,
                 "experience": experience,
                 "experience_id": experience.get("experience_id"),
                 "experience_type": experience.get("experience_type"),
@@ -206,12 +212,12 @@ class TravelExecutor(BaseExecutor):
                 "source": "local_travel_write",
             }
 
-        if tool.id == "archive_experience":
+        if operation_id == "archive_experience":
             experience = self.repository.archive_experience(
                 experience_id=self._experience_id(params)
             )
             return {
-                "tool_id": tool.id,
+                "tool_id": operation_id,
                 "experience": experience,
                 "experience_id": experience.get("experience_id"),
                 "experience_type": experience.get("experience_type"),
@@ -219,7 +225,7 @@ class TravelExecutor(BaseExecutor):
                 "source": "local_travel_write",
             }
 
-        if tool.id == "link_experience_photo":
+        if operation_id == "link_experience_photo":
             result = self.repository.link_experience_photo(
                 experience_id=self._experience_id(params),
                 photo_asset_id=params.get("photo_asset_id"),
@@ -227,23 +233,23 @@ class TravelExecutor(BaseExecutor):
                 created_by=params.get("created_by"),
             )
             return {
-                "tool_id": tool.id,
+                "tool_id": operation_id,
                 **result,
             }
 
-        if tool.id == "archive_experience_photo_link":
+        if operation_id == "archive_experience_photo_link":
             result = self.repository.archive_experience_photo_link(
                 experience_id=self._experience_id(params),
                 link_id=params.get("link_id"),
             )
             return {
-                "tool_id": tool.id,
+                "tool_id": operation_id,
                 **result,
             }
 
-        if tool.id == "set_trip_cover_image":
+        if operation_id == "set_trip_cover_image":
             return {
-                "tool_id": tool.id,
+                "tool_id": operation_id,
                 **self.repository.set_trip_cover_image(
                     trip_id=params.get("trip_id"),
                     asset_id=params.get("asset_id"),
@@ -251,9 +257,9 @@ class TravelExecutor(BaseExecutor):
                 ),
             }
 
-        if tool.id == "set_spot_cover_image":
+        if operation_id == "set_spot_cover_image":
             return {
-                "tool_id": tool.id,
+                "tool_id": operation_id,
                 **self.repository.set_spot_cover_image(
                     timeline_item_id=params.get("timeline_item_id"),
                     asset_id=params.get("asset_id"),
@@ -261,14 +267,14 @@ class TravelExecutor(BaseExecutor):
                 ),
             }
 
-        raise ValueError(f"Unsupported travel tool: {tool.id}")
+        raise ValueError(f"Unsupported travel operation: {operation_id}")
 
     @property
     def execution_mode(self) -> str:
         return "local_travel_read"
 
-    def get_execution_mode(self, tool: Any) -> str:
-        if tool.id in {
+    def get_execution_mode(self, operation: OperationContext) -> str:
+        if operation.operation_id in {
             "create_trip",
             "create_experience",
             "update_experience",
@@ -310,3 +316,31 @@ class TravelExecutor(BaseExecutor):
         if isinstance(experience_type, str) and experience_type.strip():
             return experience_type.strip()
         return None
+
+
+class TravelExecutor(BaseExecutor):
+    """Runtime adapter; Travel operation dispatch belongs to TravelProvider."""
+
+    def __init__(
+        self,
+        provider: TravelProvider | None = None,
+        repository: TravelRepository | None = None,
+    ) -> None:
+        if provider is not None and repository is not None:
+            raise ValueError("provider and repository are mutually exclusive")
+        self.provider = provider or TravelProvider(repository=repository)
+
+    def execute(self, tool: Any, params: dict[str, Any]) -> dict[str, Any]:
+        return self.provider.execute(self._operation(tool), params)
+
+    def get_execution_mode(self, tool: Any) -> str:
+        return self.provider.get_execution_mode(self._operation(tool))
+
+    @staticmethod
+    def _operation(tool: Any) -> OperationContext:
+        return OperationContext(
+            operation_id=tool.id,
+            skill_id=getattr(tool, "skill_id", "travel"),
+            mode=getattr(tool, "mode", "read"),
+            risk_level=getattr(tool, "risk_level", "low"),
+        )

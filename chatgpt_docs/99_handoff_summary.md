@@ -1,26 +1,27 @@
 # Handoff Summary
 
-更新日: 2026-06-30
+更新日: 2026-07-05
 
 ## 次回ChatGPTが最初に理解すること
 
-Jarvisの開発フェーズは変わった。Travel Chat改善を中心に考えない。Basic Chatの復元は完了しており、
-今後の中心はJarvis Core、Activation RAG、Entity Resolution、Knowledge Enrichmentである。
+Jarvisの開発フェーズは変わった。Travel Chat互換は削除済みであり、Basic ChatはToolなしへダウングレードした。
+今後の中心は単一LLM Agent Loop、Domain Provider Contract、Travel Provider Operationである。
 
 ## 完了したこと
 
-* Basic Chat Routerにより、通常会話とTravel Skill利用を分離した。
-* 通常会話はToolなしで回答し、Travel固有の発話だけTravel Adapterへ入る。
+* Travel Chat Router、Planner、Plan Executor、Entity Resolver、Answer Generator、Response Composerを削除した。
+* `/api/chat`はToolなしBasic Chatのみを返す。
 * Runtime経由でValidation、Permission、Confirmation、Audit、Tool実行を行う。
-* Repositoryから得たEvidenceをFinal Answer LLMへ渡す主経路を作った。
-* Pythonによる自然言語判断・固定回答生成は主経路から大きく除去した。
+* Domain Provider / OperationContext最小契約とTravelProviderを追加した。
+* PythonによるTravel自然言語判断・固定回答生成を物理削除した。
 * Activation RAGの共通Document、in-memory lexical index、Travel Provider PoC、Chatへのread-only候補注入を
   実装した。
 
 現在の要約:
 
 ```text
-Basic Chat -> Router -> Runtime（必要時） -> Evidence -> Final Answer LLM
+Chat Channel -> ToolなしBasic Chat（暫定）
+Runtime -> TravelExecutor adapter -> TravelProvider -> TravelRepository
 ```
 
 ## 変えてはいけない設計思想

@@ -66,10 +66,14 @@ Implemented:
 * Jarvis Shell frontend
 * Developer UI
 * Runtime Execute UI
-* Basic Chat Router v0.1
-* Chat Orchestrator / Travel Adapter
-* Evidenceを使うFinal Answer LLM経路
+* ToolなしBasic Chat
+* Domain Provider / OperationContext最小契約
+* TravelProvider / Runtime adapter
 * Activation RAG共通Document / in-memory index / Travel Provider PoC
+
+2026-07-05にTravel Chat Router、Planner、Plan Executor、Entity Resolver、Answer Generator、Response Composer、
+legacy Chat Adapterを削除した。`POST /api/chat`は単一LLM Agent Loop実装までToolなしBasic Chatのみを返す。
+Travel Runtime / API / Web Travel画面、Repository / DB、安全gateは維持している。
 
 ## Runtime API
 

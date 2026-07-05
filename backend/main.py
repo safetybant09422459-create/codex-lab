@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import codex_api
-from .chat_router import handle_chat
+from .basic_chat import handle_basic_chat
 from .config import FRONTEND_DIR, ROOT_DIR, SKILLS_DIR, TOOLS_DIR
 from .git_api import file_diff, git, git_changes
 from .git_workflow import GitWorkflow, redact_secrets
@@ -53,7 +53,6 @@ app.mount("/static", StaticFiles(directory=FRONTEND_DIR / "static"), name="stati
 runtime_service = RuntimeService()
 photo_repository = PhotoRepository()
 git_workflow = GitWorkflow(git)
-CHAT_SERVER_ROLE = "admin"
 
 JARVIS_PRINCIPLE_CHECK = """\
 
@@ -81,14 +80,10 @@ async def index() -> FileResponse:
     response_model_exclude_none=True,
 )
 async def chat(request: ChatRequest) -> ChatResponse:
-    result = handle_chat(
+    result = handle_basic_chat(
         request.message,
-        # Authentication is not implemented yet. Keep this temporary role on
-        # the trusted server side; request/Browser/LLM role values are ignored.
-        role=CHAT_SERVER_ROLE,
-        debug=request.debug,
-        context=request.context,
         conversation_history=request.conversation_history,
+        debug=request.debug,
     )
     return ChatResponse(**result)
 
