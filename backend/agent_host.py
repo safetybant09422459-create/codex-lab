@@ -6,6 +6,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
+from .llm_client import LLMClient
+
 
 class AgentContractError(ValueError):
     """Raised when an AI model returns data outside the LLM contract."""
@@ -131,10 +133,6 @@ class AgentTurnResult(ContractModel):
     trace: AgentTrace
 
 
-class LLMClient(Protocol):
-    def complete(self, payload: LLMInputPayload) -> dict[str, Any]: ...
-
-
 class AgentRuntime(Protocol):
     def get_operation_catalog(self) -> dict[str, Any]: ...
 
@@ -146,24 +144,6 @@ class AgentRuntime(Protocol):
         confirmed: bool = False,
         role: str | None = None,
     ) -> dict[str, Any]: ...
-
-
-class FakeLLMClient:
-    """Deterministic test adapter. It performs no language interpretation."""
-
-    def __init__(self, actions: dict[str, Any] | list[dict[str, Any]]) -> None:
-        if isinstance(actions, list):
-            if not actions:
-                raise ValueError("Fake LLM requires at least one action")
-            self.actions = deepcopy(actions)
-        else:
-            self.actions = [deepcopy(actions)]
-        self.payloads: list[LLMInputPayload] = []
-
-    def complete(self, payload: LLMInputPayload) -> dict[str, Any]:
-        self.payloads.append(payload.model_copy(deep=True))
-        index = min(len(self.payloads) - 1, len(self.actions) - 1)
-        return deepcopy(self.actions[index])
 
 
 class AgentHost:

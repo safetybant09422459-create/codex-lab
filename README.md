@@ -80,7 +80,8 @@ Implemented:
 - TravelProvider（既存Travel Tool IDをOperation IDとして実行）
 - Provider Contract v1 / Operation Catalog / Provider Registry
 - Provider Operation Runtime API（既存Runtime safety layerへ委譲）
-- Agent Host Single Agent Loop v0（共通Turn開始、最大2step、LLM Action検証、Runtime Observation再入力、Trace）
+- LLMClient Interface / AI Model Provider Adapter stub（実LLM接続なし）
+- Agent Host Single Agent Loop v0（LLMClient Interface経由、共通Turn開始、最大2step、LLM Action検証、Runtime Observation再入力、Trace）
 - Activation RAG Travel Provider PoC（read-only候補想起。正本はSQLite / Repository）
 - ToolなしBasic Chat（単一LLM Agent Loop実装までの暫定ダウングレード）
 - FastAPI Chat API v0.1 (`POST /api/chat`)
@@ -97,7 +98,8 @@ Not Yet Implemented:
 `POST /api/chat`はToolなしBasic Chatへダウングレード中であり、Agent Hostにはまだ接続していない。
 Capability Catalog、Memory RAG、複数Skill連携は未実装である。
 
-`backend/agent_host.py`のAgent HostはSingle Agent Loop v0である。現時点ではFake LLM Clientを使い、
+`backend/agent_host.py`のAgent HostはSingle Agent Loop v0である。Agent Hostは`LLMClient` Interfaceだけに依存し、
+AI Model Provider Adapterは未接続のstubである。実LLM接続は未実装で、Fake LLM ClientはContract Test専用とする。
 最大2stepのObservation Loop（`call_operation -> Runtime -> Observation -> answer`）のみ実装済みである。
 1turnのOperation実行は最大1回であり、2step目は終端Actionでなければならない。2step目の
 `call_operation`と、Catalog上で`planned`のOperation呼び出しは契約違反として実行前に拒否する。

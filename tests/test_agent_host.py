@@ -1,19 +1,21 @@
 import tempfile
 import unittest
 from pathlib import Path
+from typing import get_type_hints
 from unittest.mock import Mock
 
 from backend.agent_host import (
     AgentContractError,
     AgentHost,
-    FakeLLMClient,
     TurnInput,
 )
 from backend.audit import AuditLogger
 from backend.executors import ExecutorRegistry
+from backend.llm_client import AIModelProviderAdapter, LLMClient
 from backend.provider_registry import ProviderRegistry
 from backend.runtime import RuntimeService
 from backend.travel_executor import TravelExecutor, TravelProvider
+from tests.fake_llm_client import FakeLLMClient
 
 
 def answer_action(message: str = "了解しました。") -> dict:
@@ -66,6 +68,28 @@ class AgentHostTest(unittest.TestCase):
         catalog = llm.payloads[0].available_operations
         self.assertEqual(catalog["contract_version"], "1")
         self.assertEqual(catalog["providers"][0]["provider_id"], "travel")
+
+    def test_fake_llm_client_implements_interface(self) -> None:
+        llm: LLMClient = FakeLLMClient(answer_action())
+
+        result = AgentHost(llm, self.runtime).run_turn(self.turn_input)
+
+        self.assertIsInstance(llm, LLMClient)
+        self.assertEqual(result.action.action, "answer")
+
+    def test_agent_host_constructor_depends_on_llm_client_interface(self) -> None:
+        annotation = get_type_hints(AgentHost.__init__)["llm_client"]
+
+        self.assertIs(annotation, LLMClient)
+
+    def test_ai_model_provider_adapter_stub_can_be_injected(self) -> None:
+        adapter: LLMClient = AIModelProviderAdapter()
+        host = AgentHost(adapter, self.runtime)
+
+        self.assertIs(host.llm_client, adapter)
+        self.assertIsInstance(adapter, LLMClient)
+        with self.assertRaisesRegex(NotImplementedError, "not implemented"):
+            host.run_turn(self.turn_input)
 
     def test_fake_llm_answer_action_is_returned_without_runtime_call(self) -> None:
         runtime = Mock()
