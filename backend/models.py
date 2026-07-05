@@ -186,6 +186,14 @@ class RuntimeRequest(BaseModel):
     role: Literal["admin", "family", "guest"] = "guest"
 
 
+class ProviderOperationRequest(BaseModel):
+    provider_id: str = Field(min_length=1, max_length=120)
+    operation_id: str = Field(min_length=1, max_length=120)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    confirmed: bool = False
+    role: Literal["admin", "family", "guest"] = "guest"
+
+
 class RuntimeValidateResponse(BaseModel):
     valid: bool
     errors: list[str]

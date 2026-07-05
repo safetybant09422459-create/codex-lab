@@ -76,6 +76,8 @@ Implemented:
 - Travel Runtime Read v0.1 (`execution_mode: local_travel_read`)
 - Domain Provider / OperationContext最小契約
 - TravelProvider（既存Travel Tool IDをOperation IDとして実行）
+- Provider Contract v1 / Operation Catalog / Provider Registry
+- Provider Operation Runtime API（既存Runtime safety layerへ委譲）
 - Activation RAG Travel Provider PoC（read-only候補想起。正本はSQLite / Repository）
 - ToolなしBasic Chat（単一LLM Agent Loop実装までの暫定ダウングレード）
 - FastAPI Chat API v0.1 (`POST /api/chat`)
@@ -83,7 +85,7 @@ Implemented:
 Not Yet Implemented:
 
 - Jarvis Chat Core / Orchestrator v2（Context Assembly、Capability Catalog）
-- 単一LLM Agent LoopとAgent用Operation Catalog view
+- 単一LLM Agent LoopからOperation Catalogを使うtool-call接続
 - Memory RAG / Memory Capability
 - Knowledge Enrichment Engine
 - Confirmation UI
@@ -166,6 +168,8 @@ Runtime API:
 - `POST /api/runtime/dry-run`
 - `POST /api/runtime/execute`
 - `GET /api/audit`
+- `GET /api/providers/operations`
+- `POST /api/runtime/operations/execute`
 
 Chat API:
 

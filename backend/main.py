@@ -20,6 +20,7 @@ from .models import (
     GitPreflightResponse,
     LogResponse,
     ProjectResponse,
+    ProviderOperationRequest,
     RuntimeDryRunResponse,
     RuntimeExecuteResponse,
     RuntimeRequest,
@@ -46,6 +47,12 @@ from .models import (
 from .photo_immich_adapter import ImmichAPIError, ImmichConfigurationError
 from .photo_repository import PhotoRepository
 from .runtime import InvalidToolDefinitionError, RuntimeService, ToolNotFoundError
+from .provider_registry import (
+    OperationNotExecutableError,
+    OperationNotFoundError,
+    ProviderNotFoundError,
+    ProviderRegistryError,
+)
 from .service_api import schedule_restart, systemctl
 
 app = FastAPI(title="Jarvis Dev v0.3")
@@ -150,6 +157,33 @@ async def runtime_get_tool(tool_id: str) -> RuntimeToolResponse:
     except ToolNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidToolDefinitionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/providers/operations")
+async def provider_operation_catalog() -> dict:
+    return runtime_service.get_operation_catalog()
+
+
+@app.post("/api/runtime/operations/execute", response_model=RuntimeExecuteResponse)
+async def runtime_execute_provider_operation(
+    request: ProviderOperationRequest,
+) -> RuntimeExecuteResponse:
+    try:
+        return RuntimeExecuteResponse(
+            **runtime_service.execute_provider_operation(
+                request.provider_id,
+                request.operation_id,
+                request.arguments,
+                request.confirmed,
+                request.role,
+            )
+        )
+    except (ProviderNotFoundError, OperationNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except OperationNotExecutableError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (ProviderRegistryError, InvalidToolDefinitionError) as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 

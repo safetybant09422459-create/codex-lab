@@ -1,6 +1,6 @@
 from typing import Any
 
-from .domain_provider import DomainProvider, OperationContext
+from .domain_provider import DomainProvider, OperationContext, ProviderOperationSpec
 from .executors import BaseExecutor
 from .travel_repository import TravelRepository
 
@@ -10,6 +10,102 @@ class TravelProvider(DomainProvider):
 
     def __init__(self, repository: TravelRepository | None = None) -> None:
         self.repository = repository or TravelRepository()
+
+    def operation_specs(self) -> tuple[ProviderOperationSpec, ...]:
+        read_ids = (
+            "get_trips",
+            "get_trip",
+            "get_trip_timeline",
+            "get_spot",
+            "get_experience",
+            "get_trip_photos",
+            "get_spot_photos",
+            "get_experience_photos",
+            "get_experience_photo_search",
+            "get_experience_photo_links",
+        )
+        write_ids = (
+            "create_trip",
+            "create_timeline_item",
+            "create_experience",
+            "update_experience",
+            "archive_experience",
+            "link_experience_photo",
+            "archive_experience_photo_link",
+            "set_trip_cover_image",
+            "set_spot_cover_image",
+        )
+        specs = [
+            ProviderOperationSpec(
+                operation_id=operation_id,
+                what_it_can_do=(
+                    "Read canonical Travel data for the selected operation."
+                ),
+                what_it_cannot_do=(
+                    "It cannot infer user intent, choose an entity, or modify "
+                    "Travel data."
+                ),
+                examples=({"arguments": {}},),
+                limitations=(
+                    "Canonical IDs are required where declared by input_schema.",
+                ),
+            )
+            for operation_id in read_ids
+        ]
+        specs.extend(
+            ProviderOperationSpec(
+                operation_id=operation_id,
+                what_it_can_do=(
+                    "Apply the selected deterministic change to the local Travel "
+                    "repository."
+                ),
+                what_it_cannot_do=(
+                    "It cannot execute without Runtime permission, confirmation, "
+                    "and audit gates."
+                ),
+                examples=({"arguments": {}},),
+                limitations=("Admin role and explicit confirmation are required.",),
+            )
+            for operation_id in write_ids
+        )
+        planned_schema = {
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"],
+        }
+        for operation_id, subject in (
+            ("search_trip", "trips"),
+            ("search_experience", "experiences"),
+        ):
+            specs.append(
+                ProviderOperationSpec(
+                    operation_id=operation_id,
+                    description=f"Search {subject} using structured search criteria.",
+                    what_it_can_do=(
+                        f"Planned: return candidate {subject} for later canonical "
+                        "re-fetch."
+                    ),
+                    what_it_cannot_do=(
+                        "It cannot currently execute or establish candidates as "
+                        "verified evidence."
+                    ),
+                    input_schema=planned_schema,
+                    output_schema={
+                        "type": "object",
+                        "properties": {"candidates": {"type": "array"}},
+                    },
+                    mode="read",
+                    risk_level="low",
+                    confirmation_required=False,
+                    examples=({"arguments": {"query": "岡山"}},),
+                    limitations=(
+                        "Not implemented; visibility and pagination contracts are "
+                        "undecided.",
+                    ),
+                    availability="planned",
+                )
+            )
+        return tuple(specs)
 
     def execute(
         self, operation: OperationContext, params: dict[str, Any]

@@ -15,6 +15,24 @@ class OperationContext:
     risk_level: str
 
 
+@dataclass(frozen=True)
+class ProviderOperationSpec:
+    """Provider-owned semantics layered on Runtime-owned Tool metadata."""
+
+    operation_id: str
+    what_it_can_do: str
+    what_it_cannot_do: str
+    examples: tuple[dict[str, Any], ...] = ()
+    limitations: tuple[str, ...] = ()
+    availability: str = "implemented"
+    description: str | None = None
+    input_schema: dict[str, Any] | None = None
+    output_schema: dict[str, Any] | None = None
+    mode: str | None = None
+    risk_level: str | None = None
+    confirmation_required: bool | None = None
+
+
 class DomainProvider(ABC):
     """Deterministic capability boundary used after Runtime policy checks.
 
@@ -24,6 +42,11 @@ class DomainProvider(ABC):
     """
 
     provider_id: str
+
+    @abstractmethod
+    def operation_specs(self) -> tuple[ProviderOperationSpec, ...]:
+        """Return deterministic capability metadata; never infer it from user text."""
+        raise NotImplementedError
 
     @abstractmethod
     def execute(

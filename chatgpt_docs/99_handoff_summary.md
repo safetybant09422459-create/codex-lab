@@ -13,6 +13,7 @@ Jarvisの開発フェーズは変わった。Travel Chat互換は削除済みで
 * `/api/chat`はToolなしBasic Chatのみを返す。
 * Runtime経由でValidation、Permission、Confirmation、Audit、Tool実行を行う。
 * Domain Provider / OperationContext最小契約とTravelProviderを追加した。
+* Provider Contract v1、Operation Catalog、Provider Registry、Provider Operation Runtime入口を追加した。
 * PythonによるTravel自然言語判断・固定回答生成を物理削除した。
 * Activation RAGの共通Document、in-memory lexical index、Travel Provider PoC、Chatへのread-only候補注入を
   実装した。
@@ -21,7 +22,7 @@ Jarvisの開発フェーズは変わった。Travel Chat互換は削除済みで
 
 ```text
 Chat Channel -> ToolなしBasic Chat（暫定）
-Runtime -> TravelExecutor adapter -> TravelProvider -> TravelRepository
+LLM/Core向けCatalog -> Runtime safety layer -> TravelProvider -> TravelRepository
 ```
 
 ## 変えてはいけない設計思想

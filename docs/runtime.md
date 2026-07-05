@@ -31,6 +31,8 @@ Implemented (v0.1):
 * Travel Runtime v0.1
 * `SQLiteTravelStorage` による `storage/travel.db` のlocal DB-backed read/write
 * Travel guarded write tools: `travel.create_trip`, `travel.create_timeline_item`
+* Provider Registry / Operation Catalog v1
+* Provider Operation Runtime entry
 
 Not Yet Implemented:
 
@@ -51,6 +53,8 @@ Not Yet Implemented:
 * `POST /api/runtime/dry-run`
 * `POST /api/runtime/execute`
 * `GET /api/audit`
+* `GET /api/providers/operations`
+* `POST /api/runtime/operations/execute`
 
 Runtime/API検証コマンドは、プロジェクトルートの通常の `python` ではなく、仮想環境の `./.venv/bin/python` を前提にする。
 
@@ -127,6 +131,10 @@ WeatherExecutor / TravelExecutor / StubExecutor
 ↓
 Result
 ```
+
+Provider Operation入口では、Coreが選んだ`provider_id`と`operation_id`をProvider Registryで厳密に解決し、
+対応する既存Tool IDを上記フローへ渡す。Catalogの`planned` Operationは実行できない。Provider Registryは
+Validation、Permission、Confirmation、Auditを代替せず、Runtime本体にSkill固有の意味判断を追加しない。
 
 現在のRuntimeは、Tool Registry配下のJSON定義を読み取り、Tool IDに一致する定義を探す。
 

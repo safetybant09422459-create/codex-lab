@@ -7,6 +7,7 @@ from .confirmation import ConfirmationEngine
 from .config import ROOT_DIR, TOOLS_DIR
 from .executors import ExecutorRegistry
 from .permission import PermissionEngine
+from .provider_registry import ProviderRegistry
 
 
 class RuntimeError(Exception):
@@ -51,15 +52,58 @@ class RuntimeService:
         confirmation_engine: ConfirmationEngine | None = None,
         executor_registry: ExecutorRegistry | None = None,
         permission_engine: PermissionEngine | None = None,
+        provider_registry: ProviderRegistry | None = None,
     ) -> None:
         self.tools_dir = tools_dir
         self.audit_logger = audit_logger or AuditLogger()
         self.confirmation_engine = confirmation_engine or ConfirmationEngine()
+        if provider_registry is None:
+            from .travel_executor import TravelProvider
+
+            provider_registry = ProviderRegistry(tools_dir=tools_dir)
+            if (tools_dir / "travel").is_dir():
+                provider_registry.register(TravelProvider())
+        self.provider_registry = provider_registry
         self.executor_registry = executor_registry or ExecutorRegistry()
+        if executor_registry is None and (tools_dir / "travel").is_dir():
+            from .travel_executor import TravelExecutor
+
+            self.executor_registry.register_skill(
+                "travel",
+                TravelExecutor(provider=self.provider_registry.get_provider("travel")),
+            )
         self.permission_engine = permission_engine or PermissionEngine()
 
     def get_tool(self, tool_id: str) -> dict[str, Any]:
         return self._load_tool(tool_id).summary()
+
+    def get_operation_catalog(self) -> dict[str, Any]:
+        return self.provider_registry.catalog()
+
+    def execute_provider_operation(
+        self,
+        provider_id: str,
+        operation_id: str,
+        arguments: dict[str, Any],
+        confirmed: bool = False,
+        role: str | None = None,
+    ) -> dict[str, Any]:
+        operation = self.provider_registry.get_operation(
+            provider_id, operation_id, executable=True
+        )
+        if operation.tool_id is None:
+            raise InvalidToolDefinitionError(
+                f"Executable operation has no Runtime Tool: {provider_id}.{operation_id}"
+            )
+        runtime_tool = self._load_tool(operation.tool_id)
+        if runtime_tool.skill_id != provider_id:
+            raise InvalidToolDefinitionError(
+                f"Operation Tool belongs to another provider: "
+                f"{provider_id}.{operation_id}"
+            )
+        return self.execute_stub(
+            operation.tool_id, arguments, confirmed=confirmed, role=role
+        )
 
     def validate(self, tool_id: str, params: dict[str, Any]) -> dict[str, Any]:
         tool = self._load_tool(tool_id)
