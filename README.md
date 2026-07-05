@@ -80,6 +80,7 @@ Implemented:
 - TravelProvider（既存Travel Tool IDをOperation IDとして実行）
 - Provider Contract v1 / Operation Catalog / Provider Registry
 - Provider Operation Runtime API（既存Runtime safety layerへ委譲）
+- Agent Host最小骨組み（共通Turn開始、Context / Catalog payload、LLM Action検証、Runtime Observation、Trace）
 - Activation RAG Travel Provider PoC（read-only候補想起。正本はSQLite / Repository）
 - ToolなしBasic Chat（単一LLM Agent Loop実装までの暫定ダウングレード）
 - FastAPI Chat API v0.1 (`POST /api/chat`)
@@ -88,15 +89,18 @@ Not Yet Implemented:
 
 - Jarvis Chat Core / Orchestrator v2（Context Assembly、Capability Catalog）
 - 単一LLM Agent LoopからOperation Catalogを使うtool-call接続
+- Agent Hostの複数Action反復、会話状態永続化、実LLM Client接続
 - Memory RAG / Memory Capability
 - Knowledge Enrichment Engine
 - Confirmation UI
 - External API / DB-backed Real Tool Execution
 
-`POST /api/chat`はBasic Chat Routerで通常会話とTravel Skill利用をLLMに判定させる。通常会話は
-ToolなしでJarvis LLMへ渡し、Travel固有の発話だけ既存Travel Planner / Executor / Answer Generatorへ
-委譲する。Router出力はserver-sideで検証し、判定失敗時はRuntimeを呼ばないBasic Chatへfallbackする。
+`POST /api/chat`はToolなしBasic Chatへダウングレード中であり、Agent Hostにはまだ接続していない。
 Capability Catalog、Memory RAG、複数Skill連携は未実装である。
+
+`backend/agent_host.py`のAgent HostはSingle Agent Loopの実装入口となる最小骨組みである。現時点では
+Fake LLM Clientによる1 Actionと最大1回のRuntime Operation実行だけを扱い、`/api/chat`には接続していない。
+自然会話とTravel Chatの復旧、実LLM呼び出し、Observation後の反復は次フェーズである。
 
 Activation RAGはTravel専用検索ではなく、Jarvis Coreが正本Entityを思い出すためのread-only索引である。
 DBやRuntimeを置き換えず、Entity Resolutionへ未検証候補を渡す。Travelは最初のProvider / PoCであり、
