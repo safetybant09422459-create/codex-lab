@@ -343,3 +343,19 @@ Observation Is Observed Facts, Not Interpretation
 ObservationはProvider実行結果から決定的に確認できるfactsと、その`visibility`、`freshness` / `observed_at`、
 `limitations`、`provenance`だけをLLMへ渡す。意図、話題、解釈、次Action、推薦、回答、Provider / Operation選択、
 UI表示判断を含めない。詳細は[Observation Guardrail](decisions/2026-07-observation-guardrail.md)を参照する。
+
+---
+
+## Principle 22
+
+Observation Reference Principle
+
+**Observation = conversational evidence, not cached truth.**
+
+Observationは、この会話で取得した事実を取得時点の証拠として参照するものであり、現在値を保証するキャッシュではない。
+
+現在の真実はProviderから取得する。Observationだけで十分か、Providerを再実行するかはLLMが判断する。
+PythonはObservationの保存、visibility、size制限、redactionを担うが、stable / volatile / freshness判定によって
+再取得を判断しない。
+
+詳細は[Observation Reference Principle](decisions/2026-07-observation-reference-principle.md)を参照する。

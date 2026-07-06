@@ -237,3 +237,21 @@ Operation選択、UI表示判断はLLM / Jarvis Coreまたは将来のPresentati
 ### 詳細
 
 [Observation Guardrail](decisions/2026-07-observation-guardrail.md)を参照する。
+
+---
+
+## Decision 0013
+
+### テーマ
+
+Observationを過去の会話でどう参照し、現在の真実とどう分離するか？
+
+### 決定
+
+Observationは取得時点の会話証拠であり、現在値のキャッシュではない。Conversation Stateは会話履歴、Observationは
+この会話で取得した事実、Providerは現在の真実、Memoryは長期記憶を担う。Observationだけで十分かProviderを
+再実行するかはLLMが判断し、Pythonは保存、visibility、size制限、redactionに限定する。
+
+### 詳細
+
+[Observation Reference Principle](decisions/2026-07-observation-reference-principle.md)を参照する。

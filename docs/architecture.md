@@ -10,6 +10,8 @@
 > [Conversation Quality / Python Brain Regression Guard](decisions/2026-07-conversation-quality-python-brain-regression-guard.md)を参照する。
 > Observationを観測事実に限定し、意味判断やUI表示判断と分離する境界は
 > [Observation Guardrail](decisions/2026-07-observation-guardrail.md)を参照する。
+> Observationを取得時点の会話証拠として参照し、現在値キャッシュとして再利用しない境界は
+> [Observation Reference Principle](decisions/2026-07-observation-reference-principle.md)を参照する。
 > 本書のRouter、Planner、Entity Resolution、Response Composer等は現行実装または移行前の用語であり、
 > vNextでは独立した意味判断層にしない。
 
@@ -36,6 +38,11 @@ Channel
 Memory -> permitted life context
 Activation RAG -> optional, unverified candidates only
 ```
+
+Conversation Stateは会話履歴、Observationはこの会話で取得した事実、Memoryは長期記憶を扱う。Observationは
+取得時点の会話証拠であり、現在の真実を保持するキャッシュではない。現在値はDomain Providerから取得する。
+Observationだけで十分かProviderを再実行するかはLLM Agent Loopが判断し、Pythonは保存、visibility、size制限、
+redactionに限定する。
 
 LLM Agent Loopが意図理解、Skill / Tool選択、arguments生成、事実の十分性評価、Clarification、最終回答を担う。
 PythonはSession、Principal、budget、validation、authorization、confirmation、audit、execution、timeout、
