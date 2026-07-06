@@ -1,0 +1,35 @@
+{
+  "id": "get_recent_photos",
+  "skill_id": "photo",
+  "name": "Get Recent Photo Metadata",
+  "description": "Read recent Immich photo metadata for an LLM to explain. Returns counts, observed date range, metadata-presence flags, connection status, and limitations; it does not display photos.",
+  "status": "implemented",
+  "mode": "read",
+  "risk_level": "low",
+  "confirmation_required": false,
+  "audit_required": false,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "days": {"type": "integer", "minimum": 1, "maximum": 365, "default": 30},
+      "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20}
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "photo_count": {"type": "integer"},
+      "date_range": {"type": "object"},
+      "has_location": {"type": ["boolean", "null"]},
+      "has_faces": {"type": ["boolean", "null"]},
+      "sample_photo_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
+      "limitations": {"type": "array", "items": {"type": "string"}},
+      "provenance": {"type": "object"},
+      "visibility": {"type": "string", "const": "family"},
+      "observed_at": {"type": "string", "format": "date-time"},
+      "source": {"type": "string", "enum": ["immich", "unavailable"]},
+      "connection_status": {"type": "string", "enum": ["available", "unavailable"]}
+    },
+    "required": ["photo_count", "date_range", "has_location", "has_faces", "sample_photo_ids", "limitations", "provenance", "visibility", "observed_at", "source", "connection_status"]
+  }
+}

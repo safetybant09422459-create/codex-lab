@@ -23,9 +23,14 @@ class ImmichAdapter:
     ) -> None:
         self.base_url = (base_url or os.environ.get("IMMICH_BASE_URL", "")).strip()
         self.api_key = (api_key or os.environ.get("IMMICH_API_KEY", "")).strip()
-        self.timeout_seconds = timeout_seconds or float(
-            os.environ.get("IMMICH_TIMEOUT_SECONDS", "10")
-        )
+        try:
+            self.timeout_seconds = timeout_seconds or float(
+                os.environ.get("IMMICH_TIMEOUT_SECONDS", "10")
+            )
+        except ValueError as exc:
+            raise ImmichConfigurationError(
+                "IMMICH_TIMEOUT_SECONDS must be a number"
+            ) from exc
 
         if not self.base_url:
             raise ImmichConfigurationError("IMMICH_BASE_URL is required")

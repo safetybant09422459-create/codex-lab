@@ -60,11 +60,14 @@ class RuntimeService:
         self.confirmation_engine = confirmation_engine or ConfirmationEngine()
         if provider_registry is None:
             from .jarvis_provider import JarvisProvider
+            from .photo_executor import PhotoProvider
             from .travel_executor import TravelProvider
 
             provider_registry = ProviderRegistry(tools_dir=tools_dir)
             if (tools_dir / "travel").is_dir():
                 provider_registry.register(TravelProvider())
+            if (tools_dir / "photo").is_dir():
+                provider_registry.register(PhotoProvider())
             if (tools_dir / "jarvis").is_dir():
                 provider_registry.register(
                     JarvisProvider(
@@ -87,6 +90,13 @@ class RuntimeService:
             self.executor_registry.register_skill(
                 "jarvis",
                 JarvisExecutor(provider=self.provider_registry.get_provider("jarvis")),
+            )
+        if executor_registry is None and (tools_dir / "photo").is_dir():
+            from .photo_executor import PhotoExecutor
+
+            self.executor_registry.register_skill(
+                "photo",
+                PhotoExecutor(provider=self.provider_registry.get_provider("photo")),
             )
         self.permission_engine = permission_engine or PermissionEngine()
 

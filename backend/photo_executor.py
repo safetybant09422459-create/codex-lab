@@ -1,22 +1,127 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from collections.abc import Callable
 from typing import Any
 
+from .domain_provider import DomainProvider, OperationContext, ProviderOperationSpec
 from .executors import BaseExecutor
+from .photo_immich_adapter import ImmichAPIError, ImmichConfigurationError
 from .photo_repository import PhotoRepository
 
 
-class PhotoExecutor(BaseExecutor):
-    execution_mode = "local_photo_read"
+class PhotoProvider(DomainProvider):
+    """Read-only Photo capability boundary backed by Immich metadata."""
 
-    def __init__(self, repository: PhotoRepository | None = None) -> None:
+    provider_id = "photo"
+
+    def __init__(
+        self,
+        repository: PhotoRepository | None = None,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
         self.repository = repository or PhotoRepository()
+        self._clock = clock or (lambda: datetime.now(timezone.utc))
 
-    def execute(self, tool: Any, params: dict[str, Any]) -> dict[str, Any]:
-        if tool.id == "get_asset":
-            return self._get_asset(tool.id, params)
-        if tool.id == "get_photos":
-            return self._get_photos(tool.id, params)
-        raise ValueError(f"Unsupported photo tool: {tool.id}")
+    def operation_specs(self) -> tuple[ProviderOperationSpec, ...]:
+        return (
+            ProviderOperationSpec(
+                operation_id="get_recent_photos",
+                what_it_can_do=(
+                    "Return recent photo metadata facts from Immich, including "
+                    "count, observed date range, location/face metadata presence, "
+                    "and a small sample of asset IDs."
+                ),
+                what_it_cannot_do=(
+                    "It cannot display photos, choose photos for the user, identify "
+                    "people, modify assets, or compose a conversational answer."
+                ),
+                examples=({"arguments": {}}, {"arguments": {"days": 7}}),
+                limitations=(
+                    "Photo display requires a future Presentation Contract.",
+                    "Results are unavailable when Immich is not configured or reachable.",
+                ),
+            ),
+        )
+
+    def execute(
+        self, operation: OperationContext, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        if operation.operation_id == "get_recent_photos":
+            return self._get_recent_photos(operation.operation_id, params)
+        # Legacy Runtime tools remain available outside the Provider catalog.
+        if operation.operation_id == "get_asset":
+            return self._get_asset(operation.operation_id, params)
+        if operation.operation_id == "get_photos":
+            return self._get_photos(operation.operation_id, params)
+        raise ValueError(f"Unsupported photo operation: {operation.operation_id}")
+
+    def _get_recent_photos(
+        self, operation_id: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        days = self._bounded_integer(params.get("days"), "days", 30, 1, 365)
+        limit = self._bounded_integer(params.get("limit"), "limit", 20, 1, 100)
+        observed_at = self._clock().astimezone(timezone.utc)
+        from_at = observed_at - timedelta(days=days)
+        requested_range = {
+            "from": from_at.isoformat(),
+            "to": observed_at.isoformat(),
+        }
+        try:
+            photos = self.repository.get_photos(
+                from_at=from_at.isoformat(),
+                to_at=observed_at.isoformat(),
+                limit=limit,
+                offset=0,
+            )
+        except (ImmichConfigurationError, ImmichAPIError, OSError) as exc:
+            return {
+                "tool_id": operation_id,
+                "photo_count": 0,
+                "date_range": requested_range,
+                "has_location": None,
+                "has_faces": None,
+                "sample_photo_ids": [],
+                "limitations": [
+                    "Recent photo metadata could not be read from Immich.",
+                    str(exc),
+                    "Photo display is not supported in read-only v0.",
+                ],
+                "provenance": {"source": "unavailable"},
+                "visibility": "family",
+                "observed_at": observed_at.isoformat(),
+                "source": "unavailable",
+                "connection_status": "unavailable",
+            }
+
+        taken_at = [
+            photo["taken_at"]
+            for photo in photos
+            if isinstance(photo, dict) and isinstance(photo.get("taken_at"), str)
+        ]
+        date_range = requested_range
+        if taken_at:
+            date_range = {"from": min(taken_at), "to": max(taken_at)}
+        return {
+            "tool_id": operation_id,
+            "photo_count": len(photos),
+            "date_range": date_range,
+            "has_location": any(photo.get("has_location") is True for photo in photos),
+            "has_faces": any(photo.get("has_faces") is True for photo in photos),
+            "sample_photo_ids": [
+                photo["asset_id"]
+                for photo in photos[:5]
+                if isinstance(photo.get("asset_id"), str)
+            ],
+            "limitations": [
+                f"At most {limit} recent photo metadata records were inspected.",
+                "Location and face flags only report metadata present in returned records.",
+                "Photo display is not supported in read-only v0.",
+            ],
+            "provenance": {"source": "immich"},
+            "visibility": "family",
+            "observed_at": observed_at.isoformat(),
+            "source": "immich",
+            "connection_status": "available",
+        }
 
     def _get_photos(self, tool_id: str, params: dict[str, Any]) -> dict[str, Any]:
         from_at = self._iso_datetime(params.get("from"), "from")
@@ -87,3 +192,75 @@ class PhotoExecutor(BaseExecutor):
         if value < 0:
             raise ValueError("offset must be greater than or equal to 0")
         return value
+
+    @staticmethod
+    def _bounded_integer(
+        value: Any, field_name: str, default: int, minimum: int, maximum: int
+    ) -> int:
+        if value is None:
+            return default
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise ValueError(f"{field_name} must be an integer")
+        if value < minimum or value > maximum:
+            raise ValueError(f"{field_name} must be between {minimum} and {maximum}")
+        return value
+
+    def get_execution_mode(self, operation: OperationContext) -> str:
+        if operation.operation_id == "get_recent_photos":
+            return "immich_photo_metadata_read"
+        return "local_photo_read"
+
+    def observation_details(
+        self, operation: OperationContext, result: dict[str, Any]
+    ) -> dict[str, Any]:
+        if operation.operation_id != "get_recent_photos":
+            return {"visibility": "family"}
+        facts = {
+            key: result.get(key)
+            for key in (
+                "photo_count",
+                "date_range",
+                "has_location",
+                "has_faces",
+                "source",
+                "connection_status",
+                "sample_photo_ids",
+            )
+        }
+        return {
+            "facts": facts,
+            "counts": {"photo_count": int(result.get("photo_count", 0))},
+            "limitations": list(result.get("limitations", [])),
+            "visibility": str(result.get("visibility", "family")),
+            "related_capabilities": ["review_recent_photo_metadata"],
+        }
+
+
+class PhotoExecutor(BaseExecutor):
+    """Runtime adapter; Photo operation dispatch belongs to PhotoProvider."""
+
+    execution_mode = "local_photo_read"
+
+    def __init__(
+        self,
+        provider: PhotoProvider | None = None,
+        repository: PhotoRepository | None = None,
+    ) -> None:
+        if provider is not None and repository is not None:
+            raise ValueError("provider and repository are mutually exclusive")
+        self.provider = provider or PhotoProvider(repository=repository)
+
+    def execute(self, tool: Any, params: dict[str, Any]) -> dict[str, Any]:
+        return self.provider.execute(self._operation(tool), params)
+
+    def get_execution_mode(self, tool: Any) -> str:
+        return self.provider.get_execution_mode(self._operation(tool))
+
+    @staticmethod
+    def _operation(tool: Any) -> OperationContext:
+        return OperationContext(
+            operation_id=tool.id,
+            skill_id=getattr(tool, "skill_id", "photo"),
+            mode=getattr(tool, "mode", "read"),
+            risk_level=getattr(tool, "risk_level", "low"),
+        )

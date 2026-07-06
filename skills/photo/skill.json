@@ -4,12 +4,12 @@
   "description": "Photo organization and workflows",
   "capabilities": [
     {
-      "id": "photo_features_in_preparation",
-      "description": "写真機能は一部準備中です",
-      "availability": "partial"
+      "id": "review_recent_photo_metadata",
+      "description": "最近の写真の件数や期間などのメタ情報を確認できます。写真表示は今後のPresentation Contractで対応予定です",
+      "availability": "available"
     }
   ],
-  "status": "idea",
+  "status": "implemented",
   "type": "module",
   "version": "0.1.0",
   "mode": "mixed",

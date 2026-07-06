@@ -27,6 +27,8 @@ class PhotoRepository:
         return {
             "asset_id": asset_id,
             "taken_at": self._taken_at(asset),
+            "has_location": self._has_location(asset),
+            "has_faces": self._has_faces(asset),
             "thumbnail_url": self.thumbnail_url(asset_id),
             "preview_url": self.preview_url(asset_id),
             "source": "immich",
@@ -87,6 +89,18 @@ class PhotoRepository:
             if isinstance(value, str) and value.strip():
                 return value.strip().rsplit("/", 1)[-1]
         return None
+
+    @staticmethod
+    def _has_location(asset: dict[str, Any]) -> bool:
+        exif = asset.get("exifInfo")
+        if not isinstance(exif, dict):
+            return False
+        return exif.get("latitude") is not None and exif.get("longitude") is not None
+
+    @staticmethod
+    def _has_faces(asset: dict[str, Any]) -> bool:
+        people = asset.get("people")
+        return isinstance(people, list) and bool(people)
 
     def _dimension(self, asset: dict[str, Any], field_name: str) -> int | None:
         exif = asset.get("exifInfo")

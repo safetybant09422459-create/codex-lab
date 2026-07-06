@@ -42,11 +42,9 @@ class JarvisProviderTest(unittest.TestCase):
             "Jarvisの状態や使える機能を確認できます",
         )
         self.assertIn("旅行を振り返れます", capabilities["travel"][0]["description"])
-        self.assertEqual(
-            capabilities["photo"][0]["description"], "写真機能は一部準備中です"
-        )
+        self.assertIn("写真の件数や期間", capabilities["photo"][0]["description"])
         self.assertEqual(capabilities["travel"][0]["availability"], "available")
-        self.assertEqual(capabilities["photo"][0]["availability"], "partial")
+        self.assertEqual(capabilities["photo"][0]["availability"], "available")
 
     def test_get_provider_status_executes_through_runtime(self) -> None:
         result = self._execute("get_provider_status")
@@ -56,7 +54,7 @@ class JarvisProviderTest(unittest.TestCase):
 
         self.assertTrue(providers["jarvis"]["registered"])
         self.assertTrue(providers["travel"]["registered"])
-        self.assertFalse(providers["photo"]["registered"])
+        self.assertTrue(providers["photo"]["registered"])
         self.assertIn("capabilities", providers["calendar"])
 
     def test_get_operation_catalog_executes_through_runtime(self) -> None:

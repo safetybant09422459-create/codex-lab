@@ -40,6 +40,11 @@ class ChatUiTest(unittest.TestCase):
         self.assertIn("event.isComposing", CHAT_JS)
         self.assertIn("うまく取得できませんでした", CHAT_JS)
 
+    def test_chat_has_no_photo_card_or_thumbnail_renderer(self) -> None:
+        self.assertNotIn("chat-photo-card", CHAT_JS)
+        self.assertNotIn("createPhotoCard", CHAT_JS)
+        self.assertNotIn("thumbnail_url", CHAT_JS)
+
 
 if __name__ == "__main__":
     unittest.main()
