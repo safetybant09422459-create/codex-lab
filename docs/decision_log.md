@@ -255,3 +255,25 @@ Observationは取得時点の会話証拠であり、現在値のキャッシュ
 ### 詳細
 
 [Observation Reference Principle](decisions/2026-07-observation-reference-principle.md)を参照する。
+
+---
+
+## Decision 0014
+
+### テーマ
+
+Memoryを何として保持し、Conversation State、Observation、Entity Context、Providerからどう分離するか？
+
+### 決定
+
+Memoryは長期的に有用と思われる知識であり、真実ではない。現在状態はDomain Providerから取得する。
+Conversation Stateは今回の会話、Observationは取得時点の会話証拠、Entity Contextは今回参照可能なEntity候補、
+Domain Providerは現在のSource of Truthへの能力境界、Memoryは会話を越える長期知識を担う。
+
+Memoryの採用、Provider再取得、ObservationからMemory候補への昇格はLLMが判断する。Pythonは保存、更新、削除、
+visibility、retention、redactionに限定し、重要度、推薦、意味的ranking、要約、回答、Provider / Operation選択、
+keyword / topic判定を担わない。
+
+### 詳細
+
+[Memory Principle / Responsibility Boundary](decisions/2026-07-memory-principle.md)を参照する。

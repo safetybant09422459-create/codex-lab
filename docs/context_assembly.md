@@ -125,9 +125,11 @@ queryとして薄く検索する。
 * 子ども、健康、位置、写真、予定などはより厳しい利用Policyを適用する
 * 選択後はRepository / Runtime経由で正本を取得し、Evidenceを組み立て直す
 
-Travelは最初のProvider / PoCである。Photo、Calendar、Memory Providerは将来追加し、HomeはActionなので
-RAG Provider対象外とする。Memory Provider追加後もMemoryの作成、修正、共有、Forgetは別のguarded
-writeであり、自動実行しない。
+Travelは最初のProvider / PoCである。Photo、Calendarは将来追加し、HomeはActionなのでRAG Provider対象外とする。
+Memoryは正本Entity候補を探すActivation RAGとは別の長期知識であり、
+[Memory Principle / Responsibility Boundary](decisions/2026-07-memory-principle.md)に従う。Memory Contextの取得方式は
+別途設計し、Pythonによる意味ranking、要約、重要度判定、自動想起を前提にしない。Memoryの作成、修正、共有、
+forgetはguarded writeであり、自動実行しない。
 
 ## Evidence Assembly
 

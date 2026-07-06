@@ -29,6 +29,11 @@ LLM Agent Loop
 ProviderはCRUD、検索、正本取得、外部API呼び出し、ドメイン不変条件、正規化を担う。ユーザー意図の解釈、
 Operation選択、複数Providerの計画、Clarification、会話状態、最終回答はLLM Agent Loopが担う。
 
+Memory Providerを将来追加する場合も、[Memory Principle / Responsibility Boundary](decisions/2026-07-memory-principle.md)に
+従う。Memory Providerは長期知識の保存管理境界であり、他Domain Providerの現在値やSource of Truthを代替しない。
+Python実装は保存、更新、削除、visibility、retention、redactionに限定し、Memoryの重要度、推薦、意味的ranking、
+要約、回答、Provider / Operation選択、keyword / topic判定を持たない。
+
 ## Observation Envelope
 
 Observationの正本guardrailは
