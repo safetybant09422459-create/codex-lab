@@ -5,14 +5,100 @@ from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
 from backend.agent_host import AgentHost, Principal, TurnInput
+from backend.domain_provider import OperationContext
 from backend.executors import ExecutorRegistry
 from backend.photo_executor import PhotoExecutor, PhotoProvider
+from backend.photo_repository import PhotoRepository
 from backend.provider_registry import ProviderRegistry
 from backend.runtime import RuntimeService
 from tests.fake_llm_client import FakeLLMClient
 
 
 class PhotoProviderTest(unittest.TestCase):
+    def test_recent_photo_observation_facts_are_deterministically_aggregated(self) -> None:
+        repository = Mock()
+        repository.get_photos.return_value = [
+            {
+                "asset_id": "asset-3",
+                "taken_at": "2026-07-05T18:00:00+09:00",
+                "has_location": True,
+                "has_faces": True,
+                "camera_make": "Apple",
+                "camera_model": "iPhone 15",
+                "timezone": "Asia/Tokyo",
+            },
+            {
+                "asset_id": "asset-1",
+                "taken_at": "2026-07-04T08:00:00+09:00",
+                "has_location": False,
+                "has_faces": True,
+                "camera_make": "Apple",
+                "camera_model": "iPhone 14",
+                "timezone": "Asia/Tokyo",
+            },
+            {
+                "asset_id": "asset-2",
+                "taken_at": "2026-07-05T09:00:00+09:00",
+                "has_location": True,
+                "has_faces": False,
+                "camera_make": "Apple",
+                "camera_model": "iPhone 15",
+                "timezone": "Asia/Tokyo",
+            },
+        ]
+        provider = PhotoProvider(
+            repository=repository,
+            clock=lambda: datetime(2026, 7, 6, tzinfo=timezone.utc),
+        )
+
+        operation = OperationContext(
+            operation_id="get_recent_photos",
+            skill_id="photo",
+            mode="read",
+            risk_level="low",
+        )
+        result = provider.execute(operation, {})
+        facts = provider.observation_details(operation, result)["facts"]
+
+        self.assertEqual(
+            facts["date_bucket_counts"], {"2026-07-04": 1, "2026-07-05": 2}
+        )
+        self.assertEqual(facts["day_count"], 2)
+        self.assertEqual(facts["has_location_count"], 2)
+        self.assertEqual(facts["has_faces_count"], 2)
+        self.assertEqual(facts["camera_make_counts"], {"Apple": 3})
+        self.assertEqual(
+            facts["camera_model_counts"], {"iPhone 14": 1, "iPhone 15": 2}
+        )
+        self.assertEqual(facts["timezone"], "Asia/Tokyo")
+        self.assertEqual(facts["oldest_photo_at"], "2026-07-04T08:00:00+09:00")
+        self.assertEqual(facts["newest_photo_at"], "2026-07-05T18:00:00+09:00")
+        self.assertFalse(
+            {"message", "summary", "recommendation", "next_action"} & facts.keys()
+        )
+
+    def test_repository_exposes_only_available_camera_metadata(self) -> None:
+        adapter = Mock()
+        adapter.search_photos.return_value = [
+            {
+                "id": "asset-1",
+                "fileCreatedAt": "2026-07-05T10:00:00+09:00",
+                "exifInfo": {
+                    "make": " Apple ",
+                    "model": "iPhone 15",
+                    "timeZone": "Asia/Tokyo",
+                },
+            }
+        ]
+
+        photo = PhotoRepository(adapter=adapter).get_photos(
+            "2026-07-01T00:00:00+09:00", "2026-07-06T00:00:00+09:00", 20
+        )[0]
+
+        self.assertEqual(photo["camera_make"], "Apple")
+        self.assertEqual(photo["camera_model"], "iPhone 15")
+        self.assertEqual(photo["timezone"], "Asia/Tokyo")
+
     def test_operation_catalog_exposes_recent_photo_metadata_read(self) -> None:
         runtime = RuntimeService()
         photo = next(
@@ -77,6 +163,12 @@ class PhotoProviderTest(unittest.TestCase):
         self.assertEqual(result["source"], "unavailable")
         self.assertEqual(result["connection_status"], "unavailable")
         self.assertEqual(result["sample_photo_ids"], [])
+        self.assertEqual(result["date_bucket_counts"], {})
+        self.assertEqual(result["day_count"], 0)
+        self.assertEqual(result["has_location_count"], 0)
+        self.assertEqual(result["has_faces_count"], 0)
+        self.assertEqual(result["camera_make_counts"], {})
+        self.assertEqual(result["camera_model_counts"], {})
         self.assertTrue(result["limitations"])
 
     def test_observation_contains_photo_facts_and_preserves_raw_result(self) -> None:

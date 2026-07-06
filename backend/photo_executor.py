@@ -1,5 +1,6 @@
-from datetime import datetime, timedelta, timezone
+from collections import Counter
 from collections.abc import Callable
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .domain_provider import DomainProvider, OperationContext, ProviderOperationSpec
@@ -27,8 +28,8 @@ class PhotoProvider(DomainProvider):
                 operation_id="get_recent_photos",
                 what_it_can_do=(
                     "Return recent photo metadata facts from Immich, including "
-                    "count, observed date range, location/face metadata presence, "
-                    "and a small sample of asset IDs."
+                    "daily and camera counts, observed date range, location/face "
+                    "metadata counts, and a small sample of asset IDs."
                 ),
                 what_it_cannot_do=(
                     "It cannot display photos, choose photos for the user, identify "
@@ -77,8 +78,17 @@ class PhotoProvider(DomainProvider):
                 "tool_id": operation_id,
                 "photo_count": 0,
                 "date_range": requested_range,
+                "date_bucket_counts": {},
+                "day_count": 0,
                 "has_location": None,
                 "has_faces": None,
+                "has_location_count": 0,
+                "has_faces_count": 0,
+                "camera_make_counts": {},
+                "camera_model_counts": {},
+                "timezone": None,
+                "newest_photo_at": None,
+                "oldest_photo_at": None,
                 "sample_photo_ids": [],
                 "limitations": [
                     "Recent photo metadata could not be read from Immich.",
@@ -92,20 +102,47 @@ class PhotoProvider(DomainProvider):
                 "connection_status": "unavailable",
             }
 
-        taken_at = [
-            photo["taken_at"]
+        dated_photos = [
+            (photo, parsed)
             for photo in photos
-            if isinstance(photo, dict) and isinstance(photo.get("taken_at"), str)
+            if isinstance(photo, dict)
+            and (parsed := self._parse_photo_datetime(photo.get("taken_at"))) is not None
         ]
+        date_bucket_counts = Counter(
+            parsed.date().isoformat() for _, parsed in dated_photos
+        )
+        sorted_dates = sorted(dated_photos, key=lambda item: item[1])
+        oldest_photo_at = sorted_dates[0][0]["taken_at"] if sorted_dates else None
+        newest_photo_at = sorted_dates[-1][0]["taken_at"] if sorted_dates else None
         date_range = requested_range
-        if taken_at:
-            date_range = {"from": min(taken_at), "to": max(taken_at)}
+        if sorted_dates:
+            date_range = {"from": oldest_photo_at, "to": newest_photo_at}
+        timezones = sorted(
+            {
+                value
+                for photo in photos
+                if isinstance(photo, dict)
+                and isinstance((value := photo.get("timezone")), str)
+                and value
+            }
+        )
         return {
             "tool_id": operation_id,
             "photo_count": len(photos),
             "date_range": date_range,
+            "date_bucket_counts": dict(sorted(date_bucket_counts.items())),
+            "day_count": len(date_bucket_counts),
             "has_location": any(photo.get("has_location") is True for photo in photos),
             "has_faces": any(photo.get("has_faces") is True for photo in photos),
+            "has_location_count": sum(
+                photo.get("has_location") is True for photo in photos
+            ),
+            "has_faces_count": sum(photo.get("has_faces") is True for photo in photos),
+            "camera_make_counts": self._text_counts(photos, "camera_make"),
+            "camera_model_counts": self._text_counts(photos, "camera_model"),
+            "timezone": timezones[0] if len(timezones) == 1 else None,
+            "newest_photo_at": newest_photo_at,
+            "oldest_photo_at": oldest_photo_at,
             "sample_photo_ids": [
                 photo["asset_id"]
                 for photo in photos[:5]
@@ -205,6 +242,30 @@ class PhotoProvider(DomainProvider):
             raise ValueError(f"{field_name} must be between {minimum} and {maximum}")
         return value
 
+    @staticmethod
+    def _parse_photo_datetime(value: Any) -> datetime | None:
+        if not isinstance(value, str) or not value.strip():
+            return None
+        normalized = value.strip()
+        if normalized.endswith("Z"):
+            normalized = f"{normalized[:-1]}+00:00"
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo is not None else None
+
+    @staticmethod
+    def _text_counts(photos: list[dict[str, Any]], field_name: str) -> dict[str, int]:
+        counts = Counter(
+            value
+            for photo in photos
+            if isinstance(photo, dict)
+            and isinstance((value := photo.get(field_name)), str)
+            and value
+        )
+        return dict(sorted(counts.items()))
+
     def get_execution_mode(self, operation: OperationContext) -> str:
         if operation.operation_id == "get_recent_photos":
             return "immich_photo_metadata_read"
@@ -220,8 +281,17 @@ class PhotoProvider(DomainProvider):
             for key in (
                 "photo_count",
                 "date_range",
+                "date_bucket_counts",
+                "day_count",
                 "has_location",
                 "has_faces",
+                "has_location_count",
+                "has_faces_count",
+                "camera_make_counts",
+                "camera_model_counts",
+                "timezone",
+                "newest_photo_at",
+                "oldest_photo_at",
                 "source",
                 "connection_status",
                 "sample_photo_ids",

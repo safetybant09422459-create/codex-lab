@@ -2,7 +2,7 @@
   "id": "get_recent_photos",
   "skill_id": "photo",
   "name": "Get Recent Photo Metadata",
-  "description": "Read recent Immich photo metadata for an LLM to explain. Returns counts, observed date range, metadata-presence flags, connection status, and limitations; it does not display photos.",
+  "description": "Read recent Immich photo metadata for an LLM to explain. Returns deterministic daily, camera, location and face counts, observed date range, connection status, and limitations; it does not display photos.",
   "status": "implemented",
   "mode": "read",
   "risk_level": "low",
@@ -20,8 +20,17 @@
     "properties": {
       "photo_count": {"type": "integer"},
       "date_range": {"type": "object"},
+      "date_bucket_counts": {"type": "object", "additionalProperties": {"type": "integer"}},
+      "day_count": {"type": "integer"},
       "has_location": {"type": ["boolean", "null"]},
       "has_faces": {"type": ["boolean", "null"]},
+      "has_location_count": {"type": "integer"},
+      "has_faces_count": {"type": "integer"},
+      "camera_make_counts": {"type": "object", "additionalProperties": {"type": "integer"}},
+      "camera_model_counts": {"type": "object", "additionalProperties": {"type": "integer"}},
+      "timezone": {"type": ["string", "null"]},
+      "newest_photo_at": {"type": ["string", "null"], "format": "date-time"},
+      "oldest_photo_at": {"type": ["string", "null"], "format": "date-time"},
       "sample_photo_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
       "limitations": {"type": "array", "items": {"type": "string"}},
       "provenance": {"type": "object"},
@@ -30,6 +39,6 @@
       "source": {"type": "string", "enum": ["immich", "unavailable"]},
       "connection_status": {"type": "string", "enum": ["available", "unavailable"]}
     },
-    "required": ["photo_count", "date_range", "has_location", "has_faces", "sample_photo_ids", "limitations", "provenance", "visibility", "observed_at", "source", "connection_status"]
+    "required": ["photo_count", "date_range", "date_bucket_counts", "day_count", "has_location", "has_faces", "has_location_count", "has_faces_count", "camera_make_counts", "camera_model_counts", "timezone", "newest_photo_at", "oldest_photo_at", "sample_photo_ids", "limitations", "provenance", "visibility", "observed_at", "source", "connection_status"]
   }
 }

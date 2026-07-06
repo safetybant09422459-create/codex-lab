@@ -40,6 +40,11 @@ factsは取得件数、title一覧、日付範囲、Catalog上のProvider / Capa
 事実だけである。ユーザー意図の解釈、Provider / Operation選択、結果の意味評価、Clarification、次Action提案、
 説明文生成は含めず、LLM / Jarvis Coreが担う。ObservationはPresentation ContractやUIカードとも別の契約である。
 
+Photo Providerの`get_recent_photos`は、写真メタ情報から日別件数、写真が存在する日数、位置・顔metadata件数、
+camera make / model件数、単一timezone、最古・最新日時を決定的に集計してObservation factsへ渡す。
+写真内容理解、人物名・場所名の推定、おすすめや思い出の生成は行わない。写真のUI表示もPresentation Contractまで
+未対応である。
+
 ## Operation Catalog
 
 `ProviderRegistry`は登録ProviderとTool JSONを結合し、`contract_version: "1"`のCatalogを返す。各Operationは
