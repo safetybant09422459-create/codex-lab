@@ -2,7 +2,7 @@
   "id": "get_trip",
   "skill_id": "travel",
   "name": "Get Trip",
-  "description": "Get one known trip by id.",
+  "description": "Get one known trip by canonical trip_id. Use the canonical id from active_entities, not the trip title.",
   "status": "idea",
   "mode": "read",
   "risk_level": "low",

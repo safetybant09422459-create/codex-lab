@@ -48,6 +48,8 @@ class ProviderContractTest(unittest.TestCase):
         ):
             self.assertIn(field, get_trip)
         self.assertEqual(get_trip["availability"], "implemented")
+        self.assertIn("canonical id from active_entities", get_trip["description"])
+        self.assertIn("not the trip title", get_trip["description"])
         self.assertEqual(operations["search_trip"]["availability"], "planned")
         self.assertIsNone(operations["search_trip"]["tool_id"])
 
@@ -71,6 +73,25 @@ class ProviderContractTest(unittest.TestCase):
         self.assertTrue(response["success"])
         self.assertEqual(response["result"]["trips"], [{"id": "trip-1"}])
         self.repository.get_trips.assert_called_once_with()
+
+    def test_missing_trip_id_stops_at_runtime_validation(self) -> None:
+        executor_registry = ExecutorRegistry()
+        executor_registry.register_skill(
+            "travel", TravelExecutor(provider=self.provider)
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runtime = RuntimeService(
+                audit_logger=AuditLogger(Path(temp_dir) / "audit.log"),
+                executor_registry=executor_registry,
+                provider_registry=self.registry,
+            )
+            response = runtime.execute_provider_operation(
+                "travel", "get_trip", {}, role="family"
+            )
+
+        self.assertFalse(response["success"])
+        self.assertEqual(response["errors"], ["trip_id is required"])
+        self.repository.get_trip.assert_not_called()
 
     def test_runtime_provider_write_still_requires_permission_and_confirmation(self) -> None:
         executor_registry = ExecutorRegistry()

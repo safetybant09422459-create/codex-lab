@@ -136,13 +136,16 @@ class ConversationStateApiTest(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_different_sessions_do_not_share_turns(self) -> None:
-        llm = FakeLLMClient([answer_action("A"), answer_action("B")])
+        llm = FakeLLMClient(
+            [answer_action("A", [{"id": "session-a-entity"}]), answer_action("B")]
+        )
         with patch.object(main, "agent_host", AgentHost(llm, self.runtime())):
             await self.post_chat({"message": "最初", "session_id": "session-a"})
             await self.post_chat({"message": "続き", "session_id": "session-b"})
 
         self.assertEqual(llm.payloads[1].conversation_context, [])
         self.assertEqual(llm.payloads[1].conversation_state["last_observations"], [])
+        self.assertEqual(llm.payloads[1].conversation_state["active_entities"], [])
 
     async def test_observation_is_in_next_turn_payload(self) -> None:
         llm = FakeLLMClient(

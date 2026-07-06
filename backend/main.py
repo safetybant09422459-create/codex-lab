@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import codex_api
-from .agent_host import AgentContractError, AgentHost, TurnInput
+from .agent_host import AgentContractError, AgentHost, Principal, TurnInput
 from .config import FRONTEND_DIR, ROOT_DIR, SKILLS_DIR, TOOLS_DIR
 from .git_api import file_diff, git, git_changes
 from .git_workflow import GitWorkflow, redact_secrets
@@ -100,6 +100,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         session_id=request.session_id or str(uuid4()),
         channel="web_chat",
         normalized_input={"text": request.message},
+        principal=Principal(role="family", subject_id="local-web-family"),
     )
     try:
         turn = agent_host.run_turn(turn_input)

@@ -62,6 +62,7 @@ class ObservationEnvelopeTest(unittest.TestCase):
         self.assertEqual(envelope.freshness, "observed_at_execution")
         self.assertEqual(envelope.observed_at, "2026-07-06T01:02:03+00:00")
         self.assertEqual(envelope.provenance["source"], "repository")
+        self.assertEqual(envelope.entities, [])
 
     def test_get_trips_adds_only_deterministic_provider_facts(self) -> None:
         runtime = RuntimeService()
@@ -78,6 +79,18 @@ class ObservationEnvelopeTest(unittest.TestCase):
         self.assertIn("date_range", details["facts"])
         self.assertFalse(details["facts"]["has_more"])
         self.assertNotIn("next_action", details)
+        self.assertEqual(
+            details["entity_candidates"],
+            [
+                {
+                    "entity_type": "trip",
+                    "id": str(trip["id"]),
+                    "label": str(trip["title"]),
+                }
+                for trip in raw["result"]["trips"]
+                if trip.get("id") and trip.get("title")
+            ],
+        )
 
     def test_jarvis_capability_observation_has_deterministic_counts(self) -> None:
         runtime = RuntimeService()
@@ -126,6 +139,24 @@ class ObservationEnvelopeTest(unittest.TestCase):
         self.assertEqual(stored["provider_id"], "travel")
         self.assertIn("raw_result", stored)
         self.assertIn("trip_count", stored["facts"])
+        active_entities = llm.payloads[2].conversation_state["active_entities"]
+        expected_trips = first.observations[0].raw_result["result"]["trips"]
+        self.assertEqual(
+            active_entities,
+            [
+                {
+                    "entity_type": "trip",
+                    "id": str(trip["id"]),
+                    "label": str(trip["title"]),
+                    "source_provider": "travel",
+                    "source_operation": "get_trips",
+                    "observed_at": first.observations[0].observed_at,
+                    "visibility": "family",
+                }
+                for trip in expected_trips
+                if trip.get("id") and trip.get("title")
+            ],
+        )
 
     def test_observation_code_has_no_user_intent_or_action_selection_input(self) -> None:
         source = inspect.getsource(ObservationEnvelopeBuilder)

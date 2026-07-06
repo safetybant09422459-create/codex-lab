@@ -11,6 +11,7 @@ from .conversation_state import (
     ConversationTurnState,
     InMemoryConversationStateStore,
 )
+from .entity_context import EntityContextBuilder
 from .llm_client import LLMClient
 from .observation import ObservationEnvelope, ObservationEnvelopeBuilder
 
@@ -174,6 +175,7 @@ class AgentHost:
         conversation_store: InMemoryConversationStateStore | None = None,
         context_builder: ConversationContextBuilder | None = None,
         observation_builder: ObservationEnvelopeBuilder | None = None,
+        entity_context_builder: EntityContextBuilder | None = None,
     ) -> None:
         self.llm_client = llm_client
         self.runtime = runtime
@@ -182,6 +184,7 @@ class AgentHost:
         )
         self.context_builder = context_builder or ConversationContextBuilder()
         self.observation_builder = observation_builder or ObservationEnvelopeBuilder()
+        self.entity_context_builder = entity_context_builder or EntityContextBuilder()
 
     def run_turn(self, turn_input: TurnInput) -> AgentTurnResult:
         turn_id = str(uuid4())
@@ -306,8 +309,9 @@ class AgentHost:
                     observation.model_dump(mode="json")
                     for observation in result.observations
                 ],
-                active_entities=deepcopy(
-                    action.conversation_update.active_entities or []
+                active_entities=self.entity_context_builder.build(
+                    result.observations,
+                    action.conversation_update.active_entities or [],
                 ),
             ),
         )

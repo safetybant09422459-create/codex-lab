@@ -402,6 +402,15 @@ class TravelProvider(DomainProvider):
             "limitations": ["The result reflects the current Travel repository."],
             "visibility": "family",
             "related_capabilities": ["review_travel_memories"],
+            "entity_candidates": [
+                {
+                    "entity_type": "trip",
+                    "id": str(trip["id"]),
+                    "label": str(trip["title"]),
+                }
+                for trip in valid_trips
+                if trip.get("id") and trip.get("title")
+            ],
         }
 
     @property

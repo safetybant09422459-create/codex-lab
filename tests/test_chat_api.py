@@ -84,9 +84,31 @@ class ChatApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.json()["tool_id"], "get_trips")
         self.assertEqual(response.json()["result"]["trips"][0]["id"], "trip-1")
         runtime.execute_provider_operation.assert_called_once_with(
-            "travel", "get_trips", {}, confirmed=False, role="guest"
+            "travel", "get_trips", {}, confirmed=False, role="family"
         )
+        self.assertEqual(llm.payloads[0].principal.role, "family")
+        self.assertEqual(llm.payloads[0].principal.subject_id, "local-web-family")
         self.assertEqual(len(llm.payloads), 2)
+
+    async def test_web_chat_family_entities_reach_next_turn_context(self) -> None:
+        runtime = main.runtime_service
+        llm = FakeLLMClient(
+            [call_action(), answer_action("旅行一覧です。"), answer_action("開きます。")]
+        )
+        with patch.object(main, "agent_host", AgentHost(llm, runtime)):
+            first = await self.post_chat(
+                {"message": "旅行一覧見せて", "session_id": "family-context"}
+            )
+            second = await self.post_chat(
+                {"message": "福岡旅行を開いて", "session_id": "family-context"}
+            )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        entities = llm.payloads[2].conversation_state["active_entities"]
+        self.assertTrue(entities)
+        self.assertTrue(all(item["visibility"] == "family" for item in entities))
+        self.assertTrue(all(item["id"] for item in entities))
 
     async def test_missing_openai_api_key_returns_safe_configuration_error(self) -> None:
         host = AgentHost(openai_adapter.OpenAIModelProviderAdapter(), Mock())

@@ -24,6 +24,7 @@ class ObservationEnvelope(BaseModel):
     freshness: str = "observed_at_execution"
     observed_at: str
     related_capabilities: list[str] = Field(default_factory=list)
+    entities: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ObservationEnvelopeBuilder:
@@ -41,6 +42,7 @@ class ObservationEnvelopeBuilder:
         details: dict[str, Any] | None = None,
     ) -> ObservationEnvelope:
         details = details or {}
+        observed_at = self._clock().astimezone(timezone.utc).isoformat()
         return ObservationEnvelope(
             provider_id=provider_id,
             operation_id=operation_id,
@@ -57,9 +59,53 @@ class ObservationEnvelopeBuilder:
                 "source_refs": [],
             },
             visibility=str(details.get("visibility", "unknown")),
-            observed_at=self._clock().astimezone(timezone.utc).isoformat(),
+            observed_at=observed_at,
             related_capabilities=list(details.get("related_capabilities", ())),
+            entities=self._entities(
+                details.get("entity_candidates", ()),
+                provider_id=provider_id,
+                operation_id=operation_id,
+                visibility=str(details.get("visibility", "unknown")),
+                observed_at=observed_at,
+            ),
         )
+
+    def _entities(
+        self,
+        candidates: Any,
+        *,
+        provider_id: str,
+        operation_id: str,
+        visibility: str,
+        observed_at: str,
+    ) -> list[dict[str, Any]]:
+        if not isinstance(candidates, (list, tuple)):
+            return []
+        entities = []
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            entity_type = candidate.get("entity_type")
+            entity_id = candidate.get("id")
+            label = candidate.get("label")
+            if not all(isinstance(value, str) and value for value in (
+                entity_type,
+                entity_id,
+                label,
+            )):
+                continue
+            entities.append(
+                {
+                    "entity_type": entity_type,
+                    "id": entity_id,
+                    "label": label,
+                    "source_provider": provider_id,
+                    "source_operation": operation_id,
+                    "observed_at": observed_at,
+                    "visibility": visibility,
+                }
+            )
+        return entities
 
     @staticmethod
     def _status(raw_result: dict[str, Any]) -> str:

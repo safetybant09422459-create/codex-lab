@@ -117,6 +117,25 @@ class ConversationContextBuilderTest(unittest.TestCase):
             ["family"],
         )
 
+    def test_guest_visibility_excludes_family_entity(self):
+        result = self.build(
+            turns=[
+                turn(1, active_entities=[{"id": "trip-1", "visibility": "family"}])
+            ],
+            allowed=frozenset({"public", "shared", "unknown"}),
+        )
+
+        self.assertEqual(result["conversation_state"]["active_entities"], [])
+
+    def test_family_visibility_allows_family_entity(self):
+        entity = {"id": "trip-1", "visibility": "family"}
+        result = self.build(
+            turns=[turn(1, active_entities=[entity])],
+            allowed=frozenset({"public", "shared", "family", "unknown"}),
+        )
+
+        self.assertEqual(result["conversation_state"]["active_entities"], [entity])
+
     def test_byte_limit_drops_items_without_summarizing_them(self):
         unlimited = self.build(turns=[turn(1), turn(2)])
         one_turn_size = len(
