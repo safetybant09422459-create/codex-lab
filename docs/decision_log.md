@@ -219,3 +219,21 @@ Conversation Qualityを改善するとき、Python Brainの再発をどう防ぐ
 ### 詳細
 
 [Conversation Quality / Python Brain Regression Guard](decisions/2026-07-conversation-quality-python-brain-regression-guard.md)を参照する。
+
+---
+
+## Decision 0012
+
+### テーマ
+
+Observationへ何を置き、どこからを意味判断として禁止するか？
+
+### 決定
+
+Observationは観測された事実と利用条件だけを持つ。Providerは実行結果から決定的factsを生成でき、Runtime / Agent
+Hostはvisibility、limitations、provenance、freshnessを付与できるが、解釈、意図、次Action、回答、Provider /
+Operation選択、UI表示判断はLLM / Jarvis Coreまたは将来のPresentation Contractへ残す。
+
+### 詳細
+
+[Observation Guardrail](decisions/2026-07-observation-guardrail.md)を参照する。

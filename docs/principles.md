@@ -333,3 +333,13 @@ Provider Operation契約、Capability説明、Memory、LLM promptを改善して
 
 Conversation Quality Testは自然な会話の評価であると同時に、Pythonへ意味判断が戻ることを防ぐRegression Guardとする。
 改善対象と禁止対象の区別は、[Conversation Quality / Python Brain Regression GuardのImprovement Target Principle](decisions/2026-07-conversation-quality-python-brain-regression-guard.md#improvement-target-principle)を参照する。
+
+---
+
+## Principle 21
+
+Observation Is Observed Facts, Not Interpretation
+
+ObservationはProvider実行結果から決定的に確認できるfactsと、その`visibility`、`freshness` / `observed_at`、
+`limitations`、`provenance`だけをLLMへ渡す。意図、話題、解釈、次Action、推薦、回答、Provider / Operation選択、
+UI表示判断を含めない。詳細は[Observation Guardrail](decisions/2026-07-observation-guardrail.md)を参照する。

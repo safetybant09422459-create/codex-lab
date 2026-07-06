@@ -8,6 +8,8 @@
 > [Jarvis Core LLM Contract](decisions/2026-07-llm-contract.md)を参照する。
 > 会話品質を改善するときのLLM / Python境界と回帰防止は
 > [Conversation Quality / Python Brain Regression Guard](decisions/2026-07-conversation-quality-python-brain-regression-guard.md)を参照する。
+> Observationを観測事実に限定し、意味判断やUI表示判断と分離する境界は
+> [Observation Guardrail](decisions/2026-07-observation-guardrail.md)を参照する。
 > 本書のRouter、Planner、Entity Resolution、Response Composer等は現行実装または移行前の用語であり、
 > vNextでは独立した意味判断層にしない。
 
