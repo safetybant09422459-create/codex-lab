@@ -155,7 +155,7 @@ class ConversationStateApiTest(unittest.IsolatedAsyncioTestCase):
         next_turn = llm.payloads[2]
         observations = next_turn.conversation_state["last_observations"]
         self.assertEqual(
-            observations[0]["result"]["result"]["trips"][0]["id"],
+            observations[0]["raw_result"]["result"]["trips"][0]["id"],
             "trip-1",
         )
 

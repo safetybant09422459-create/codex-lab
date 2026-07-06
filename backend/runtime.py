@@ -5,6 +5,7 @@ from typing import Any
 from .audit import AuditLogger
 from .confirmation import ConfirmationEngine
 from .config import ROOT_DIR, TOOLS_DIR
+from .domain_provider import OperationContext
 from .executors import ExecutorRegistry
 from .permission import PermissionEngine
 from .provider_registry import ProviderRegistry
@@ -97,6 +98,28 @@ class RuntimeService:
 
     def get_capability_catalog(self) -> dict[str, Any]:
         return self.provider_registry.capability_catalog()
+
+    def get_observation_details(
+        self, provider_id: str, operation_id: str, result: dict[str, Any]
+    ) -> dict[str, Any]:
+        operation = self.provider_registry.get_operation(
+            provider_id, operation_id, executable=True
+        )
+        if operation.mode != "read" or not result.get("success"):
+            return {}
+        provider_result = result.get("result")
+        if not isinstance(provider_result, dict):
+            return {}
+        provider = self.provider_registry.get_provider(provider_id)
+        return provider.observation_details(
+            OperationContext(
+                operation_id=operation.operation_id,
+                skill_id=provider_id,
+                mode=operation.mode,
+                risk_level=operation.risk_level,
+            ),
+            provider_result,
+        )
 
     def execute_provider_operation(
         self,

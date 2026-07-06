@@ -155,7 +155,9 @@ class AgentHostTest(unittest.TestCase):
         runtime.execute_provider_operation.assert_called_once_with(
             "calendar", "list_events", {}, confirmed=False, role="guest"
         )
-        self.assertEqual(result.observations[0].result["result"], {"events": []})
+        self.assertEqual(
+            result.observations[0].raw_result["result"], {"events": []}
+        )
 
     def test_real_runtime_provider_path_executes_provider_operation(self) -> None:
         travel_input = self.turn_input.model_copy(
@@ -164,7 +166,7 @@ class AgentHostTest(unittest.TestCase):
         llm = FakeLLMClient([call_action(), answer_action("旅行は1件あります。")])
         result = AgentHost(llm, self.runtime).run_turn(travel_input)
 
-        self.assertTrue(result.observations[0].result["success"])
+        self.assertTrue(result.observations[0].raw_result["success"])
         self.repository.get_trips.assert_called_once_with()
         self.assertEqual(len(llm.payloads), 2)
         second_observations = llm.payloads[1].prior_observations

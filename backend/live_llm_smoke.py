@@ -47,7 +47,7 @@ def run_live_llm_smoke() -> SmokeResult:
             travel.observations
             and travel.observations[0].provenance.get("provider_id") == "travel"
             and travel.observations[0].provenance.get("operation_id") == "get_trips"
-            and travel.observations[0].result.get("success") is True
+            and travel.observations[0].raw_result.get("success") is True
         )
         answer_after_observation = bool(
             travel.observations and travel.action.action == "answer"

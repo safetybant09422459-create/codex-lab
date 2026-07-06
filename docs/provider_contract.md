@@ -29,6 +29,17 @@ LLM Agent Loop
 ProviderはCRUD、検索、正本取得、外部API呼び出し、ドメイン不変条件、正規化を担う。ユーザー意図の解釈、
 Operation選択、複数Providerの計画、Clarification、会話状態、最終回答はLLM Agent Loopが担う。
 
+## Observation Envelope
+
+read-only Provider Operationの実行結果は、Agent Host境界でObservation Envelopeへ変換してLLMへ渡す。
+Envelopeは`provider_id`、`operation_id`、`status`、完全な`raw_result`、Providerが結果から決定的に抽出した
+`facts` / `counts`、`limitations`、`provenance`、`visibility`、`freshness` / `observed_at`、
+`related_capabilities`を持つ。`raw_result`と会話向けの事実を分離し、正本の実行結果を失わない。
+
+factsは取得件数、title一覧、日付範囲、Catalog上のProvider / Capability件数など、結果から機械的に確認できる
+事実だけである。ユーザー意図の解釈、Provider / Operation選択、結果の意味評価、Clarification、次Action提案、
+説明文生成は含めず、LLM / Jarvis Coreが担う。ObservationはPresentation ContractやUIカードとも別の契約である。
+
 ## Operation Catalog
 
 `ProviderRegistry`は登録ProviderとTool JSONを結合し、`contract_version: "1"`のCatalogを返す。各Operationは

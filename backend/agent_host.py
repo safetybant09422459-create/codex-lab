@@ -12,6 +12,7 @@ from .conversation_state import (
     InMemoryConversationStateStore,
 )
 from .llm_client import LLMClient
+from .observation import ObservationEnvelope, ObservationEnvelopeBuilder
 
 
 class AgentContractError(ValueError):
@@ -50,11 +51,7 @@ class TurnContext(ContractModel):
     capability_context: list[dict[str, Any]] = Field(default_factory=list)
 
 
-class Observation(ContractModel):
-    result: dict[str, Any]
-    provenance: dict[str, Any]
-    visibility: str = "unknown"
-    limitations: list[str] = Field(default_factory=list)
+Observation = ObservationEnvelope
 
 
 class LLMInputPayload(ContractModel):
@@ -158,6 +155,10 @@ class AgentRuntime(Protocol):
         role: str | None = None,
     ) -> dict[str, Any]: ...
 
+    def get_observation_details(
+        self, provider_id: str, operation_id: str, result: dict[str, Any]
+    ) -> dict[str, Any]: ...
+
 
 class AgentHost:
     """Minimal, provider-neutral entry point for the single agent loop.
@@ -172,6 +173,7 @@ class AgentHost:
         runtime: AgentRuntime,
         conversation_store: InMemoryConversationStateStore | None = None,
         context_builder: ConversationContextBuilder | None = None,
+        observation_builder: ObservationEnvelopeBuilder | None = None,
     ) -> None:
         self.llm_client = llm_client
         self.runtime = runtime
@@ -179,6 +181,7 @@ class AgentHost:
             conversation_store or InMemoryConversationStateStore()
         )
         self.context_builder = context_builder or ConversationContextBuilder()
+        self.observation_builder = observation_builder or ObservationEnvelopeBuilder()
 
     def run_turn(self, turn_input: TurnInput) -> AgentTurnResult:
         turn_id = str(uuid4())
@@ -226,15 +229,21 @@ class AgentHost:
                     },
                 )
             )
+            details = self.runtime.get_observation_details(
+                action.provider_id, action.operation_id, runtime_result
+            )
+            if not isinstance(details, dict):
+                details = {}
+            details["limitations"] = [
+                *details.get("limitations", ()),
+                *self._runtime_limitations(runtime_result),
+            ]
             observations.append(
-                Observation(
-                    result=runtime_result,
-                    provenance={
-                        "provider_id": action.provider_id,
-                        "operation_id": action.operation_id,
-                        "source_refs": [],
-                    },
-                    limitations=self._runtime_limitations(runtime_result),
+                self.observation_builder.build(
+                    provider_id=action.provider_id,
+                    operation_id=action.operation_id,
+                    raw_result=runtime_result,
+                    details=details,
                 )
             )
             events.append(

@@ -365,6 +365,45 @@ class TravelProvider(DomainProvider):
 
         raise ValueError(f"Unsupported travel operation: {operation_id}")
 
+    def observation_details(
+        self, operation: OperationContext, result: dict[str, Any]
+    ) -> dict[str, Any]:
+        if operation.operation_id != "get_trips":
+            return {
+                "visibility": "family",
+                "related_capabilities": ["review_travel_memories"],
+            }
+
+        trips = result.get("trips")
+        if not isinstance(trips, list):
+            trips = []
+        valid_trips = [trip for trip in trips if isinstance(trip, dict)]
+        titles = [str(trip["title"]) for trip in valid_trips if trip.get("title")]
+        dated_trips = [
+            trip for trip in valid_trips if isinstance(trip.get("start_date"), str)
+        ]
+        starts = [str(trip["start_date"]) for trip in dated_trips]
+        ends = [
+            str(trip.get("end_date") or trip["start_date"]) for trip in dated_trips
+        ]
+        facts: dict[str, Any] = {
+            "trip_count": len(valid_trips),
+            "titles": titles,
+            "has_more": False,
+        }
+        if dated_trips:
+            latest = max(dated_trips, key=lambda trip: str(trip["start_date"]))
+            if latest.get("title"):
+                facts["latest_trip_title"] = str(latest["title"])
+            facts["date_range"] = f"{min(starts)}〜{max(ends)}"
+        return {
+            "facts": facts,
+            "counts": {"trip_count": len(valid_trips)},
+            "limitations": ["The result reflects the current Travel repository."],
+            "visibility": "family",
+            "related_capabilities": ["review_travel_memories"],
+        }
+
     @property
     def execution_mode(self) -> str:
         return "local_travel_read"

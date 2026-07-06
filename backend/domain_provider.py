@@ -57,3 +57,9 @@ class DomainProvider(ABC):
     @abstractmethod
     def get_execution_mode(self, operation: OperationContext) -> str:
         raise NotImplementedError
+
+    def observation_details(
+        self, operation: OperationContext, result: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Return deterministic facts about this Provider's own read result."""
+        return {}

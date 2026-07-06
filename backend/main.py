@@ -120,7 +120,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         "reply": action.message,
     }
     if turn.observations:
-        runtime_result = turn.observations[-1].result
+        runtime_result = turn.observations[-1].raw_result
         response["tool_id"] = runtime_result.get("tool_id")
         response["result"] = runtime_result.get("result")
     if request.debug:

@@ -137,6 +137,52 @@ class JarvisProvider(DomainProvider):
     def get_execution_mode(self, operation: OperationContext) -> str:
         return "local_jarvis_status_read"
 
+    def observation_details(
+        self, operation: OperationContext, result: dict[str, Any]
+    ) -> dict[str, Any]:
+        facts: dict[str, Any] = {}
+        counts: dict[str, int] = {}
+        if operation.operation_id == "get_capabilities":
+            providers = result.get("available_providers", [])
+            operations = result.get("available_operations", [])
+            capability_providers = result.get("capability_catalog", {}).get(
+                "providers", []
+            )
+            capability_count = sum(
+                len(item.get("capabilities", []))
+                for item in capability_providers
+                if isinstance(item, dict)
+            )
+            facts = {
+                "provider_count": len(providers),
+                "capability_count": capability_count,
+                "operation_count": len(operations),
+            }
+            counts = dict(facts)
+        elif operation.operation_id == "get_provider_status":
+            providers = result.get("providers", [])
+            facts = {"provider_count": len(providers)}
+            counts = dict(facts)
+        elif operation.operation_id == "get_operation_catalog":
+            providers = result.get("providers", [])
+            operation_count = sum(
+                len(item.get("operations", []))
+                for item in providers
+                if isinstance(item, dict)
+            )
+            facts = {
+                "provider_count": len(providers),
+                "operation_count": operation_count,
+            }
+            counts = dict(facts)
+        return {
+            "facts": facts,
+            "counts": counts,
+            "limitations": list(result.get("limitations", [])),
+            "visibility": "public",
+            "related_capabilities": ["inspect_jarvis_status"],
+        }
+
     @staticmethod
     def _active_provider_ids(catalog: dict[str, Any]) -> list[str]:
         return [

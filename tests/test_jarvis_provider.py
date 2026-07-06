@@ -147,7 +147,8 @@ class JarvisProviderTest(unittest.TestCase):
         self.assertEqual(turn.action.action, "answer")
         self.assertEqual(len(turn.observations), 1)
         self.assertEqual(
-            turn.observations[0].result["result"]["source"], "operation_catalog"
+            turn.observations[0].raw_result["result"]["source"],
+            "operation_catalog",
         )
         self.assertEqual(len(llm.payloads), 2)
         self.assertEqual(len(llm.payloads[1].prior_observations), 1)
