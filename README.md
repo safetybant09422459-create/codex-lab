@@ -17,6 +17,7 @@ AI開発練習用
 - [Observation Guardrail Decision](docs/decisions/2026-07-observation-guardrail.md)
 - [Observation Reference Principle Decision](docs/decisions/2026-07-observation-reference-principle.md)
 - [Long-term Context Principle Decision](docs/decisions/2026-07-long-term-context-principle.md)
+- [Jarvis Self-Improvement Principle Decision](docs/decisions/2026-07-jarvis-self-improvement-principle.md)
 - [Jarvis Core Thinking Model Decision](docs/decisions/2026-07-jarvis-core-thinking-model.md)
 - [Domain Provider Contract](docs/provider_contract.md)
 - [Jarvis Chat Core / Orchestrator v2](docs/chat_core.md)
@@ -39,6 +40,12 @@ Long-term Context候補、Capability Catalog、Operation Catalog、Provider Resp
 clarification、Observation参照、Provider Operation、Long-term Context利用を判断し、Pythonは決定的なContext
 AssemblyとRuntime実行に限定する。詳細は[Jarvis Core Thinking Model](docs/decisions/2026-07-jarvis-core-thinking-model.md)を
 参照する。Long-term Context retrievalの方式、DB、embedding、RAG、Memory Providerは未設計・未実装である。
+
+失敗、ユーザー訂正、頓珍漢な回答、Provider / Operation選択ミス、Runtime失敗、Context不足、Provider責務の
+曖昧さは、ユーザー理解のLong-term Contextへ混ぜず、Jarvis改善専用のLearning Logとして分離する。
+Learning Logは通常回答の根拠にせず、LLMが設計改善候補を作る場合だけ参照する。記録・要約・レビュー・提案の
+契約、保存方式、API、Tool、DB、retrieval、Provider、定期実行は未設計・未実装である。詳細は
+[Jarvis Self-Improvement Principle](docs/decisions/2026-07-jarvis-self-improvement-principle.md)を参照する。
 
 `tests/test_conversation_quality_smoke.py` のConversation Quality Smoke v0は、回答品質を評価する
 Conversation Quality Testではない。Capability、Conversation Context、Observation、active entitiesがLLMへ

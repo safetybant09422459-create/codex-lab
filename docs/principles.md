@@ -397,3 +397,24 @@ ProviderはSource of Truth由来の結果と新しい能力を提供する。Pro
 新しい検索、操作、能力が生まれるかで判断する。
 
 詳細は[Jarvis Core Thinking Model](decisions/2026-07-jarvis-core-thinking-model.md)を参照する。
+
+---
+
+## Principle 25
+
+Jarvis Self-Improvement Without Polluting User Understanding
+
+**Jarvisは失敗をLong-term Contextとして覚えない。**
+
+失敗、ユーザー訂正、頓珍漢な回答、Provider / Operation選択ミス、Runtime失敗、Context不足、Provider責務の
+曖昧さはLearning Logとして扱う。Long-term Contextはユーザー理解と未来の推論を変える文脈、Learning Logは
+Jarvis自身の設計改善材料である。
+
+Learning Logを通常回答の根拠、ユーザーの好み・性格・方針として利用しない。Jarvis改善時だけLLMがレビューし、
+Provider Responsibility、Capability / Operation説明、Context Assembly、Long-term Context retrieval、
+新Provider候補等を提案できる。ただしProvider生成、DB作成、API / Tool追加、コード変更は人間判断を必須とする。
+
+Pythonは保存、分離、visibility、permission、retention、redaction、token budget、決定的な構造化、Runtime記録を
+担える。失敗の意味判定、改善提案、Provider化判断、ユーザー理解への変換、通常回答への利用判断はLLMが担う。
+
+詳細は[Jarvis Self-Improvement Principle](decisions/2026-07-jarvis-self-improvement-principle.md)を参照する。

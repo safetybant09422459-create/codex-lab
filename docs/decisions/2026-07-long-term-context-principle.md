@@ -30,6 +30,10 @@ Long-term Contextは、呼び方、長期的な好み、判断基準、家族と
 Record、Observation、Conversation State、ProviderのSource of Truthではない。その役割は、未来の推論を変える
 長期文脈をLLMへ提供することに限る。
 
+失敗、ユーザー訂正、頓珍漢な回答、選択ミス、Runtime失敗等はユーザー理解ではないため、Long-term Contextへ
+保存しない。これらは[Jarvis Self-Improvement Principle](2026-07-jarvis-self-improvement-principle.md)に従い、
+Jarvis改善専用のLearning Logとして分離する。
+
 ### Providerとの責務分離
 
 Providerは出来事、記録、状態、操作対象、すなわち「What happened」を管理する。Long-term Contextは、
