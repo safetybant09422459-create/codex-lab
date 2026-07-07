@@ -29,6 +29,15 @@ LLM Agent Loop
 ProviderはCRUD、検索、正本取得、外部API呼び出し、ドメイン不変条件、正規化を担う。ユーザー意図の解釈、
 Operation選択、複数Providerの計画、Clarification、会話状態、最終回答はLLM Agent Loopが担う。
 
+Providerはデータを保存するためではなく、Jarvis Coreへ新しい能力を提供するために存在する。Provider化の判断基準は
+データ件数ではなく、「構造化することで新しい検索・操作・能力が生まれるか」である。永続化したい、情報量が増えた
+という理由だけではProvider化しない。
+
+Provider ResultsはRepositoryまたは外部サービス等のSource of Truth由来の構造化結果である。会話回答、結果の意味評価、
+次Action、UI表示判断を含めない。Runtime / Agent Hostがprovenance、visibility、limitations、freshness等を持つ
+Observation Envelopeへ変換し、LLMが十分性と利用方法を判断する。全体の関係は
+[Jarvis Core Thinking Model](decisions/2026-07-jarvis-core-thinking-model.md)を参照する。
+
 Memory Providerを将来追加する場合も、[Memory Principle / Responsibility Boundary](decisions/2026-07-memory-principle.md)に
 従う。Memory Providerは長期知識の保存管理境界であり、他Domain Providerの現在値やSource of Truthを代替しない。
 Python実装は保存、更新、削除、visibility、retention、redactionに限定し、Memoryの重要度、推薦、意味的ranking、

@@ -377,3 +377,23 @@ Long-term Contextは無制限にLLMへ渡さない。Pythonはvisibility、permi
 要約、回答、Provider / Operation選択を担わない。
 
 詳細は[Long-term Context Principle](decisions/2026-07-long-term-context-principle.md)を参照する。
+
+---
+
+## Principle 24
+
+Jarvis Core Thinking Model / LLM Decides
+
+Jarvis Coreは、User Input、Conversation Context、Observation、Active Entities、Long-term Context候補、
+Capability Catalog、Operation Catalog、Provider Responsibilityを、権限とtoken budgetの範囲でLLMへ渡す。
+
+LLMが直接回答、clarification、Provider / Operation選択、Observation参照またはProvider再取得、
+Long-term Contextの意味利用を判断する。
+
+Pythonは保存、整形、validation、filtering、visibility、permission、token budget、決定的Context Assembly、
+Runtime実行を担う。intent、topic、Provider、Operation、clarification、answerを判断または生成しない。
+
+ProviderはSource of Truth由来の結果と新しい能力を提供する。Provider化はデータ件数ではなく、構造化によって
+新しい検索、操作、能力が生まれるかで判断する。
+
+詳細は[Jarvis Core Thinking Model](decisions/2026-07-jarvis-core-thinking-model.md)を参照する。

@@ -270,3 +270,26 @@ Pythonはvisibility、permission、token budget、候補retrievalまでを担い
 ### 詳細
 
 [Long-term Context Principle](decisions/2026-07-long-term-context-principle.md)を参照する。
+
+---
+
+## Decision 0015
+
+### テーマ
+
+Jarvis CoreはLLMへ何を渡し、LLM、Runtime、Providerはそれぞれ何を担うか？
+
+### 決定
+
+CoreはUser Input、Conversation Context、Observation、Active Entities、Long-term Context候補、Capability Catalog、
+Operation Catalog、Provider Responsibilityを決定的に組み立ててLLMへ渡す。LLMが直接回答、clarification、
+Observation参照、Provider / Operation選択、Long-term Context利用を判断する。Runtimeは安全な実行、Providerは
+Source of Truth由来の構造化結果を担い、Pythonは意味判断を行わない。
+
+Long-term Contextは全件を渡さず、visibility、permission、token budget内の候補だけをretrievalする。retrieval方式、
+DB、embedding、RAG、Memory Providerは本Decisionでは決定または実装しない。Provider化は件数ではなく、構造化により
+新しい検索・操作・能力が生まれるかで判断する。
+
+### 詳細
+
+[Jarvis Core Thinking Model](decisions/2026-07-jarvis-core-thinking-model.md)を参照する。

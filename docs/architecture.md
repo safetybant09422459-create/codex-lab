@@ -14,6 +14,8 @@
 > [Observation Reference Principle](decisions/2026-07-observation-reference-principle.md)を参照する。
 > Long-term Contextを未来の推論を変える文脈に限定し、Provider、Observation、Conversation Stateと分離する境界は
 > [Long-term Context Principle](decisions/2026-07-long-term-context-principle.md)を参照する。
+> これらの入力、LLM判断、Runtime / Provider実行を一枚に統合した責務モデルは
+> [Jarvis Core Thinking Model](decisions/2026-07-jarvis-core-thinking-model.md)を参照する。
 > 本書のRouter、Planner、Entity Resolution、Response Composer等は現行実装または移行前の用語であり、
 > vNextでは独立した意味判断層にしない。
 
@@ -26,6 +28,38 @@ Jarvis Coreは、家庭用AIエージェントJarvisの中核である。
 ---
 
 ## 基本構造
+
+Jarvis CoreのThinking Modelは次のとおりである。
+
+```text
+User Input
+    ↓
+Context Assembly
+    ├ Conversation Context
+    ├ Observation
+    ├ Active Entities
+    ├ Long-term Context candidates
+    ├ Capability Catalog
+    ├ Operation Catalog
+    └ Provider Responsibility
+    ↓
+LLM
+    ↓
+Direct Answer or Provider Operation
+                    ↓
+                 Runtime
+                    ↓
+                 Provider
+                    ↓
+                Observation
+                    ↓
+Conversation State / Context update
+```
+
+Context Assemblyは保存、整形、validation、filtering、visibility、permission、token budgetを適用する決定的処理である。
+LLMが直接回答、Provider / Operation選択、clarification、Observation参照またはProvider再取得、Long-term Context候補の
+意味利用を判断する。ProviderはSource of Truth由来の構造化結果を返し、Runtime / Agent HostがObservationとして
+同じLoopへ戻す。Pythonはintent、topic、Provider、Operation、回答を判断しない。
 
 vNextの目標構造:
 
@@ -132,6 +166,9 @@ Skill（ユーザーから見える能力領域）
 
 ProviderはCRUD、検索、正本データ取得、外部API呼び出し、Operation実行、Repository等の隠蔽、
 ドメイン不変条件や正規化を担う。内部実装のdispatch、Repository選択、fallbackも決定的であればよい。
+
+Providerはデータ保存のためではなく、新しい能力を提供するために存在する。Provider化は件数ではなく、
+「構造化することで新しい検索・操作・能力が生まれるか」で判断する。
 
 Providerは、ユーザー意図の解釈、Provider / Operationの会話上の選択、複数Providerを使う計画、結果の
 意味評価、Clarification、Persona、会話状態、最終回答を担わない。これらはLLM Agent Loopが担う。
