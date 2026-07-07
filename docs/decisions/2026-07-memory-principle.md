@@ -6,7 +6,7 @@
 
 ## Status
 
-Accepted
+Superseded by [Long-term Context Principle](2026-07-long-term-context-principle.md). 本文は旧判断の履歴として残す。
 
 ## 背景
 

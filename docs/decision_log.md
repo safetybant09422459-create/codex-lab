@@ -72,21 +72,16 @@ AI
 
 ### テーマ
 
-記憶の持ち方
+長期文脈とDomain Dataの分離
 
 ### 決定
 
-ハイブリッド方式
+Long-term ContextとDomain Providerを責務分離する。
 
 ### 理由
 
-AI人格の記憶と各モジュールのデータを分離する。
-
-例
-
-* jarvis.db
-* travel.db
-* garden.db
+Long-term Contextは未来の推論を変える文脈であり、各Domain Providerが管理する出来事、記録、状態、
+操作対象とは異なる。保存方式ではなく、LLMが何を判断材料にするかで境界を定める。
 
 ---
 
@@ -212,7 +207,7 @@ Conversation Qualityを改善するとき、Python Brainの再発をどう防ぐ
 
 ### 決定
 
-会話品質はContext、Observation、Provider契約、Catalog説明、Memory、LLM promptの改善によって上げ、Pythonへ
+会話品質はContext、Observation、Provider契約、Catalog説明、Long-term Context、LLM promptの改善によって上げ、Pythonへ
 意図・話題・Provider / Operation選択・Clarification・意味的fallbackを追加しない。Conversation Quality Testを
 自然な会話の評価と同時にPython Brain Regression Guardとして扱う。
 
@@ -249,7 +244,7 @@ Observationを過去の会話でどう参照し、現在の真実とどう分離
 ### 決定
 
 Observationは取得時点の会話証拠であり、現在値のキャッシュではない。Conversation Stateは会話履歴、Observationは
-この会話で取得した事実、Providerは現在の真実、Memoryは長期記憶を担う。Observationだけで十分かProviderを
+この会話で取得した事実、Providerは現在の真実、Long-term Contextは継続的に未来の推論を変える文脈を担う。Observationだけで十分かProviderを
 再実行するかはLLMが判断し、Pythonは保存、visibility、size制限、redactionに限定する。
 
 ### 詳細
@@ -262,18 +257,16 @@ Observationは取得時点の会話証拠であり、現在値のキャッシュ
 
 ### テーマ
 
-Memoryを何として保持し、Conversation State、Observation、Entity Context、Providerからどう分離するか？
+Long-term Contextを何として扱い、Conversation State、Observation、Providerからどう分離するか？
 
 ### 決定
 
-Memoryは長期的に有用と思われる知識であり、真実ではない。現在状態はDomain Providerから取得する。
-Conversation Stateは今回の会話、Observationは取得時点の会話証拠、Entity Contextは今回参照可能なEntity候補、
-Domain Providerは現在のSource of Truthへの能力境界、Memoryは会話を越える長期知識を担う。
+Long-term Contextは、長期間にわたり未来の推論を変える文脈であり、Record、Observation、Conversation State、
+ProviderのSource of Truthではない。Providerは出来事、記録、状態、操作対象を管理する。
 
-Memoryの採用、Provider再取得、ObservationからMemory候補への昇格はLLMが判断する。Pythonは保存、更新、削除、
-visibility、retention、redactionに限定し、重要度、推薦、意味的ranking、要約、回答、Provider / Operation選択、
-keyword / topic判定を担わない。
+Pythonはvisibility、permission、token budget、候補retrievalまでを担い、候補を利用するかはLLMが判断する。
+一部をProviderへ構造化するのは、新しい検索、操作、能力が生まれる場合に限る。
 
 ### 詳細
 
-[Memory Principle / Responsibility Boundary](decisions/2026-07-memory-principle.md)を参照する。
+[Long-term Context Principle](decisions/2026-07-long-term-context-principle.md)を参照する。

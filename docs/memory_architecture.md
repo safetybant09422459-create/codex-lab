@@ -1,5 +1,9 @@
 # Jarvis Memory Principle and Responsibility
 
+> この文書は旧設計である。内部推論概念は
+> [Long-term Context Principle](decisions/2026-07-long-term-context-principle.md)へ置き換えた。
+> 本文は履歴参照のため残し、新規設計の正本として使用しない。
+
 ## 目的
 
 Memoryは、会話終了後も長期的に保持し、将来の会話で有用になり得る知識だけを扱う。

@@ -1,6 +1,6 @@
 # Jarvis Constitution
 
-更新日: 2026-06-30
+更新日: 2026-07-07
 
 > 通常docsの正本は `docs/principles.md`。この文書は、現在の開発フェーズを含めてChatGPTへ渡す判断原則である。
 
@@ -163,7 +163,7 @@ Jarvisの人格は以下から形成される。
 * Vision
 * Decision
 * Lessons
-* Memory
+* Long-term Context
 * 家族との体験
 
 ### 13. Ideas Are Assets
@@ -195,7 +195,7 @@ Entity確定、Evidence、Tool実行許可として扱わない。
 ### 17. Provider Neutral Core
 
 TravelはJarvis Activation RAGの最初のProvider / PoCであり、Travel RAGを作ることが目的ではない。
-Travel固有の型、語彙、alias、ranking規則をCoreへ入れない。Memory、Photo、Calendar、Garden等も同じ
+Travel固有の型、語彙、alias、ranking規則をCoreへ入れない。Photo、Calendar、Garden等も同じ
 Provider契約へ載せられる構造を守る。
 
 ### 18. Enrich Search, Not Domain Facts
@@ -206,7 +206,7 @@ Knowledge Enrichmentは本体DBを更新しない。候補は出所、confidence
 
 ### 19. Separate Action From Search
 
-現実世界やデータへ作用するAction Toolと、既存Entityを探すMemory / Domain Searchを分ける。
+現実世界やデータへ作用するAction Toolと、既存Entityを探すDomain Searchを分ける。
 Capability Usage RAGを将来検討する場合も、利用例の想起はCapability選択の補助に留め、Tool call、引数、
 権限、実行許可を生成しない。
 
@@ -253,16 +253,19 @@ Clarification、Persona、会話、最終回答はLLM Agent Loopが担う。Prov
 
 将来は自律性を高めてもよいが、最初は提案、確認、実行、監査を基本にする。
 
-### 記憶はハイブリッド
+### Long-term Contextは未来の推論を変える
 
-Jarvis人格の記憶とSkillごとのデータは分ける。
+Jarvisの推論入力はUser Input、Conversation Context、Observation、Long-term Context、Provider Results、
+Capability Catalogから成る。Long-term ContextはRecord、Observation、Conversation State、Providerの
+Source of Truthではなく、呼び方、長期的な好み、判断基準、家族との関係、継続プロジェクト、設計思想など、
+長期間にわたり未来の推論を変える文脈である。
 
-例:
+Providerは出来事、記録、状態、操作対象という「What happened」を管理する。Long-term Contextは
+「Why future reasoning should change」だけを担う。全件をLLMへ渡さず、Pythonはvisibility、permission、
+token budget、候補retrievalまでを担い、候補の利用はLLMが判断する。
 
-* Jarvis Memory
-* Travel DB
-* Photo基盤
-* Garden DB
+Long-term Contextの一部を将来Providerへ構造化する基準は件数や保存都合ではない。新しい検索、操作、能力が
+生まれる場合に限り、Domain Providerとして独立させる。
 
 ### 家族全員が将来利用者
 
@@ -273,7 +276,7 @@ Jarvis人格の記憶とSkillごとのデータは分ける。
 * 旅行アプリの増改築で、機能中心設計の限界を学んだ。Jarvis Coreを先に設計する。
 * 思いつきは忘れる。Idea Backlogへ残す。
 * AI時代は、未来のAIが読みやすい構造、Tool化、Decision管理が重要である。
-* 人格は口調ではなく、Vision、Decision、Memory、Lessonsから形成される。
+* 人格は口調ではなく、Vision、Decision、Lessons、Long-term Contextから形成される。
 * 現在は人間承認型が適している。自律化は信頼の後に進める。
 * Safari Firstが必要。iPhone / Safariで壊れるfrontendは未完成として扱う。
 * Basic Chat復元後はTravel固有改善を中心にせず、Activation RAG、Entity Resolution、Knowledge Enrichmentを
