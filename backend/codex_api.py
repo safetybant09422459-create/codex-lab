@@ -1,6 +1,7 @@
 import asyncio
 import re
 import shlex
+from dataclasses import dataclass
 from typing import Literal
 
 from .config import CODEX_ARGS, CODEX_BIN, GUARD_PROMPT, MAX_LOG_LINES, ROOT_DIR
@@ -9,6 +10,34 @@ _lock = asyncio.Lock()
 _process: asyncio.subprocess.Process | None = None
 _logs: list[str] = []
 _returncode: int | None = None
+
+SESSION_ID_RE = re.compile(
+    r"^\s*(?:session id|session_id)\s*:\s*([0-9a-f]{8}-[0-9a-f-]{27,})\s*$",
+    re.IGNORECASE,
+)
+
+
+@dataclass
+class CodexSessionManager:
+    """Owns the process-local Codex conversation selected by Developer."""
+
+    session_id: str | None = None
+
+    def reset(self) -> None:
+        self.session_id = None
+
+    def capture(self, line: str) -> None:
+        match = SESSION_ID_RE.match(_clean_line(line))
+        if match:
+            self.session_id = match.group(1)
+
+    def command(self, prompt: str) -> tuple[list[str], bool]:
+        if self.session_id is None:
+            return [CODEX_BIN, *CODEX_ARGS, prompt], False
+        return [CODEX_BIN, *CODEX_ARGS, "resume", self.session_id, prompt], True
+
+
+_session_manager = CodexSessionManager()
 
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 FINAL_MARKER_RE = re.compile(
@@ -123,6 +152,12 @@ def returncode() -> int | None:
     return _returncode
 
 
+def reset_session() -> None:
+    if _lock.locked():
+        raise RuntimeError("Codex is already running.")
+    _session_manager.reset()
+
+
 async def start_codex(prompt: str) -> None:
     global _returncode
 
@@ -139,10 +174,18 @@ async def _run_codex(prompt: str) -> None:
     global _process, _returncode
 
     full_prompt = f"{GUARD_PROMPT}{prompt}"
-    command = [CODEX_BIN, *CODEX_ARGS, full_prompt]
+    command, is_resume = _session_manager.command(full_prompt)
 
     _append_log(f"$ cd {ROOT_DIR}")
-    _append_log("$ " + " ".join(shlex.quote(part) for part in command[:-1]) + " <prompt>")
+    _append_log("Resume Session" if is_resume else "New Session")
+    display_command = [CODEX_BIN, *CODEX_ARGS]
+    if is_resume:
+        display_command.extend(["resume", "<session>"])
+    _append_log(
+        "$ "
+        + " ".join(shlex.quote(part) for part in display_command)
+        + " <prompt>"
+    )
 
     try:
         _process = await asyncio.create_subprocess_exec(
@@ -157,7 +200,9 @@ async def _run_codex(prompt: str) -> None:
             line = await _process.stdout.readline()
             if not line:
                 break
-            _append_log(line.decode("utf-8", errors="replace"))
+            decoded_line = line.decode("utf-8", errors="replace")
+            _session_manager.capture(decoded_line)
+            _append_log(decoded_line)
 
         _returncode = await _process.wait()
         _append_log(f"[process exited: {_returncode}]")

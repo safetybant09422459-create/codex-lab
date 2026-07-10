@@ -16,6 +16,7 @@ from .models import (
     ChatRequest,
     ChatResponse,
     ChangesResponse,
+    DeveloperSessionResponse,
     DiffResponse,
     GitCommitPushRequest,
     GitCommitPushResponse,
@@ -141,6 +142,15 @@ async def run_codex(request: RunRequest) -> RunResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return RunResponse(status="started")
+
+
+@app.post("/api/developer/session/new", response_model=DeveloperSessionResponse)
+async def new_developer_session() -> DeveloperSessionResponse:
+    try:
+        codex_api.reset_session()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return DeveloperSessionResponse(status="new_session")
 
 
 @app.get("/api/project", response_model=ProjectResponse)

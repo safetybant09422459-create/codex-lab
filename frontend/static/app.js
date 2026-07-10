@@ -39,6 +39,22 @@ function bindDevelopActions() {
       setStatus(elements.runStatus, error.message, true);
     }
   });
+
+  elements.newCodexSessionButton.addEventListener("click", async () => {
+    if (!confirm("現在のCodex会話を終了し、新しい会話を開始しますか？")) {
+      return;
+    }
+
+    elements.newCodexSessionButton.disabled = true;
+    try {
+      await api("/api/developer/session/new", { method: "POST" });
+      setStatus(elements.runStatus, "新しい会話（次回送信時に開始）");
+    } catch (error) {
+      setStatus(elements.runStatus, error.message, true);
+    } finally {
+      elements.newCodexSessionButton.disabled = false;
+    }
+  });
 }
 
 bindShellNavigation();

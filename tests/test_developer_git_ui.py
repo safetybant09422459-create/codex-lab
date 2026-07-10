@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 HTML = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
 REVIEW_JS = (ROOT / "frontend" / "static" / "review.js").read_text(encoding="utf-8")
+APP_JS = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
 
 
 class DeveloperGitUiTest(unittest.TestCase):
@@ -17,6 +18,10 @@ class DeveloperGitUiTest(unittest.TestCase):
         for label in ("Failed rule", "File", "Line", "Detected", "How to fix",
                       "Open Diff", "Ignore Once", "Cancel"):
             self.assertIn(label, HTML + REVIEW_JS)
+
+    def test_new_codex_conversation_button_is_wired(self):
+        self.assertIn('id="new-codex-session-button"', HTML)
+        self.assertIn('api("/api/developer/session/new"', APP_JS)
 
 
 if __name__ == "__main__":

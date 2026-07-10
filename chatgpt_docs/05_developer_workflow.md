@@ -30,6 +30,10 @@ Jarvis ShellのDeveloper画面にはCodex Prompt、差分レビュー、Commit /
 
 `POST /api/run` はCodex作業を開始するDeveloper機能で、一般Chat APIではない。`run_codex`、`restart_service` はhigh riskであり、自然文Chatのallowlistへ入れない。
 
+Codex会話はDeveloper backendのprocess-localなSession ManagerがIDを1件だけ保持する。初回は`codex exec`、
+継続時は`codex exec resume <SESSION_ID>`を使い、`POST /api/developer/session/new`で保持IDを破棄する。
+永続化、一覧、タイトル、履歴管理、Resume一覧、Forkは未実装であり、Developer再起動時に状態は消える。
+
 ## 変更時の安全原則
 
 - commit / push / restartは明示依頼なしに行わない

@@ -6,6 +6,7 @@ export const elements = {
   stateValue: document.querySelector("#state-value"),
   codexPrompt: document.querySelector("#codex-prompt"),
   sendCodexButton: document.querySelector("#send-codex-button"),
+  newCodexSessionButton: document.querySelector("#new-codex-session-button"),
   runStatus: document.querySelector("#run-status"),
   tokens: document.querySelector("#tokens"),
   finalAnswer: document.querySelector("#final-answer"),
