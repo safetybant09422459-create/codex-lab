@@ -130,6 +130,11 @@ Repository / Adapter / Storage
 
 注意:
 
+* Developer APIはデフォルト無効。`JARVIS_ENABLE_DEVELOPER_API=true`とserver-side
+  `JARVIS_DEVELOPER_TOKEN`を設定し、`Authorization: Bearer` headerが一致した場合だけ利用できる。
+* 保護対象は`/api/run`、`/api/developer/session/new`、`/api/project`、`/api/audit`、`/api/logs`、
+  `/api/changes`、`/api/diff`、`/api/git/*`、`/api/service/*`。Chat / Travel / Photoにはこの認証を要求しない。
+* Stage 0は同一process内の緊急封じ込めであり、Consumer Plane / Developer Planeのprocess分離は未実装。
 * この依頼ではgit commit / git pushは禁止。
 * Jarvis Dev UIにはbackend preflight付きのCommit & Push機能があるが、人間の明示操作用である。
 * Codex CLIはcommit/push禁止のままであり、Git更新はUI確認後の専用APIだけが実行する。

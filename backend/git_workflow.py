@@ -19,6 +19,9 @@ BLOCKED_PARTS = {".env", "logs", "storage", "__pycache__", "node_modules"}
 SECRET_PATTERNS = (
     ("private-key", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----")),
     ("provider-token", re.compile(r"\b(?:sk|ghp|github_pat|xox[baprs])-[_A-Za-z0-9-]{16,}\b")),
+    ("authorization-header", re.compile(
+        r"(?i)\bauthorization\b\s*:\s*(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}"
+    )),
     ("credential-assignment", re.compile(
         r"(?i)\b(?:api[_-]?key|secret|token|password|passwd)\b\s*[:=]\s*"
         r"['\"]?[A-Za-z0-9_./+=-]{8,}"
@@ -392,6 +395,11 @@ def _is_allowed_test_fixture(path: str, line: str, matched_text: str) -> bool:
     pure = PurePosixPath(path)
     if not pure.parts or pure.parts[0] != "tests" or not TEST_FIXTURE_MARKER.search(line):
         return False
+    authorization = re.match(
+        r"(?i)^authorization\s*:\s*(?:bearer|basic)\s+(.+)$", matched_text
+    )
+    if authorization:
+        return bool(OBVIOUS_TEST_VALUE.fullmatch(authorization.group(1)))
     assignment = re.match(r"(?i)^.*?[:=]\s*['\"]?([A-Za-z0-9_./+=-]+)", matched_text)
     if assignment:
         return bool(OBVIOUS_TEST_VALUE.fullmatch(assignment.group(1)))

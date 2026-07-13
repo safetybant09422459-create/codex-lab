@@ -2,13 +2,14 @@ import json
 import logging
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import codex_api
 from .agent_host import AgentContractError, AgentHost, Principal, TurnInput
 from .config import FRONTEND_DIR, ROOT_DIR, SKILLS_DIR, TOOLS_DIR
+from .developer_security import redact_developer_token, require_developer_api
 from .git_api import file_diff, git, git_changes
 from .git_workflow import GitWorkflow, redact_secrets
 from .models import (
@@ -65,6 +66,7 @@ from .service_api import schedule_restart, systemctl
 
 app = FastAPI(title="Jarvis Dev v0.3")
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR / "static"), name="static")
+developer_router = APIRouter(dependencies=[Depends(require_developer_api)])
 runtime_service = RuntimeService()
 agent_host = AgentHost(OpenAIModelProviderAdapter(), runtime_service)
 photo_repository = PhotoRepository()
@@ -134,7 +136,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
     return ChatResponse(**response)
 
 
-@app.post("/api/run", response_model=RunResponse)
+@developer_router.post("/api/run", response_model=RunResponse)
 async def run_codex(request: RunRequest) -> RunResponse:
     try:
         prompt = f"{request.prompt.rstrip()}{JARVIS_PRINCIPLE_CHECK}"
@@ -144,7 +146,7 @@ async def run_codex(request: RunRequest) -> RunResponse:
     return RunResponse(status="started")
 
 
-@app.post("/api/developer/session/new", response_model=DeveloperSessionResponse)
+@developer_router.post("/api/developer/session/new", response_model=DeveloperSessionResponse)
 async def new_developer_session() -> DeveloperSessionResponse:
     try:
         codex_api.reset_session()
@@ -153,7 +155,7 @@ async def new_developer_session() -> DeveloperSessionResponse:
     return DeveloperSessionResponse(status="new_session")
 
 
-@app.get("/api/project", response_model=ProjectResponse)
+@developer_router.get("/api/project", response_model=ProjectResponse)
 async def get_project() -> ProjectResponse:
     status_text = await git("status", "--short", check=False)
     git_state = "clean" if not status_text.strip() else "changed"
@@ -1083,15 +1085,17 @@ async def photo_asset_preview(asset_id: str) -> Response:
     return Response(content=content, media_type=content_type)
 
 
-@app.get("/api/audit", response_model=AuditResponse)
+@developer_router.get("/api/audit", response_model=AuditResponse)
 async def get_audit(limit: int = 50) -> AuditResponse:
     bounded_limit = min(max(limit, 1), 500)
     return AuditResponse(items=runtime_service.audit_logger.list_recent(bounded_limit))
 
 
-@app.get("/api/logs", response_model=LogResponse)
+@developer_router.get("/api/logs", response_model=LogResponse)
 async def get_logs() -> LogResponse:
-    log_lines = codex_api.logs()
+    log_lines = [
+        redact_developer_token(redact_secrets(line)) for line in codex_api.logs()
+    ]
     final_answer = codex_api.extract_final_answer(log_lines)
     if not final_answer and codex_api.returncode() not in (None, 0):
         final_answer = codex_api.failure_summary(log_lines)
@@ -1105,17 +1109,20 @@ async def get_logs() -> LogResponse:
     )
 
 
-@app.get("/api/changes", response_model=ChangesResponse)
+@developer_router.get("/api/changes", response_model=ChangesResponse)
 async def get_changes() -> ChangesResponse:
     return await git_changes()
 
 
-@app.get("/api/diff", response_model=DiffResponse)
+@developer_router.get("/api/diff", response_model=DiffResponse)
 async def get_diff(path: str) -> DiffResponse:
-    return DiffResponse(path=path, diff=redact_secrets(await file_diff(path)))
+    return DiffResponse(
+        path=path,
+        diff=redact_developer_token(redact_secrets(await file_diff(path))),
+    )
 
 
-@app.get("/api/git/preflight", response_model=GitPreflightResponse)
+@developer_router.get("/api/git/preflight", response_model=GitPreflightResponse)
 async def git_preflight() -> GitPreflightResponse:
     if codex_api.is_running():
         raise HTTPException(status_code=409, detail="Codex is still running.")
@@ -1131,7 +1138,7 @@ async def git_preflight() -> GitPreflightResponse:
     return GitPreflightResponse(**report.as_dict())
 
 
-@app.post("/api/git/commit_push", response_model=GitCommitPushResponse)
+@developer_router.post("/api/git/commit_push", response_model=GitCommitPushResponse)
 async def git_commit_push(request: GitCommitPushRequest) -> GitCommitPushResponse:
     if codex_api.is_running():
         raise HTTPException(status_code=409, detail="Codex is still running.")
@@ -1156,11 +1163,14 @@ async def git_commit_push(request: GitCommitPushRequest) -> GitCommitPushRespons
     return GitCommitPushResponse(**result)
 
 
-@app.get("/api/service/status", response_model=ServiceResponse)
+@developer_router.get("/api/service/status", response_model=ServiceResponse)
 async def service_status() -> ServiceResponse:
     return await systemctl("status", "--no-pager")
 
 
-@app.post("/api/service/restart", response_model=ServiceResponse)
+@developer_router.post("/api/service/restart", response_model=ServiceResponse)
 async def service_restart() -> ServiceResponse:
     return await schedule_restart()
+
+
+app.include_router(developer_router)

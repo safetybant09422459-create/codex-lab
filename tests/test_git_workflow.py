@@ -168,6 +168,14 @@ class GitWorkflowTest(unittest.IsolatedAsyncioTestCase):
         )[0]
         self.assertEqual(finding.disposition, "blocked")
 
+    def test_dummy_authorization_header_fixture_is_allowed(self):
+        finding = _find_secrets_in_line(
+            "tests/test_example.py",
+            10,
+            'value = "Authorization: Bearer dummy-auth-value"  # test fixture',
+        )[0]
+        self.assertEqual(finding.disposition, "allowed test fixture")
+
     def test_dummy_fixture_outside_tests_is_blocked(self):
         finding = _find_secrets_in_line(
             "backend/config.py", 10, 'api_key = "dummy-api-key"  # test fixture'

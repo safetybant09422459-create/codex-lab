@@ -225,6 +225,8 @@ class RuntimeExecuteResponse(BaseModel):
             "local_travel_read",
             "local_travel_write",
             "local_photo_read",
+            "local_jarvis_status_read",
+            "immich_photo_metadata_read",
         ]
         | None
     ) = None

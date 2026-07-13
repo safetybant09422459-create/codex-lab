@@ -1,4 +1,5 @@
 import asyncio
+import os
 import re
 import shlex
 from dataclasses import dataclass
@@ -49,6 +50,22 @@ TOKENS_RE = re.compile(
     re.IGNORECASE,
 )
 TOKENS_USED_LINE_RE = re.compile(r"\btokens?\s+used\b", re.IGNORECASE)
+CODEX_ENV_ALLOWLIST = (
+    "PATH",
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "TERM",
+    "TMPDIR",
+    "XDG_CONFIG_HOME",
+    "CODEX_HOME",
+)
+
+
+def codex_subprocess_env() -> dict[str, str]:
+    """Keep CLI discovery, locale, terminal, and Codex config without app secrets."""
+    return {name: os.environ[name] for name in CODEX_ENV_ALLOWLIST if name in os.environ}
 
 
 def _append_log(line: str) -> None:
@@ -191,6 +208,7 @@ async def _run_codex(prompt: str) -> None:
         _process = await asyncio.create_subprocess_exec(
             *command,
             cwd=ROOT_DIR,
+            env=codex_subprocess_env(),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )
