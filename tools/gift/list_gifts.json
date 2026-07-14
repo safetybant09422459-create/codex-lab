@@ -1,0 +1,24 @@
+{
+  "id": "list_gifts",
+  "skill_id": "gift",
+  "name": "List Gifts",
+  "description": "Read gift candidates and given or received history from the canonical local Gift DB.",
+  "status": "implemented",
+  "mode": "read",
+  "risk_level": "low",
+  "confirmation_required": false,
+  "audit_required": false,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "entry_type": {"type": "string", "enum": ["candidate", "given", "received"]},
+      "person": {"type": "string", "maxLength": 120},
+      "year": {"type": "integer", "minimum": 1900, "maximum": 2100}
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {"entries": {"type": "array"}, "count": {"type": "integer"}},
+    "required": ["entries", "count"]
+  }
+}

@@ -21,6 +21,7 @@
         <button class="shell-nav-button active" type="button" data-screen="jarvis-screen" aria-current="page">Jarvis</button>
         <button class="shell-nav-button" type="button" data-screen="travel-screen">Travel</button>
         <button class="shell-nav-button" type="button" data-screen="photo-screen">Photo</button>
+        <button class="shell-nav-button" type="button" data-screen="gift-screen">Gift</button>
         <button class="shell-nav-button" type="button" data-screen="garden-screen">Garden</button>
         <button class="shell-nav-button" type="button" data-screen="calendar-screen">Calendar</button>
         <button class="shell-nav-button" type="button" data-screen="home-screen">Home</button>
@@ -30,24 +31,30 @@
       <section id="jarvis-screen" class="shell-screen active" data-screen-name="Jarvis">
         <section class="jarvis-home" aria-labelledby="jarvis-home-title">
           <header class="jarvis-home-head">
-            <h2 id="jarvis-home-title">何をしますか？</h2>
+            <div>
+              <p class="jarvis-eyebrow">家族のためのAI</p>
+              <h2 id="jarvis-home-title">今日は、どうしようか？</h2>
+            </div>
+            <button id="chat-clear" class="chat-clear" type="button" aria-label="このタブの会話を消す">会話を消す</button>
           </header>
 
           <div
             id="chat-history"
             class="chat-history"
             aria-live="polite"
+            aria-busy="false"
             aria-label="会話履歴"
           >
             <div class="chat-empty" id="chat-empty">
-              <p>旅行の確認など、自然な言葉で話しかけてください。</p>
+              <strong>話し方を考えなくて大丈夫です。</strong>
+              <p>旅行や最近の写真、Jarvisにできることを自然な言葉で聞いてください。</p>
             </div>
           </div>
 
           <div id="chat-suggestions" class="chat-suggestions" aria-label="入力例">
-            <button class="chat-chip" type="button" data-chat-prompt="旅行一覧を見せて">旅行一覧を見せて</button>
-            <button class="chat-chip" type="button" data-chat-prompt="福岡旅行を開いて">福岡旅行を開いて</button>
-            <button class="chat-chip" type="button" data-chat-prompt="アンパンマンミュージアムの写真見せて">アンパンマンミュージアムの写真見せて</button>
+            <button class="chat-chip" type="button" data-chat-prompt="今のJarvisには何ができる？">できることを知る</button>
+            <button class="chat-chip" type="button" data-chat-prompt="家族の旅行を振り返りたい">旅行を振り返る</button>
+            <button class="chat-chip" type="button" data-chat-prompt="最近の写真について教えて">最近の写真を知る</button>
           </div>
 
           <form id="chat-form" class="chat-form">
@@ -56,13 +63,51 @@
               id="chat-input"
               rows="1"
               maxlength="4000"
-              placeholder="例: 旅行一覧を見せて"
+              placeholder="Jarvisに話しかける"
               autocomplete="off"
             ></textarea>
             <button id="chat-submit" class="chat-submit" type="submit">送信</button>
           </form>
-          <p id="chat-status" class="chat-status" role="status"></p>
+          <div class="chat-footnote">
+            <p id="chat-status" class="chat-status" role="status"></p>
+            <p class="chat-privacy">このタブとJarvisの一時状態にだけ保持され、長期Memoryには自動保存されません。</p>
+          </div>
         </section>
+      </section>
+
+      <section id="gift-screen" class="shell-screen" data-screen-name="Gift" hidden>
+        <div class="shell-screen-head">
+          <div>
+            <h2>Gift</h2>
+            <p class="muted">贈りたい気持ちと、家族でもらった思い出を忘れないための記録です。</p>
+          </div>
+          <button id="gift-add-button" type="button">記録する</button>
+        </div>
+        <div class="panel gift-panel">
+          <div class="gift-filters" role="group" aria-label="Gift表示切替">
+            <button class="gift-filter active" type="button" data-gift-type="">すべて</button>
+            <button class="gift-filter" type="button" data-gift-type="candidate">候補</button>
+            <button class="gift-filter" type="button" data-gift-type="given">贈った</button>
+            <button class="gift-filter" type="button" data-gift-type="received">もらった</button>
+          </div>
+          <p id="gift-status" class="status" role="status">画面を開くと読み込みます。</p>
+          <div id="gift-list" class="gift-list"></div>
+        </div>
+        <div id="gift-form-panel" class="panel gift-form-panel" hidden>
+          <div class="section-head"><h3>Giftを記録</h3><button id="gift-cancel-button" class="secondary" type="button">閉じる</button></div>
+          <form id="gift-form" class="gift-form">
+            <label>種類<select id="gift-entry-type" required><option value="candidate">プレゼント候補</option><option value="given">贈った記録</option><option value="received">もらった記録</option></select></label>
+            <label class="gift-wide">プレゼント<input id="gift-title" maxlength="200" required placeholder="例: 絵本、花束、温泉旅行" /></label>
+            <label>誰から<input id="gift-giver" maxlength="120" /></label>
+            <label>誰へ<input id="gift-recipient" maxlength="120" /></label>
+            <label>日付<input id="gift-date" type="date" /></label>
+            <label>金額（円・任意）<input id="gift-amount" type="number" min="0" inputmode="numeric" /></label>
+            <label>関連イベント<input id="gift-event" maxlength="200" placeholder="誕生日、記念日など" /></label>
+            <label>イベント日<input id="gift-occasion-date" type="date" /></label>
+            <label class="gift-wide">メモ<textarea id="gift-memo" maxlength="2000" rows="3"></textarea></label>
+            <button class="gift-wide" type="submit">内容を確認して保存</button>
+          </form>
+        </div>
       </section>
 
       <section id="travel-screen" class="shell-screen" data-screen-name="Travel" hidden>
@@ -92,12 +137,28 @@
         <div class="shell-screen-head">
           <div>
             <h2>Photo</h2>
-            <p class="muted">Photo Skill の将来画面。写真検索、表示、思い出候補の受け皿です。</p>
+            <p class="muted">最近の写真を、内容を公開せずメタデータだけで振り返ります。</p>
           </div>
+          <button id="photo-refresh-button" class="secondary" type="button">更新</button>
         </div>
-        <div class="placeholder-panel">
-          <h3>Photo Skill</h3>
-          <p>現時点ではプレースホルダーです。写真取得や外部Adapter処理はShellに持ちません。</p>
+        <div class="panel photo-summary-panel">
+          <div class="section-head">
+            <div>
+              <h3>最近の写真</h3>
+              <p class="muted">写真本体・asset ID・位置の値・人物名は表示しません。</p>
+            </div>
+            <label class="photo-period-label" for="photo-days">
+              期間
+              <select id="photo-days">
+                <option value="7">7日</option>
+                <option value="30" selected>30日</option>
+                <option value="90">90日</option>
+              </select>
+            </label>
+          </div>
+          <p id="photo-status" class="status" role="status">画面を開くと読み込みます。</p>
+          <div id="photo-summary" class="photo-summary" aria-live="polite"></div>
+          <div id="photo-limitations" class="photo-limitations"></div>
         </div>
       </section>
 
@@ -321,6 +382,8 @@
     <script type="module" src="/static/shell.js"></script>
     <script type="module" src="/static/chat.js"></script>
     <script type="module" src="/static/travel.js"></script>
+    <script type="module" src="/static/photo.js"></script>
+    <script type="module" src="/static/gift.js"></script>
     <script type="module" src="/static/app.js"></script>
 
   </body>

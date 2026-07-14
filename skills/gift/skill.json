@@ -1,0 +1,38 @@
+{
+  "id": "gift",
+  "name": "Gift",
+  "description": "家族のプレゼント候補と贈答履歴を、確認可能な記録として管理します。",
+  "capabilities": [
+    {
+      "id": "remember_gifts",
+      "description": "プレゼント候補、贈った記録、もらった記録を人・日付・イベントと結び付けて振り返れます",
+      "availability": "available"
+    }
+  ],
+  "status": "implemented",
+  "type": "module",
+  "version": "0.1.0",
+  "mode": "mixed",
+  "risk_level": "medium",
+  "confirmation_required": true,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "request": {"type": "string", "description": "Giftに関する確認または記録依頼"}
+    },
+    "required": ["request"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "result": {"type": "object"}
+    },
+    "required": ["result"]
+  },
+  "invocation_examples": [
+    "去年、家族に何を贈った？",
+    "子どもの誕生日プレゼント候補を記録して",
+    "最近この人から何をもらった？"
+  ]
+}

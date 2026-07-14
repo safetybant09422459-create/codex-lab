@@ -63,17 +63,21 @@ Implemented:
 * Weather Executor v0.1
 * Travel Executor / Repository / SQLiteTravelStorage
 * Photo Executor / Repository / ImmichAdapter
+* Photo Recent Summary API / Web UI（写真本体・asset ID・座標・人物名を返さないmetadata概要）
+* Gift Executor / Provider / Repository / SQLiteGiftStorage / Web UI
 * Jarvis Shell frontend
 * Developer UI
 * Runtime Execute UI
-* ToolなしBasic Chat
+* Single Agent Loop v0（LLM direct answer / Provider Operation、最大2 step）
 * Domain Provider / OperationContext最小契約
 * TravelProvider / Runtime adapter
 * Activation RAG共通Document / in-memory index / Travel Provider PoC
+* Family Chat Continuity v0（同一tabの最大5件復元、明示消去、24時間TTL / 256 session LRU、安全な再試行）
 
 2026-07-05にTravel Chat Router、Planner、Plan Executor、Entity Resolver、Answer Generator、Response Composer、
-legacy Chat Adapterを削除した。`POST /api/chat`は単一LLM Agent Loop実装までToolなしBasic Chatのみを返す。
-Travel Runtime / API / Web Travel画面、Repository / DB、安全gateは維持している。
+legacy Chat Adapterを削除した。現在の`POST /api/chat`は共通Agent HostのSingle Agent Loop v0を使い、LLMの
+`answer`または`call_operation` ActionをRuntime / Providerへ接続する。Travel Runtime / API / Web Travel画面、
+Repository / DB、安全gateは維持している。
 
 ## Runtime API
 
@@ -130,11 +134,12 @@ Repository / Adapter / Storage
 
 注意:
 
-* Developer APIはデフォルト無効。`JARVIS_ENABLE_DEVELOPER_API=true`とserver-side
-  `JARVIS_DEVELOPER_TOKEN`を設定し、`Authorization: Bearer` headerが一致した場合だけ利用できる。
-* 保護対象は`/api/run`、`/api/developer/session/new`、`/api/project`、`/api/audit`、`/api/logs`、
-  `/api/changes`、`/api/diff`、`/api/git/*`、`/api/service/*`。Chat / Travel / Photoにはこの認証を要求しない。
-* Stage 0は同一process内の緊急封じ込めであり、Consumer Plane / Developer Planeのprocess分離は未実装。
+* Developer APIは、Raspberry Pi上のローカル開発環境で開発者本人が使う現段階では認証なしで利用する。
+  `JARVIS_ENABLE_DEVELOPER_API`、`JARVIS_DEVELOPER_TOKEN`、Bearer tokenには依存しない。
+* Developer画面を開くと`/api/run`、`/api/developer/session/new`、`/api/project`、`/api/audit`、`/api/logs`、
+  `/api/changes`、`/api/diff`、`/api/git/*`、`/api/service/*`を利用できる。
+* Developer APIは外部公開しない。インターネット公開または複数ユーザー対応の前に、認証、権限、監査と
+  Consumer Plane / Developer Plane分離を再設計する。
 * この依頼ではgit commit / git pushは禁止。
 * Jarvis Dev UIにはbackend preflight付きのCommit & Push機能があるが、人間の明示操作用である。
 * Codex CLIはcommit/push禁止のままであり、Git更新はUI確認後の専用APIだけが実行する。
@@ -263,12 +268,48 @@ Tools:
 
 * `get_photos`
 * `get_asset`
+* `get_recent_photos`
 
 実装:
 
 * `PhotoExecutor`
 * `PhotoRepository`
 * `ImmichAdapter`
+
+Consumer API:
+
+* `GET /api/photo/recent-summary`
+
+### Gift
+
+Skill:
+
+* `gift`
+* `mode: mixed`
+* `risk_level: medium`
+* `confirmation_required: true`
+* `audit_required: true`
+
+Tools:
+
+* `list_gifts`（read / low risk）
+* `create_gift`（write / medium risk / confirmation / audit）
+
+実装:
+
+* `GiftExecutor` / `GiftProvider`
+* `GiftRepository`
+* `SQLiteGiftStorage`
+* DB: `storage/gift.db`
+* migration: `migrations/gift/001_initial.sql`
+
+Consumer API:
+
+* `GET /api/gifts`
+* `POST /api/gifts`
+
+Gift writeは現行ローカル環境向けのブラウザ確認とserver-owned `admin + confirmed`を使う暫定境界であり、
+本格的な認証、household/member principal、Confirmation Transaction、surprise visibilityは未実装である。
 
 ### Calendar
 

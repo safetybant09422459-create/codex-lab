@@ -2,27 +2,32 @@ import json
 import logging
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import codex_api
 from .agent_host import AgentContractError, AgentHost, Principal, TurnInput
 from .config import FRONTEND_DIR, ROOT_DIR, SKILLS_DIR, TOOLS_DIR
-from .developer_security import redact_developer_token, require_developer_api
 from .git_api import file_diff, git, git_changes
 from .git_workflow import GitWorkflow, redact_secrets
 from .models import (
     AuditResponse,
     ChatRequest,
     ChatResponse,
+    ChatSessionResetRequest,
+    ChatSessionResetResponse,
     ChangesResponse,
     DeveloperSessionResponse,
     DiffResponse,
     GitCommitPushRequest,
     GitCommitPushResponse,
     GitPreflightResponse,
+    GiftEntriesResponse,
+    GiftEntryCreateRequest,
+    GiftEntryWriteResponse,
     LogResponse,
+    PhotoRecentSummaryResponse,
     ProjectResponse,
     ProviderOperationRequest,
     RuntimeDryRunResponse,
@@ -66,12 +71,13 @@ from .service_api import schedule_restart, systemctl
 
 app = FastAPI(title="Jarvis Dev v0.3")
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR / "static"), name="static")
-developer_router = APIRouter(dependencies=[Depends(require_developer_api)])
+developer_router = APIRouter()
 runtime_service = RuntimeService()
 agent_host = AgentHost(OpenAIModelProviderAdapter(), runtime_service)
 photo_repository = PhotoRepository()
 git_workflow = GitWorkflow(git)
 logger = logging.getLogger(__name__)
+ERROR_CODE_HEADER = "X-Jarvis-Error-Code"
 
 JARVIS_PRINCIPLE_CHECK = """\
 
@@ -86,6 +92,28 @@ Jarvis Principle Check:
 6. 読み取り系か更新系か
 7. 副作用・権限・プライバシー上の注意はあるか
 """
+
+
+@app.middleware("http")
+async def private_response_policy(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path == "/api" or request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self'; "
+        "img-src 'self' data:; "
+        "font-src 'self'; "
+        "connect-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'none'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'"
+    )
+    return response
 
 
 @app.get("/")
@@ -103,6 +131,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         session_id=request.session_id or str(uuid4()),
         channel="web_chat",
         normalized_input={"text": request.message},
+        conversation_history=request.conversation_history,
         principal=Principal(role="family", subject_id="local-web-family"),
     )
     try:
@@ -111,11 +140,13 @@ async def chat(request: ChatRequest) -> ChatResponse:
         raise HTTPException(
             status_code=503,
             detail=f"Jarvis Chat is not configured: {exc}",
+            headers={ERROR_CODE_HEADER: "chat_not_configured"},
         ) from exc
     except (OpenAIRequestError, AgentContractError) as exc:
         raise HTTPException(
             status_code=502,
             detail=f"Jarvis Chat could not complete the LLM turn: {exc}",
+            headers={ERROR_CODE_HEADER: "chat_turn_failed"},
         ) from exc
 
     action = turn.action
@@ -134,6 +165,14 @@ async def chat(request: ChatRequest) -> ChatResponse:
             "events": [event.event for event in turn.trace.events],
         }
     return ChatResponse(**response)
+
+
+@app.post("/api/chat/session/reset", response_model=ChatSessionResetResponse)
+async def reset_chat_session(
+    request: ChatSessionResetRequest,
+) -> ChatSessionResetResponse:
+    agent_host.reset_conversation(request.session_id)
+    return ChatSessionResetResponse(status="cleared")
 
 
 @developer_router.post("/api/run", response_model=RunResponse)
@@ -275,6 +314,116 @@ async def runtime_execute(request: RuntimeRequest) -> RuntimeExecuteResponse:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidToolDefinitionError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/photo/recent-summary", response_model=PhotoRecentSummaryResponse)
+async def photo_recent_summary(
+    days: int = Query(default=30, ge=1, le=365),
+    limit: int = Query(default=20, ge=1, le=100),
+) -> PhotoRecentSummaryResponse:
+    """Return family-safe photo facts without exposing asset IDs or adapter errors."""
+    try:
+        response = runtime_service.execute_provider_operation(
+            "photo",
+            "get_recent_photos",
+            {"days": days, "limit": limit},
+            confirmed=False,
+            role="guest",
+        )
+    except (ProviderRegistryError, InvalidToolDefinitionError) as exc:
+        raise HTTPException(status_code=500, detail="Photo capability is unavailable") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not response.get("success"):
+        if response.get("permission_denied"):
+            raise HTTPException(status_code=403, detail="Photo metadata access denied")
+        raise HTTPException(status_code=502, detail="Photo metadata request failed")
+
+    result = response.get("result") or {}
+    available = result.get("connection_status") == "available"
+    limitations = [
+        f"最大{limit}件の写真メタデータを集計しています。",
+        "位置情報と人物情報は、Immichに記録された有無と件数だけを表示します。",
+        "この画面では写真そのものやasset IDを表示しません。",
+    ]
+    if not available:
+        limitations = [
+            "Immichが未設定、または現在接続できないため写真メタデータを取得できません。",
+            "接続情報や内部エラーはこのレスポンスには含めません。",
+        ]
+
+    return PhotoRecentSummaryResponse(
+        photo_count=int(result.get("photo_count") or 0),
+        date_range=result.get("date_range") or {},
+        date_bucket_counts=result.get("date_bucket_counts") or {},
+        day_count=int(result.get("day_count") or 0),
+        has_location_count=int(result.get("has_location_count") or 0),
+        has_faces_count=int(result.get("has_faces_count") or 0),
+        camera_make_counts=result.get("camera_make_counts") or {},
+        camera_model_counts=result.get("camera_model_counts") or {},
+        timezone=result.get("timezone"),
+        newest_photo_at=result.get("newest_photo_at"),
+        oldest_photo_at=result.get("oldest_photo_at"),
+        observed_at=str(result.get("observed_at") or ""),
+        source="immich" if available else "unavailable",
+        connection_status="available" if available else "unavailable",
+        limitations=limitations,
+        execution_mode="immich_photo_metadata_read",
+    )
+
+
+@app.get("/api/gifts", response_model=GiftEntriesResponse)
+async def gift_list_entries(
+    entry_type: str | None = Query(default=None),
+    person: str | None = Query(default=None, max_length=120),
+    year: int | None = Query(default=None, ge=1900, le=2100),
+) -> GiftEntriesResponse:
+    try:
+        response = runtime_service.execute_provider_operation(
+            "gift",
+            "list_gifts",
+            {key: value for key, value in {"entry_type": entry_type, "person": person, "year": year}.items() if value is not None},
+            confirmed=False,
+            role="guest",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (ProviderRegistryError, InvalidToolDefinitionError) as exc:
+        raise HTTPException(status_code=500, detail="Gift capability is unavailable") from exc
+    if not response.get("success"):
+        raise HTTPException(status_code=403 if response.get("permission_denied") else 502, detail="Gift history request failed")
+    result = response.get("result") or {}
+    return GiftEntriesResponse(
+        entries=result.get("entries") or [],
+        count=int(result.get("count") or 0),
+        source="local_gift_db",
+        execution_mode="local_gift_read",
+    )
+
+
+@app.post("/api/gifts", response_model=GiftEntryWriteResponse)
+async def gift_create_entry(request: GiftEntryCreateRequest) -> GiftEntryWriteResponse:
+    try:
+        response = runtime_service.execute_provider_operation(
+            "gift",
+            "create_gift",
+            request.model_dump(exclude_none=True),
+            confirmed=True,
+            role="admin",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (ProviderRegistryError, InvalidToolDefinitionError) as exc:
+        raise HTTPException(status_code=500, detail="Gift capability is unavailable") from exc
+    if not response.get("success"):
+        raise HTTPException(status_code=403, detail=response.get("reason") or "Gift entry was not created")
+    result = response.get("result") or {}
+    return GiftEntryWriteResponse(
+        entry=result.get("entry") or {},
+        source="local_gift_db",
+        execution_mode="local_gift_write",
+    )
 
 
 @app.get("/api/travel/trips", response_model=TravelTripsResponse)
@@ -1093,9 +1242,7 @@ async def get_audit(limit: int = 50) -> AuditResponse:
 
 @developer_router.get("/api/logs", response_model=LogResponse)
 async def get_logs() -> LogResponse:
-    log_lines = [
-        redact_developer_token(redact_secrets(line)) for line in codex_api.logs()
-    ]
+    log_lines = [redact_secrets(line) for line in codex_api.logs()]
     final_answer = codex_api.extract_final_answer(log_lines)
     if not final_answer and codex_api.returncode() not in (None, 0):
         final_answer = codex_api.failure_summary(log_lines)
@@ -1118,7 +1265,7 @@ async def get_changes() -> ChangesResponse:
 async def get_diff(path: str) -> DiffResponse:
     return DiffResponse(
         path=path,
-        diff=redact_developer_token(redact_secrets(await file_diff(path))),
+        diff=redact_secrets(await file_diff(path)),
     )
 
 

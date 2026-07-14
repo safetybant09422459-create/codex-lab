@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 import httpx
 
 from backend import main, openai_adapter
-from backend.agent_host import AgentHost
+from backend.agent_host import AgentContractError, AgentHost
 from tests.fake_llm_client import FakeLLMClient
 
 
@@ -53,6 +53,11 @@ class ChatApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("tool_id", response.json())
         self.assertNotIn("result", response.json())
         runtime.execute_provider_operation.assert_not_called()
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        self.assertEqual(response.headers["x-content-type-options"], "nosniff")
+        self.assertEqual(response.headers["referrer-policy"], "no-referrer")
+        self.assertIn("default-src 'self'", response.headers["content-security-policy"])
+        self.assertIn("frame-ancestors 'none'", response.headers["content-security-policy"])
 
     async def test_chat_call_operation_runs_runtime_then_returns_answer(self) -> None:
         runtime = Mock()
@@ -124,6 +129,19 @@ class ChatApiTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status_code, 503)
         self.assertIn("OPENAI_API_KEY is not configured", response.json()["detail"])
+        self.assertEqual(
+            response.headers[main.ERROR_CODE_HEADER], "chat_not_configured"
+        )
+
+    async def test_turn_failure_returns_machine_error_code_without_secret(self) -> None:
+        host = Mock()
+        host.run_turn.side_effect = AgentContractError("invalid model action")
+        with patch.object(main, "agent_host", host):
+            response = await self.post_chat({"message": "こんにちは"})
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.headers[main.ERROR_CODE_HEADER], "chat_turn_failed")
+        self.assertNotIn("OPENAI_API_KEY", response.text)
 
     async def test_history_is_bounded(self) -> None:
         response = await self.post_chat(

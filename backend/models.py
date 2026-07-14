@@ -40,6 +40,14 @@ class ChatRequest(BaseModel):
     context: dict[str, Any] | None = None
 
 
+class ChatSessionResetRequest(BaseModel):
+    session_id: str = Field(min_length=1, max_length=128)
+
+
+class ChatSessionResetResponse(BaseModel):
+    status: Literal["cleared"]
+
+
 class ChatClarificationResponse(BaseModel):
     status: Literal["not_required", "clarification_required", "candidates"]
     clarification: str | None = None
@@ -227,6 +235,8 @@ class RuntimeExecuteResponse(BaseModel):
             "local_photo_read",
             "local_jarvis_status_read",
             "immich_photo_metadata_read",
+            "local_gift_read",
+            "local_gift_write",
         ]
         | None
     ) = None
@@ -243,6 +253,50 @@ class RuntimeExecuteResponse(BaseModel):
 
 class AuditResponse(BaseModel):
     items: list[dict[str, Any]]
+
+
+class PhotoRecentSummaryResponse(BaseModel):
+    photo_count: int
+    date_range: dict[str, str]
+    date_bucket_counts: dict[str, int]
+    day_count: int
+    has_location_count: int
+    has_faces_count: int
+    camera_make_counts: dict[str, int]
+    camera_model_counts: dict[str, int]
+    timezone: str | None = None
+    newest_photo_at: str | None = None
+    oldest_photo_at: str | None = None
+    observed_at: str
+    source: Literal["immich", "unavailable"]
+    connection_status: Literal["available", "unavailable"]
+    limitations: list[str] = Field(default_factory=list)
+    execution_mode: Literal["immich_photo_metadata_read"]
+
+
+class GiftEntryCreateRequest(BaseModel):
+    entry_type: Literal["candidate", "given", "received"]
+    title: str = Field(min_length=1, max_length=200)
+    giver: str | None = Field(default=None, max_length=120)
+    recipient: str | None = Field(default=None, max_length=120)
+    gift_date: str | None = Field(default=None, max_length=10)
+    amount_yen: int | None = Field(default=None, ge=0)
+    memo: str | None = Field(default=None, max_length=2000)
+    related_event: str | None = Field(default=None, max_length=200)
+    occasion_date: str | None = Field(default=None, max_length=10)
+
+
+class GiftEntriesResponse(BaseModel):
+    entries: list[dict[str, Any]]
+    count: int
+    source: Literal["local_gift_db"]
+    execution_mode: Literal["local_gift_read"]
+
+
+class GiftEntryWriteResponse(BaseModel):
+    entry: dict[str, Any]
+    source: Literal["local_gift_db"]
+    execution_mode: Literal["local_gift_write"]
 
 
 class TravelTripsResponse(BaseModel):

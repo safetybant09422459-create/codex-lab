@@ -1,0 +1,17 @@
+[Unit]
+Description=Jarvis Dev
+After=network.target
+
+[Service]
+Type=simple
+User=kazuki
+WorkingDirectory=/mnt/nas/projects/codex-lab
+Environment="PATH=/mnt/nas/projects/codex-lab/.venv/bin:/home/kazuki/.nvm/versions/node/v24.15.0/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="CODEX_BIN=/home/kazuki/.nvm/versions/node/v24.15.0/bin/codex"
+Environment="CODEX_ARGS=exec"
+ExecStart=/mnt/nas/projects/codex-lab/.venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8001
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

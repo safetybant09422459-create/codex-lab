@@ -2,6 +2,7 @@ var screens = [
   { id: "jarvis-screen", hash: "jarvis" },
   { id: "travel-screen", hash: "travel" },
   { id: "photo-screen", hash: "photo" },
+  { id: "gift-screen", hash: "gift" },
   { id: "garden-screen", hash: "garden" },
   { id: "calendar-screen", hash: "calendar" },
   { id: "home-screen", hash: "home" },
@@ -72,6 +73,10 @@ function showScreen(screenId, shouldUpdateHash) {
       window.history.replaceState(null, "", "#" + screenHash);
     }
   }
+
+  window.dispatchEvent(
+    new CustomEvent("jarvis:screenchange", { detail: { screenId: screenId } }),
+  );
 }
 
 export function bindShellNavigation() {

@@ -26,6 +26,7 @@ class ExecutorRegistry:
         self.register_skill("weather", self._build_weather_executor())
         self.register_skill("travel", self._build_travel_executor())
         self.register_skill("photo", self._build_photo_executor())
+        self.register_skill("gift", self._build_gift_executor())
 
     def register_tool(self, tool_id: str, executor: BaseExecutor) -> None:
         self._tool_executors[tool_id] = executor
@@ -56,3 +57,8 @@ class ExecutorRegistry:
         from .photo_executor import PhotoExecutor
 
         return PhotoExecutor()
+
+    def _build_gift_executor(self) -> BaseExecutor:
+        from .gift_executor import GiftExecutor
+
+        return GiftExecutor()

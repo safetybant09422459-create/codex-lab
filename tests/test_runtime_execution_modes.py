@@ -2,6 +2,7 @@ import unittest
 
 from backend.domain_provider import OperationContext
 from backend.jarvis_provider import JarvisProvider
+from backend.gift_executor import GiftProvider
 from backend.models import RuntimeExecuteResponse
 from backend.photo_executor import PhotoProvider
 from backend.travel_executor import TravelProvider
@@ -14,6 +15,8 @@ class RuntimeExecutionModeContractTest(unittest.TestCase):
         recent_photos = OperationContext("get_recent_photos", "photo", "read", "low")
         local_photo = OperationContext("other", "photo", "read", "low")
         jarvis_status = OperationContext("get_capabilities", "jarvis", "read", "low")
+        gift_read = OperationContext("list_gifts", "gift", "read", "low")
+        gift_write = OperationContext("create_gift", "gift", "write", "medium")
         modes = {
             "stub",
             "local_weather_stub",
@@ -22,6 +25,8 @@ class RuntimeExecutionModeContractTest(unittest.TestCase):
             PhotoProvider().get_execution_mode(recent_photos),
             PhotoProvider().get_execution_mode(local_photo),
             JarvisProvider(lambda: {}, lambda: {}).get_execution_mode(jarvis_status),
+            GiftProvider().get_execution_mode(gift_read),
+            GiftProvider().get_execution_mode(gift_write),
         }
 
         self.assertEqual(
@@ -34,6 +39,8 @@ class RuntimeExecutionModeContractTest(unittest.TestCase):
                 "local_photo_read",
                 "immich_photo_metadata_read",
                 "local_jarvis_status_read",
+                "local_gift_read",
+                "local_gift_write",
             },
         )
         for mode in modes:

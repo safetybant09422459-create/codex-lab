@@ -245,9 +245,163 @@ button:disabled {
   line-height: 1.55;
 }
 
+.photo-summary-panel,
+.photo-limitations {
+  display: grid;
+  gap: 12px;
+}
+
+.photo-period-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.photo-period-label select {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 0 10px;
+}
+
+.photo-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.photo-fact {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--soft);
+}
+
+.photo-fact span,
+.photo-limitations {
+  color: var(--muted);
+}
+
+.photo-limitations ul {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.6;
+}
+
+@media (max-width: 680px) {
+  .photo-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .travel-panel {
   display: grid;
   gap: 10px;
+}
+
+.gift-panel,
+.gift-form-panel,
+.gift-list {
+  display: grid;
+  gap: 12px;
+}
+
+.gift-form-panel {
+  margin-top: 12px;
+}
+
+.gift-filters {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.gift-filter {
+  width: auto;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.gift-filter.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.gift-card {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.gift-card-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.gift-badge {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.gift-badge.given { color: var(--accent); }
+.gift-badge.received { color: var(--success); }
+
+.gift-meta,
+.gift-empty {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.gift-memo { line-height: 1.55; }
+
+.gift-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.gift-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.gift-form input,
+.gift-form select,
+.gift-form textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  padding: 10px;
+}
+
+.gift-wide { grid-column: 1 / -1; }
+
+@media (max-width: 680px) {
+  .gift-form { grid-template-columns: 1fr; }
+  .gift-wide { grid-column: auto; }
 }
 
 .travel-list {
@@ -1104,6 +1258,12 @@ details > div {
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .chat-history {
+    scroll-behavior: auto;
+  }
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -1128,7 +1288,9 @@ details > div {
 
 .jarvis-home-head {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 4px;
+  align-items: center;
   padding: 18px 18px 14px;
   border-bottom: 1px solid var(--border);
 }
@@ -1194,12 +1356,42 @@ details > div {
   color: var(--danger);
 }
 
+.chat-retry {
+  display: block;
+  width: auto;
+  min-height: 34px;
+  margin-top: 10px;
+  border: 1px solid currentColor;
+  padding: 0 10px;
+  background: transparent;
+  color: inherit;
+  font-size: 0.8rem;
+}
+
 .chat-suggestions {
   display: flex;
   gap: 8px;
   overflow-x: auto;
   padding: 10px 18px;
   border-top: 1px solid var(--border);
+}
+
+.jarvis-home-head .jarvis-eyebrow {
+  margin-bottom: 2px;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.chat-clear {
+  width: auto;
+  min-height: 36px;
+  border: 1px solid var(--border);
+  padding: 0 11px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .chat-chip {
@@ -1235,11 +1427,21 @@ details > div {
   min-height: 46px;
 }
 
-.chat-status {
-  min-height: 30px;
+.chat-footnote {
   padding: 5px 18px 10px;
+}
+
+.chat-status {
+  min-height: 20px;
+  padding: 0;
   color: var(--muted);
   font-size: 0.82rem;
+}
+
+.chat-privacy {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
 }
 
 .chat-trip-list {
@@ -1337,6 +1539,10 @@ details > div {
   }
 
   .chat-status {
+    padding: 0;
+  }
+
+  .chat-footnote {
     padding-inline: 14px;
   }
 

@@ -160,6 +160,31 @@ PhotoRepositoryをPhoto Skillの中心にする。
 
 初期実装は読み取り系を中心にする。
 
+## 家族向けRecent Summary v0
+
+`GET /api/photo/recent-summary` は、`PhotoProvider.get_recent_photos` をRuntime経由で呼ぶ
+Consumer向けのread-only Presentation境界である。WebのPhoto画面は、このAPIを画面表示時にだけ読み込む。
+
+返すもの:
+
+* 対象件数、撮影日数、最古・最新の撮影日
+* 位置情報・人物情報が記録された写真の件数（値や人物名ではない）
+* カメラ機種別の件数
+* 観測時刻、接続状態、安全なlimitations
+
+返さないもの:
+
+* 写真本体、thumbnail、asset ID、人物名、座標
+* Immich API key、接続URL、Authorization header
+* Adapterの生エラーやProvider内部のprovenance
+
+これは完全なPhoto Presentation Contractではない。家族が「最近写真が増えたか」を安心して確認できる
+小さなread体験であり、写真表示、思い出選定、人物同定をUIやPythonへ追加しない。Immich未設定・接続失敗時は
+内部エラーを公開せず、`connection_status: unavailable` と固定の安全な説明を返す。
+
+Immich連携では、API keyをheaderで送り、必要な読み取り権限だけを持つscoped keyへ移行する。
+query parameterにはsecretを含めない。JarvisのConsumer APIはImmich認証情報をfrontendへ渡さない。
+
 ---
 
 ## 将来のTool候補

@@ -63,6 +63,21 @@ class ConversationContextBuilderTest(unittest.TestCase):
             [{"id": "entity-1"}],
         )
 
+    def test_client_history_hint_never_becomes_trusted_state(self):
+        hint = turn(
+            1,
+            last_observations=[{"id": "untrusted-observation"}],
+            active_entities=[{"id": "untrusted-entity"}],
+        )
+        hint.source = "client_history_hint"
+
+        result = self.build(turns=[hint])
+
+        self.assertEqual(result["conversation_context"][0]["source"], "client_history_hint")
+        self.assertIsNone(result["conversation_state"]["last_llm_action"])
+        self.assertEqual(result["conversation_state"]["last_observations"], [])
+        self.assertEqual(result["conversation_state"]["active_entities"], [])
+
     def test_capability_descriptions_are_added_in_declared_order(self):
         capabilities = [
             {"provider_id": "travel", "description": "旅行を振り返る"},

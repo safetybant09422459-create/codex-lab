@@ -54,6 +54,14 @@ PhotoRepository
 ImmichAdapter
 ```
 
+```text
+GiftExecutor
+↓
+GiftRepository
+↓
+SQLiteGiftStorage
+```
+
 ---
 
 ## 各レイヤーの責務
@@ -206,6 +214,12 @@ Immich API
 * `photo.find_assets_for_spot`
 
 Album作成、Asset追加、共有、削除などの更新系は、家族写真のプライバシーに影響するため、Permission / Confirmation / Auditの方針を固めてから扱う。
+
+## Gift Skill v0.1実装
+
+Giftは新規Skill追加時のlocal DB-backed標準実例である。`list_gifts`はread / low risk、`create_gift`は
+write / medium risk / confirmation / auditとして、Providerからversioned SQLite migrationまで層を分離する。
+Gift固有のgiver、recipient、occasionはCoreへ持ち込まず、会話上の意味判断と推薦はLLMへ残す。
 
 ---
 

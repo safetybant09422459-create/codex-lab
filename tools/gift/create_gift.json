@@ -1,0 +1,31 @@
+{
+  "id": "create_gift",
+  "skill_id": "gift",
+  "name": "Create Gift Entry",
+  "description": "Create a confirmed gift candidate or given/received history entry in the local Gift DB.",
+  "status": "implemented",
+  "mode": "write",
+  "risk_level": "medium",
+  "confirmation_required": true,
+  "audit_required": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "entry_type": {"type": "string", "enum": ["candidate", "given", "received"]},
+      "title": {"type": "string", "maxLength": 200},
+      "giver": {"type": "string", "maxLength": 120},
+      "recipient": {"type": "string", "maxLength": 120},
+      "gift_date": {"type": "string", "format": "date"},
+      "amount_yen": {"type": "integer", "minimum": 0},
+      "memo": {"type": "string", "maxLength": 2000},
+      "related_event": {"type": "string", "maxLength": 200},
+      "occasion_date": {"type": "string", "format": "date"}
+    },
+    "required": ["entry_type", "title"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {"entry": {"type": "object"}},
+    "required": ["entry"]
+  }
+}

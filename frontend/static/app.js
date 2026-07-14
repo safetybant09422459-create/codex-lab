@@ -57,13 +57,6 @@ function bindDevelopActions() {
   });
 }
 
-bindShellNavigation();
-bindTabs();
-bindDevelopActions();
-bindGitActions();
-bindServiceActions();
-initRuntimeExecute();
-
 const initialLoads = [
   ["project", loadProject],
   ["logs", refreshLogs],
@@ -73,27 +66,50 @@ const initialLoads = [
   ["service", refreshService],
 ];
 
-Promise.allSettled(initialLoads.map(([, load]) => load())).then((results) => {
-  const failures = results
-    .map((result, index) => ({ result, name: initialLoads[index][0] }))
-    .filter(({ result }) => result.status === "rejected");
+let developerInitialized = false;
 
-  if (!failures.length) {
+function initializeDeveloperScreen() {
+  if (developerInitialized) {
     return;
   }
+  bindTabs();
+  bindDevelopActions();
+  bindGitActions();
+  bindServiceActions();
+  initRuntimeExecute();
+  developerInitialized = true;
+  Promise.allSettled(initialLoads.map(([, load]) => load())).then((results) => {
+    const failures = results
+      .map((result, index) => ({ result, name: initialLoads[index][0] }))
+      .filter(({ result }) => result.status === "rejected");
 
-  console.error(
-    "Initial load failed",
-    failures.map(({ name, result }) => ({
-      name,
-      error: result.reason,
-    })),
-  );
-  setStatus(
-    elements.runStatus,
-    `初期読み込み失敗: ${failures.map(({ name, result }) =>
-      `${name} (${result.reason && result.reason.message ? result.reason.message : "詳細不明"})`
-    ).join(", ")}`,
-    true,
-  );
+    if (!failures.length) {
+      return;
+    }
+
+    console.error(
+      "Initial load failed",
+      failures.map(({ name, result }) => ({
+        name,
+        error: result.reason,
+      })),
+    );
+    setStatus(
+      elements.runStatus,
+      `初期読み込み失敗: ${failures.map(({ name, result }) =>
+        `${name} (${result.reason && result.reason.message ? result.reason.message : "詳細不明"})`
+      ).join(", ")}`,
+      true,
+    );
+  });
+}
+
+bindShellNavigation();
+window.addEventListener("jarvis:screenchange", (event) => {
+  if (event.detail && event.detail.screenId === "developer-screen") {
+    initializeDeveloperScreen();
+  }
 });
+if (window.location.hash.replace("#", "").split("?")[0] === "developer") {
+  initializeDeveloperScreen();
+}

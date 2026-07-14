@@ -15,7 +15,6 @@ class CodexSubprocessSecurityTest(unittest.TestCase):
             "CODEX_HOME": "/home/jarvis/.codex",
             "OPENAI_API_KEY": "dummy-openai-value",
             "IMMICH_API_KEY": "dummy-immich-value",
-            "JARVIS_DEVELOPER_TOKEN": "dummy-developer-value",
             "JARVIS_PRODUCTION_SECRET": "dummy-production-value",
         }
         with patch.dict(os.environ, parent_environment, clear=True):

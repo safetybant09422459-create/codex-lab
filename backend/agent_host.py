@@ -11,6 +11,7 @@ from .conversation_state import (
     ConversationTurnState,
     InMemoryConversationStateStore,
 )
+from .core_models import ConversationTurn
 from .entity_context import EntityContextBuilder
 from .llm_client import LLMClient
 from .observation import ObservationEnvelope, ObservationEnvelopeBuilder
@@ -33,6 +34,7 @@ class TurnInput(ContractModel):
     session_id: str
     channel: str = Field(min_length=1)
     normalized_input: dict[str, Any]
+    conversation_history: list[ConversationTurn] = Field(default_factory=list)
     principal: Principal = Field(default_factory=Principal)
 
 
@@ -186,6 +188,9 @@ class AgentHost:
         self.observation_builder = observation_builder or ObservationEnvelopeBuilder()
         self.entity_context_builder = entity_context_builder or EntityContextBuilder()
 
+    def reset_conversation(self, session_id: str) -> None:
+        self.conversation_store.clear_session(session_id)
+
     def run_turn(self, turn_input: TurnInput) -> AgentTurnResult:
         turn_id = str(uuid4())
         events = [TraceEvent(event="turn_started", metadata={"channel": turn_input.channel})]
@@ -263,6 +268,10 @@ class AgentHost:
 
     def _assemble_context(self, turn_id: str, turn_input: TurnInput) -> TurnContext:
         previous_turns = self.conversation_store.get_turns(turn_input.session_id)
+        if not previous_turns:
+            previous_turns = self._channel_history_turns(
+                turn_input.conversation_history
+            )
         capability_catalog = self.runtime.get_capability_catalog()
         if not isinstance(capability_catalog, dict):
             capability_catalog = {"providers": []}
@@ -284,6 +293,28 @@ class AgentHost:
             normalized_input=turn_input.normalized_input,
             **assembled,
         )
+
+    @staticmethod
+    def _channel_history_turns(
+        history: list[ConversationTurn],
+    ) -> list[ConversationTurnState]:
+        """Project completed client pairs as untrusted context, never Core state."""
+        turns: list[ConversationTurnState] = []
+        pending_user: str | None = None
+        for item in history:
+            if item.role == "user":
+                pending_user = item.content
+            elif pending_user is not None:
+                turns.append(
+                    ConversationTurnState(
+                        user_input={"text": pending_user},
+                        assistant_final_response=item.content,
+                        last_llm_action={},
+                        source="client_history_hint",
+                    )
+                )
+                pending_user = None
+        return turns
 
     @staticmethod
     def _allowed_visibilities(role: str) -> frozenset[str]:

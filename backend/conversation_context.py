@@ -61,6 +61,9 @@ class ConversationContextBuilder:
     ) -> dict[str, Any]:
         turns = list(previous_turns)[-self.config.max_turns :]
         last_turn = turns[-1] if turns else None
+        trusted_last_turn = (
+            last_turn if last_turn and last_turn.source == "server_turn" else None
+        )
         context = {
             "context_version": self.VERSION,
             "session_info": {
@@ -72,19 +75,26 @@ class ConversationContextBuilder:
                 {
                     "user_input": turn.user_input,
                     "assistant_final_response": turn.assistant_final_response,
+                    "source": turn.source,
                 }
                 for turn in turns
             ],
             "conversation_state": {
-                "last_llm_action": last_turn.last_llm_action if last_turn else None,
+                "last_llm_action": (
+                    trusted_last_turn.last_llm_action if trusted_last_turn else None
+                ),
                 "last_observations": (
-                    last_turn.last_observations[-self.config.max_observations :]
-                    if last_turn
+                    trusted_last_turn.last_observations[
+                        -self.config.max_observations :
+                    ]
+                    if trusted_last_turn
                     else []
                 ),
                 "active_entities": (
-                    last_turn.active_entities[-self.config.max_active_entities :]
-                    if last_turn
+                    trusted_last_turn.active_entities[
+                        -self.config.max_active_entities :
+                    ]
+                    if trusted_last_turn
                     else []
                 ),
             },
