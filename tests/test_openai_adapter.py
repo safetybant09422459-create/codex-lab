@@ -284,8 +284,51 @@ class OpenAIAdapterTest(unittest.TestCase):
         self.assertIn("conversation context alone is enough", instructions)
         self.assertIn("If no operation is needed, choose answer", instructions)
         self.assertIn("Greetings", instructions)
+        self.assertIn("get_capabilities", instructions)
         self.assertIn("get_provider_status", instructions)
+        self.assertIn("get_operation_catalog", instructions)
+        self.assertIn("self-diagnostic operations", instructions)
+        self.assertIn("preflight", instructions)
+        self.assertIn("just-in-case check", instructions)
+        self.assertIn("preparation for a normal answer", instructions)
+        self.assertIn("conversation context alone can answer", instructions)
         self.assertIn("prior observation", instructions)
+
+    def test_compact_index_preserves_declarative_jarvis_metadata(self) -> None:
+        index = openai_adapter._compact_operation_index(self.current_catalog())
+        jarvis = next(
+            provider for provider in index["providers"]
+            if provider["provider_id"] == "jarvis"
+        )
+        operations = {
+            operation["operation_id"]: operation
+            for operation in jarvis["operations"]
+        }
+
+        self.assertEqual(
+            set(operations),
+            {"get_capabilities", "get_provider_status", "get_operation_catalog"},
+        )
+        self.assertIn(
+            "Capability Catalog", operations["get_capabilities"]["limitations"][0]
+        )
+        self.assertIn(
+            "Capability Catalog", operations["get_provider_status"]["limitations"][0]
+        )
+        self.assertIn(
+            "local catalog", operations["get_operation_catalog"]["limitations"][0]
+        )
+        serialized = json.dumps(jarvis, ensure_ascii=False).lower()
+        for routing_phrase in (
+            "use only when",
+            "user asks",
+            "greetings",
+            "general conversation",
+            "preflight",
+            "just-in-case",
+            "preparation for",
+        ):
+            self.assertNotIn(routing_phrase, serialized)
 
     def test_trace_uses_the_actual_projected_request_input(self) -> None:
         store = ChatTraceStore()
@@ -332,6 +375,11 @@ class OpenAIAdapterTest(unittest.TestCase):
         )
         self.assertFalse(second_request["operation_catalog_present"])
         self.assertEqual(second_request["available_operations_bytes"], 0)
+        second_input = client.responses.calls[1]["input"]
+        for operation_id in (
+            "get_capabilities", "get_provider_status", "get_operation_catalog"
+        ):
+            self.assertNotIn(operation_id, second_input)
 
     def test_all_control_tools_normalize_to_common_actions(self) -> None:
         _request, registry = openai_adapter._build_action_request_with_registry(

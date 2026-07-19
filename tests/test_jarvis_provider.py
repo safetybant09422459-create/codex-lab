@@ -112,6 +112,46 @@ class JarvisProviderTest(unittest.TestCase):
             self.assertFalse(operation["confirmation_required"])
             self.assertEqual(operation["availability"], "implemented")
 
+    def test_catalog_declares_self_diagnostic_facts_without_routing_policy(self) -> None:
+        catalog = self.runtime.get_operation_catalog()
+        jarvis = next(
+            item for item in catalog["providers"] if item["provider_id"] == "jarvis"
+        )
+        operations = {
+            operation["operation_id"]: operation
+            for operation in jarvis["operations"]
+        }
+
+        capabilities = operations["get_capabilities"]
+        self.assertIn("structured facts", capabilities["what_it_can_do"])
+        self.assertIn("Capability Catalog", capabilities["limitations"][0])
+        self.assertIn("cannot change state", capabilities["what_it_cannot_do"])
+
+        provider_status = operations["get_provider_status"]
+        self.assertIn("declared Domain Provider", provider_status["what_it_can_do"])
+        self.assertIn("select a Provider", provider_status["what_it_cannot_do"])
+        self.assertIn("Capability Catalog", provider_status["limitations"][0])
+
+        operation_catalog = operations["get_operation_catalog"]
+        self.assertIn("structured summary", operation_catalog["what_it_can_do"])
+        self.assertIn("select, execute, rank", operation_catalog["what_it_cannot_do"])
+        self.assertIn("local catalog", operation_catalog["limitations"][0])
+
+        serialized = json.dumps(jarvis, ensure_ascii=False).lower()
+        for routing_phrase in (
+            "use only when",
+            "user asks",
+            "greetings",
+            "general conversation",
+            "preflight",
+            "just-in-case",
+            "preparation for",
+        ):
+            self.assertNotIn(routing_phrase, serialized)
+        for operation in operations.values():
+            self.assertIn("read-only", operation["limitations"][-1])
+            self.assertIn("no side effects", operation["limitations"][-1])
+
     def test_agent_host_returns_jarvis_observation_to_llm(self) -> None:
         llm = FakeLLMClient(
             [
