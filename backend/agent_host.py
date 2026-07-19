@@ -7,6 +7,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 from .conversation_context import ConversationContextBuilder
+from .chat_trace import ChatTraceRecorder
 from .conversation_state import (
     ConversationTurnState,
     InMemoryConversationStateStore,
@@ -178,6 +179,7 @@ class AgentHost:
         context_builder: ConversationContextBuilder | None = None,
         observation_builder: ObservationEnvelopeBuilder | None = None,
         entity_context_builder: EntityContextBuilder | None = None,
+        trace_recorder: ChatTraceRecorder | None = None,
     ) -> None:
         self.llm_client = llm_client
         self.runtime = runtime
@@ -187,84 +189,142 @@ class AgentHost:
         self.context_builder = context_builder or ConversationContextBuilder()
         self.observation_builder = observation_builder or ObservationEnvelopeBuilder()
         self.entity_context_builder = entity_context_builder or EntityContextBuilder()
+        self.trace_recorder = trace_recorder
 
     def reset_conversation(self, session_id: str) -> None:
         self.conversation_store.clear_session(session_id)
 
     def run_turn(self, turn_input: TurnInput) -> AgentTurnResult:
         turn_id = str(uuid4())
+        recorder = self.trace_recorder
+        if recorder:
+            recorder.start_turn(
+                turn_id, turn_input.session_id, turn_input.normalized_input
+            )
         events = [TraceEvent(event="turn_started", metadata={"channel": turn_input.channel})]
-        context = self._assemble_context(turn_id, turn_input)
-        events.append(TraceEvent(event="context_assembled"))
+        try:
+            if recorder:
+                recorder.stage_start(turn_id, "context_assembly", turn_input)
+            context = self._assemble_context(turn_id, turn_input)
+            if recorder:
+                recorder.stage_finish(turn_id, "context_assembly", {
+                    "turn_context": context,
+                    "conversation_context_count": len(context.conversation_context),
+                    "activation_candidates_count": len(context.activation_candidates),
+                    "capability_context_count": len(context.capability_context),
+                    "memory_context_count": len(context.memory_context),
+                    "session_info": context.session_info,
+                })
+            events.append(TraceEvent(event="context_assembled"))
 
-        catalog = self.runtime.get_operation_catalog()
-        events.append(TraceEvent(event="catalog_loaded"))
-        observations: list[Observation] = []
-        action: MessageAction | CallOperationAction
-        for step in range(1, 3):
-            payload = self._build_payload(context, catalog, observations)
-            raw_action = self.llm_client.complete(payload)
-            events.append(TraceEvent(event="llm_called", metadata={"step": step}))
-            action = self._validate_action(
-                raw_action,
-                catalog,
-                operation_call_allowed=step < 2,
-            )
-            events.append(
-                TraceEvent(
-                    event="action_validated",
-                    metadata={"step": step, "action": action.action},
-                )
-            )
+            if recorder:
+                recorder.stage_start(turn_id, "operation_catalog")
+            catalog = self.runtime.get_operation_catalog()
+            if recorder:
+                operations = [
+                    operation
+                    for provider in catalog.get("providers", [])
+                    for operation in provider.get("operations", [])
+                ]
+                recorder.stage_finish(turn_id, "operation_catalog", {
+                    "provider_count": len(catalog.get("providers", [])),
+                    "operation_count": len(operations),
+                    "implemented_operation_count": sum(operation.get("availability") == "implemented" for operation in operations),
+                    "available_operation_names": [f"{operation.get('provider_id')}.{operation.get('operation_id')}" for operation in operations if operation.get("availability") == "implemented"],
+                    "catalog": catalog,
+                })
+            events.append(TraceEvent(event="catalog_loaded"))
+            observations: list[Observation] = []
+            action: MessageAction | CallOperationAction
+            for step in range(1, 3):
+                llm_stage = f"llm_call_{step}"
+                validation_stage = f"action_validation_{step}"
+                payload = self._build_payload(context, catalog, observations)
+                if recorder:
+                    recorder.stage_start(turn_id, llm_stage, payload)
+                try:
+                    raw_action = self.llm_client.complete(payload)
+                except Exception as exc:
+                    if recorder:
+                        recorder.stage_error(turn_id, llm_stage, _exception_category(exc), exc)
+                    raise
+                if recorder:
+                    recorder.stage_finish(turn_id, llm_stage, raw_action)
+                events.append(TraceEvent(event="llm_called", metadata={"step": step}))
+                if recorder:
+                    recorder.stage_start(turn_id, validation_stage, raw_action)
+                try:
+                    action = self._validate_action(raw_action, catalog, operation_call_allowed=step < 2)
+                except Exception as exc:
+                    if recorder:
+                        recorder.stage_error(turn_id, validation_stage, "action_validation_error", exc)
+                    raise
+                if recorder:
+                    recorder.stage_finish(turn_id, validation_stage, action)
+                events.append(TraceEvent(event="action_validated", metadata={"step": step, "action": action.action}))
 
-            if not isinstance(action, CallOperationAction):
-                break
+                if not isinstance(action, CallOperationAction):
+                    break
 
-            runtime_result = self.runtime.execute_provider_operation(
-                action.provider_id,
-                action.operation_id,
-                action.arguments,
-                confirmed=False,
-                role=turn_input.principal.role,
-            )
-            events.append(
-                TraceEvent(
-                    event="runtime_called",
-                    metadata={
-                        "step": step,
-                        "provider_id": action.provider_id,
-                        "operation_id": action.operation_id,
-                    },
-                )
-            )
-            details = self.runtime.get_observation_details(
-                action.provider_id, action.operation_id, runtime_result
-            )
-            if not isinstance(details, dict):
-                details = {}
-            details["limitations"] = [
-                *details.get("limitations", ()),
-                *self._runtime_limitations(runtime_result),
-            ]
-            observations.append(
-                self.observation_builder.build(
-                    provider_id=action.provider_id,
-                    operation_id=action.operation_id,
-                    raw_result=runtime_result,
-                    details=details,
-                )
-            )
-            events.append(
-                TraceEvent(event="observation_recorded", metadata={"step": step})
-            )
+                runtime_input = {
+                    "provider_id": action.provider_id, "operation_id": action.operation_id,
+                    "llm_arguments": action.arguments, "runtime_arguments": action.arguments,
+                    "role": turn_input.principal.role, "confirmed": False,
+                    "permission": "not_exposed", "confirmation": "not_exposed",
+                }
+                if recorder:
+                    recorder.stage_start(turn_id, "runtime_execution", runtime_input)
+                try:
+                    runtime_result = self.runtime.execute_provider_operation(
+                        action.provider_id, action.operation_id, action.arguments,
+                        confirmed=False, role=turn_input.principal.role,
+                    )
+                except Exception as exc:
+                    if recorder:
+                        recorder.stage_error(turn_id, "runtime_execution", _runtime_error_category(exc), exc)
+                    raise
+                if recorder:
+                    recorder.stage_finish(turn_id, "runtime_execution", runtime_result, status="success" if runtime_result.get("success") else "warning")
+                events.append(TraceEvent(event="runtime_called", metadata={"step": step, "provider_id": action.provider_id, "operation_id": action.operation_id}))
+                if recorder:
+                    recorder.stage_start(turn_id, "observation_build", {"provider_id": action.provider_id, "operation_id": action.operation_id, "raw_result": runtime_result})
+                try:
+                    details = self.runtime.get_observation_details(action.provider_id, action.operation_id, runtime_result)
+                    if not isinstance(details, dict):
+                        details = {}
+                    details["limitations"] = [*details.get("limitations", ()), *self._runtime_limitations(runtime_result)]
+                    observation = self.observation_builder.build(
+                        provider_id=action.provider_id, operation_id=action.operation_id,
+                        raw_result=runtime_result, details=details,
+                    )
+                    observations.append(observation)
+                except Exception as exc:
+                    if recorder:
+                        recorder.stage_error(turn_id, "observation_build", "observation_error", exc)
+                    raise
+                if recorder:
+                    recorder.stage_finish(turn_id, "observation_build", observation)
+                events.append(TraceEvent(event="observation_recorded", metadata={"step": step}))
 
-        result = AgentTurnResult(
-            action=action,
-            observations=observations,
-            trace=AgentTrace(turn_id=turn_id, events=events),
-        )
-        self._remember_turn(turn_input, result)
-        return result
+            if recorder:
+                recorder.stage_start(turn_id, "final_answer", action)
+            final_answer = action.message if isinstance(action, MessageAction) else None
+            if not final_answer:
+                error = AgentContractError("Final answer is missing")
+                if recorder:
+                    recorder.stage_error(turn_id, "final_answer", "final_answer_missing", error)
+                raise error
+            if recorder:
+                recorder.stage_finish(turn_id, "final_answer", {"message": final_answer})
+            result = AgentTurnResult(action=action, observations=observations, trace=AgentTrace(turn_id=turn_id, events=events))
+            self._remember_turn(turn_input, result)
+            if recorder:
+                recorder.complete(turn_id, final_answer)
+            return result
+        except Exception as exc:
+            if recorder:
+                recorder.complete(turn_id, error_category=_exception_category(exc), error=exc)
+            raise
 
     def _assemble_context(self, turn_id: str, turn_input: TurnInput) -> TurnContext:
         previous_turns = self.conversation_store.get_turns(turn_input.session_id)
@@ -408,3 +468,28 @@ class AgentHost:
         if runtime_result.get("blocked"):
             limitations.append("blocked")
         return limitations
+
+
+def _exception_category(exc: Exception) -> str:
+    name = exc.__class__.__name__
+    return {
+        "OpenAIConfigurationError": "configuration_error",
+        "OpenAITimeoutError": "timeout",
+        "OpenAIModelRefusalError": "provider_refusal",
+        "OpenAIIncompleteResponseError": "provider_incomplete",
+        "OpenAIResponseValidationError": "malformed_response",
+        "OpenAIRequestError": "provider_request_error",
+        "AgentContractError": "action_validation_error",
+    }.get(name, "internal_error")
+
+
+def _runtime_error_category(exc: Exception) -> str:
+    name = exc.__class__.__name__.lower()
+    message = str(exc).lower()
+    if "permission" in name or "permission" in message:
+        return "permission_denied"
+    if "confirmation" in name or "confirmation" in message:
+        return "confirmation_required"
+    if "notexecutable" in name or "not allowed" in message:
+        return "operation_not_allowed"
+    return "runtime_error"

@@ -14,6 +14,27 @@
   --code-text: #d8eee8;
 }
 
+.chat-trace-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(0, 1.6fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.chat-trace-list { display: grid; align-content: start; gap: 8px; }
+.chat-trace-item { display: grid; gap: 6px; text-align: left; overflow-wrap: anywhere; }
+.chat-trace-item span { font-size: 0.78rem; opacity: 0.8; }
+.chat-trace-item.selected { outline: 3px solid rgba(75, 139, 245, 0.35); }
+.chat-trace-detail { min-width: 0; }
+.chat-trace-detail .status-pre { max-height: 28rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.trace-toolbar { align-items: flex-start; gap: 12px; }
+
+@media (max-width: 760px) {
+  .chat-trace-layout { grid-template-columns: 1fr; }
+  .trace-toolbar { display: grid; }
+  .chat-trace-detail .actions button { width: 100%; }
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #121513;

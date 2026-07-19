@@ -238,6 +238,7 @@
         <button class="tab" type="button" data-tab="review-panel">レビュー</button>
         <button class="tab" type="button" data-tab="update-panel">更新</button>
         <button class="tab" type="button" data-tab="logs-panel">詳細ログ</button>
+        <button class="tab" type="button" data-tab="chat-trace-panel">Chat Trace</button>
       </nav>
 
       <section id="develop-panel" class="tab-panel active">
@@ -374,6 +375,38 @@
             <span id="return-code" class="pill"></span>
           </div>
           <pre id="log">ログはここに表示されます。</pre>
+        </div>
+      </section>
+      <section id="chat-trace-panel" class="tab-panel">
+        <div class="panel">
+          <div class="section-head trace-toolbar">
+            <div>
+              <h2>Jarvis Chat Trace Bundle v1</h2>
+              <p class="muted">家族・private情報を含む可能性があります。共有前に内容を確認してください。</p>
+            </div>
+            <div class="actions">
+              <button id="chat-trace-refresh" class="secondary" type="button">更新</button>
+              <button id="chat-trace-clear" class="danger" type="button">全トレース消去</button>
+              <span id="chat-trace-count" class="pill">0件</span>
+            </div>
+          </div>
+          <div id="chat-trace-message" class="status" role="status"></div>
+          <div class="chat-trace-layout">
+            <div id="chat-trace-list" class="chat-trace-list">Chat Traceを読み込んでいません。</div>
+            <div class="chat-trace-detail">
+              <div class="actions">
+                <button id="chat-trace-copy-consultation" type="button" disabled>相談用コピー</button>
+                <button id="chat-trace-copy-full" class="secondary" type="button" disabled>完全トレースコピー</button>
+                <button id="chat-trace-copy-json" class="secondary" type="button" disabled>JSONコピー</button>
+              </div>
+              <h3>概要・推定異常箇所・Anomaly Flags・Pipeline</h3>
+              <pre id="chat-trace-summary" class="status-pre">Traceを選択してください。</pre>
+              <h3>LLM #1 / Runtime / Observation / LLM #2 / Final Answer</h3>
+              <pre id="chat-trace-detail-json" class="status-pre">Traceを選択してください。</pre>
+              <h3>Tokens / Timings / Errors</h3>
+              <pre id="chat-trace-metrics" class="status-pre">Traceを選択してください。</pre>
+            </div>
+          </div>
         </div>
       </section>
       </section>
