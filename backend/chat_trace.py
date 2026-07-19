@@ -41,6 +41,8 @@ _SECRET_KEY_NAMES = {
     "refresh_token", "cookie", "password", "passwd", "secret",
     "client_secret", "developer_token", "immich_api_key",
 }
+_SECRET_KEY_WORDS = {"authorization", "password", "passwd", "secret"}
+_SECRET_KEY_TRAILING_QUALIFIERS = {"backup", "hash", "header", "value"}
 _SECRET_VALUES = (
     re.compile(r"(?i)\bBearer\s+[^\s,;]+"),
     re.compile(r"(?i)\b(?:Authorization|Cookie)\s*:\s*[^\r\n]+"),
@@ -114,7 +116,23 @@ def _truncate_field(value: str, limit: int = FIELD_MAX_BYTES) -> str | dict[str,
 
 def _is_secret_key(key: str) -> bool:
     normalized = re.sub(r"[^a-z0-9]+", "_", key.lower()).strip("_")
-    return normalized in _SECRET_KEY_NAMES
+    if normalized in _SECRET_KEY_NAMES:
+        return True
+    words = [word for word in normalized.split("_") if word]
+    if any(word in _SECRET_KEY_WORDS for word in words):
+        return True
+    if any(words[index : index + 2] == ["api", "key"] for index in range(len(words) - 1)):
+        return True
+    if "cookie" in words:
+        return words[-1] != "count"
+    if "token" not in words:
+        return False
+    token_index = len(words) - 1 - words[::-1].index("token")
+    trailing = words[token_index + 1 :]
+    return not trailing or all(
+        word in _SECRET_KEY_TRAILING_QUALIFIERS or re.fullmatch(r"v\d+", word)
+        for word in trailing
+    )
 
 
 def bounded_json(value: Any, max_bytes: int) -> str:
@@ -533,7 +551,8 @@ def _consultation_context(stage: Any) -> Any:
         return stage
     output = stage.get("output") or {}
     context = output.get("turn_context") or {}
-    active_entities = context.get("active_entities") or []
+    conversation_state = context.get("conversation_state") or {}
+    active_entities = conversation_state.get("active_entities") or []
     return {
         "status": stage.get("status"),
         "conversation_context_count": output.get("conversation_context_count"),
@@ -541,8 +560,10 @@ def _consultation_context(stage: Any) -> Any:
         "activation_candidates_count": output.get("activation_candidates_count"),
         "capability_context_count": output.get("capability_context_count"),
         "active_entity_count": len(active_entities) if isinstance(active_entities, list) else None,
-        "pending_question": context.get("pending_question"), "unresolved_intent": context.get("unresolved_intent"),
-        "current_topic": context.get("current_topic"), "session": _safe_session_summary(output.get("session_info")),
+        "pending_question": conversation_state.get("pending_question"),
+        "unresolved_intent": conversation_state.get("unresolved_intent"),
+        "current_topic": conversation_state.get("current_topic"),
+        "session": _safe_session_summary(output.get("session_info")),
         "duration_ms": stage.get("duration_ms"), "error": stage.get("error_message"),
     }
 
@@ -584,6 +605,7 @@ def _consultation_llm_call(call: Any) -> Any:
     request, response = call.get("request") or {}, call.get("response") or {}
     payload = request.get("llm_input_payload") or {}
     operations = payload.get("available_operations")
+    operation_tool_count = request.get("operation_tool_count")
     action = response.get("normalized_action") or {}
     names = request.get("tool_names") or []
     return {
@@ -592,9 +614,11 @@ def _consultation_llm_call(call: Any) -> Any:
             "reasoning_effort": request.get("reasoning_effort"), "verbosity": request.get("verbosity"),
             "max_output_tokens": request.get("max_output_tokens"), "timeout_seconds": request.get("timeout_seconds"),
             "store": request.get("store"), "tool_choice": request.get("tool_choice"),
-            "operation_tool_count": request.get("operation_tool_count"), "control_tool_count": request.get("control_tool_count"),
+            "operation_tool_count": operation_tool_count, "control_tool_count": request.get("control_tool_count"),
             "tool_names": list(names[:CONSULTATION_NAME_LIMIT]), "tool_names_count": len(names),
-            "include_operations": bool(operations), "input_payload_bytes": _json_bytes(payload),
+            "include_operations": isinstance(operation_tool_count, int) and operation_tool_count > 0,
+            "operation_catalog_present": operations is not None,
+            "input_payload_bytes": _json_bytes(payload),
             "available_operations_bytes": _json_bytes(operations),
             "prior_observation_count": len(payload.get("prior_observations") or []), "duration_ms": call.get("duration_ms"),
         },

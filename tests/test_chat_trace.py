@@ -61,6 +61,27 @@ class RedactionTest(unittest.TestCase):
         self.assertEqual(safe["safe"], "hello")
         self.assertEqual(original["api_key"], "dummy-api-key")
 
+    def test_composite_secret_keys_are_redacted_without_hiding_token_metrics(self) -> None:
+        secret_keys = (
+            "github_token", "openai_api_key_backup", "user_password_hash",
+            "service_client_secret_value", "authorization_header", "session_cookie",
+            "developer_token_v2",
+        )
+        original = {
+            "nested": [{key: f"dummy-{key}" for key in secret_keys}],
+            "token_usage": 10, "input_tokens": 11, "output_tokens": 12,
+            "max_output_tokens": 13, "cookie_count": 14,
+        }
+
+        safe = sanitize(original)
+
+        for key in secret_keys:
+            self.assertEqual(safe["nested"][0][key], "[REDACTED]")
+        for key in ("token_usage", "input_tokens", "output_tokens", "max_output_tokens", "cookie_count"):
+            self.assertEqual(safe[key], original[key])
+        self.assertNotIn("dummy-", json.dumps(safe))
+        self.assertEqual(original["nested"][0]["github_token"], "dummy-github_token")
+
     def test_exception_and_unsupported_object_are_safe(self) -> None:
         self.assertNotIn("dummy-token", str(sanitize(RuntimeError("Bearer dummy-token"))))
         self.assertNotIn("object at", json.dumps(sanitize(object())))
@@ -97,7 +118,7 @@ class TruncationTest(unittest.TestCase):
                 {"step": 2, "request": {"model": "gpt", "tool_names": ["jarvis_control_answer"], "operation_tool_count": 0, "control_tool_count": 1, "llm_input_payload": {**payload, "prior_observations": [{}]}, "tool_definitions": [schema]}, "response": {"status": "completed", "function_call_count": 1, "function_call_names": ["jarvis_control_answer"], "normalized_action": {"action": "answer"}}, "usage": usage_2, "duration_ms": 2000},
             ],
             "stages": {
-                "context_assembly": {"status": "success", "output": {"turn_context": {"active_entities": [], "pending_question": None}, "conversation_context_count": 1, "memory_context_count": 0, "activation_candidates_count": 0, "capability_context_count": 2, "session_info": {"session_id": "safe"}}, "duration_ms": 1},
+                "context_assembly": {"status": "success", "output": {"turn_context": {"conversation_state": {"active_entities": [{"id": "trip-1"}], "pending_question": "いつ？", "unresolved_intent": "旅行の確認", "current_topic": "travel"}}, "conversation_context_count": 1, "memory_context_count": 0, "activation_candidates_count": 0, "capability_context_count": 2, "session_info": {"session_id": "safe"}}, "duration_ms": 1},
                 "operation_catalog": {"status": "success", "output": {"provider_count": 2, "operation_count": 3, "implemented_operation_count": 2, "available_operation_names": ["travel.get_trips", "jarvis.get_capabilities"], "catalog": schema}, "duration_ms": 1},
                 "action_validation_1": {"status": "success", "output": {"action": "call_operation", "provider_id": "travel", "operation_id": "get_trips"}},
                 "runtime_execution": {"status": "success", "input": {"provider_id": "travel", "operation_id": "get_trips", "runtime_arguments": {}, "role": "admin", "confirmed": False}, "output": {"success": True, "execution_mode": "local_travel_read", "result": {"trips": [], "source": "local_travel_read"}}, "duration_ms": 10},
@@ -111,10 +132,25 @@ class TruncationTest(unittest.TestCase):
             self.assertNotIn(omitted, consultation)
         for retained in ("travel.get_trips", '"selected_provider": "travel"', '"success": true', "local_travel_read", '"trip_count": 0', "Final Answer", "旅行一覧はまだ登録", "Token Usage", "llm_call_1", "llm_call_2", "diagnostic error retained"):
             self.assertIn(retained, consultation)
+        self.assertIn('"active_entity_count": 1', consultation)
+        self.assertIn('"current_topic": "travel"', consultation)
+        self.assertIn('"include_operations": true', consultation)
+        self.assertIn('"include_operations": false', consultation)
+        self.assertEqual(consultation.count('"operation_catalog_present": true'), 2)
         full = build_bundle(trace, "full")
         self.assertLessEqual(len(full.encode()), FULL_MAX_BYTES)
         self.assertIn("llm_input_payload", full)
         self.assertIn("tool_definitions", full)
+
+    def test_consultation_context_is_safe_when_conversation_state_is_missing(self) -> None:
+        trace = {
+            "turn_id": "turn", "stages": {
+                "context_assembly": {"status": "success", "output": {"turn_context": {}}},
+            }, "llm_calls": [],
+        }
+        consultation = build_bundle(trace, "consultation")
+        self.assertIn('"active_entity_count": 0', consultation)
+        self.assertIn('"current_topic": null', consultation)
 
 
 class GitEnvironmentTest(unittest.TestCase):
