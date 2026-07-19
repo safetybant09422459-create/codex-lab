@@ -5,6 +5,7 @@ import { bindServiceActions, refreshService, refreshSkills, refreshTools } from 
 import { api } from "./api.js";
 import { refreshLogs } from "./logs.js";
 import { initRuntimeExecute } from "./runtime-execute.js";
+import { initChatTrace } from "./chat-trace.js";
 import { elements, runtime, setStatus, setTopState } from "./state.js";
 
 function bindDevelopActions() {
@@ -77,6 +78,7 @@ function initializeDeveloperScreen() {
   bindGitActions();
   bindServiceActions();
   initRuntimeExecute();
+  initChatTrace();
   developerInitialized = true;
   Promise.allSettled(initialLoads.map(([, load]) => load())).then((results) => {
     const failures = results

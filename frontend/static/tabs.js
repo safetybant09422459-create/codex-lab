@@ -1,6 +1,7 @@
 import { refreshLogs } from "./logs.js";
 import { refreshChanges } from "./review.js";
 import { refreshService } from "./update.js";
+import { refreshChatTraces } from "./chat-trace.js";
 
 export function bindTabs() {
   document.querySelectorAll(".tab").forEach((tab) => {
@@ -16,6 +17,9 @@ export function bindTabs() {
       }
       if (tab.dataset.tab === "update-panel") {
         await refreshService();
+      }
+      if (tab.dataset.tab === "chat-trace-panel") {
+        await refreshChatTraces();
       }
     });
   });

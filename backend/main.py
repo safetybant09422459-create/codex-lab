@@ -1,14 +1,26 @@
 import json
 import logging
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import codex_api
 from .agent_host import AgentContractError, AgentHost, Principal, TurnInput
-from .config import FRONTEND_DIR, ROOT_DIR, SKILLS_DIR, TOOLS_DIR
+from .chat_trace import (
+    ChatTraceRecorder,
+    ChatTraceStore,
+    build_bundle,
+    collect_environment,
+    trace_summary,
+)
+from .config import (
+    FRONTEND_DIR, ROOT_DIR, SKILLS_DIR, TOOLS_DIR, OPENAI_MAX_OUTPUT_TOKENS,
+    OPENAI_MODEL, OPENAI_REASONING_EFFORT, OPENAI_TIMEOUT_SECONDS,
+    OPENAI_VERBOSITY,
+)
 from .git_api import file_diff, git, git_changes
 from .git_workflow import GitWorkflow, redact_secrets
 from .models import (
@@ -69,11 +81,30 @@ from .provider_registry import (
 )
 from .service_api import schedule_restart, systemctl
 
-app = FastAPI(title="Jarvis Dev v0.3")
+APP_TITLE = "Jarvis Dev v0.3"
+app = FastAPI(title=APP_TITLE)
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR / "static"), name="static")
 developer_router = APIRouter()
 runtime_service = RuntimeService()
-agent_host = AgentHost(OpenAIModelProviderAdapter(), runtime_service)
+chat_trace_store = ChatTraceStore()
+chat_trace_recorder = ChatTraceRecorder(
+    chat_trace_store,
+    collect_environment(
+        Path(__file__).resolve().parent.parent,
+        APP_TITLE,
+        {
+            "model": OPENAI_MODEL,
+            "reasoning_effort": OPENAI_REASONING_EFFORT,
+            "verbosity": OPENAI_VERBOSITY,
+            "max_output_tokens": OPENAI_MAX_OUTPUT_TOKENS,
+            "timeout_seconds": OPENAI_TIMEOUT_SECONDS,
+        },
+    ),
+)
+openai_model_provider = OpenAIModelProviderAdapter(chat_trace_recorder)
+agent_host = AgentHost(
+    openai_model_provider, runtime_service, trace_recorder=chat_trace_recorder
+)
 photo_repository = PhotoRepository()
 git_workflow = GitWorkflow(git)
 logger = logging.getLogger(__name__)
@@ -192,6 +223,37 @@ async def new_developer_session() -> DeveloperSessionResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return DeveloperSessionResponse(status="new_session")
+
+
+@developer_router.get("/api/developer/chat-traces")
+async def list_chat_traces(limit: int = Query(default=50, ge=1, le=50)) -> list[dict]:
+    return [trace_summary(trace) for trace in chat_trace_store.list(limit)]
+
+
+@developer_router.get("/api/developer/chat-traces/{turn_id}")
+async def get_chat_trace(turn_id: str) -> dict:
+    trace = chat_trace_store.get(turn_id)
+    if trace is None:
+        raise HTTPException(status_code=404, detail="Chat trace not found")
+    return trace
+
+
+@developer_router.get("/api/developer/chat-traces/{turn_id}/bundle")
+async def get_chat_trace_bundle(
+    turn_id: str,
+    mode: str = Query(default="consultation", pattern="^(consultation|full)$"),
+) -> PlainTextResponse:
+    trace = chat_trace_store.get(turn_id)
+    if trace is None:
+        raise HTTPException(status_code=404, detail="Chat trace not found")
+    return PlainTextResponse(
+        build_bundle(trace, mode), media_type="text/plain"
+    )
+
+
+@developer_router.delete("/api/developer/chat-traces")
+async def clear_chat_traces() -> dict[str, int | str]:
+    return {"status": "cleared", "deleted_count": chat_trace_store.clear()}
 
 
 @developer_router.get("/api/project", response_model=ProjectResponse)

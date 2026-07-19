@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from .agent_host import ACTION_ADAPTER, LLMInputPayload
+from .chat_trace import ChatTraceRecorder, extract_usage, sanitize, utc_now
 from .config import (
     OPENAI_API_KEY,
     OPENAI_MAX_OUTPUT_TOKENS,
@@ -62,18 +63,26 @@ class OpenAIIncompleteResponseError(OpenAIRequestError):
 class OpenAIModelProviderAdapter:
     """OpenAI Responses API implementation of the provider-neutral LLMClient."""
 
-    def complete(self, payload: LLMInputPayload) -> dict[str, Any]:
-        _validate_configuration()
-        request, registry = _build_action_request_with_registry(payload)
-        try:
-            response = _get_client().responses.create(**request)
-        except Exception as exc:
-            if _is_timeout_exception(exc):
-                raise OpenAITimeoutError(_safe_exception_message(exc)) from None
-            raise OpenAIRequestError(_safe_exception_message(exc)) from None
+    def __init__(self, trace_recorder: ChatTraceRecorder | None = None) -> None:
+        self.trace_recorder = trace_recorder
 
-        _raise_for_unsuccessful_action_response(response)
+    def complete(self, payload: LLMInputPayload) -> dict[str, Any]:
+        step = 2 if payload.prior_observations else 1
+        started_at = utc_now()
+        started = perf_counter()
+        request: dict[str, Any] | None = None
+        response: Any = None
         try:
+            _validate_configuration()
+            request, registry = _build_action_request_with_registry(payload)
+            try:
+                response = _get_client().responses.create(**request)
+            except Exception as exc:
+                if _is_timeout_exception(exc):
+                    raise OpenAITimeoutError(_safe_exception_message(exc)) from None
+                raise OpenAIRequestError(_safe_exception_message(exc)) from None
+
+            _raise_for_unsuccessful_action_response(response)
             action = ACTION_ADAPTER.validate_python(
                 _normalize_native_tool_response(response, registry)
             )
@@ -84,10 +93,98 @@ class OpenAIModelProviderAdapter:
             ValidationError,
             ValueError,
         ) as exc:
-            raise OpenAIResponseValidationError(
+            error = OpenAIResponseValidationError(
                 f"OpenAI returned an invalid LLM Action: {_safe_exception_message(exc)}"
-            ) from None
-        return action.model_dump(mode="json")
+            )
+            self._record_trace(payload, step, started_at, started, request, response, error=error)
+            raise error from None
+        except Exception as exc:
+            self._record_trace(payload, step, started_at, started, request, response, error=exc)
+            raise
+        normalized = action.model_dump(mode="json")
+        self._record_trace(payload, step, started_at, started, request, response, action=normalized)
+        return normalized
+
+    def _record_trace(
+        self, payload: LLMInputPayload, step: int, started_at: str,
+        started: float, request: dict[str, Any] | None, response: Any,
+        *, action: dict[str, Any] | None = None, error: Exception | None = None,
+    ) -> None:
+        if self.trace_recorder is None:
+            return
+        category = _trace_error_category(error) if error else None
+        tools = (request or {}).get("tools", [])
+        function_calls = [
+            item for item in (_get_value(response, "output") or [])
+            if _get_value(item, "type") == "function_call"
+        ]
+        control_count = sum(
+            1 for tool in tools if str(tool.get("name", "")).startswith("jarvis_control_")
+        )
+        self.trace_recorder.record_llm_call(payload.turn_id, {
+            "step": step,
+            "request": {
+                "model": (request or {}).get("model", OPENAI_MODEL),
+                "reasoning_effort": OPENAI_REASONING_EFFORT or None,
+                "verbosity": OPENAI_VERBOSITY or None,
+                "max_output_tokens": (request or {}).get("max_output_tokens"),
+                "timeout_seconds": _safe_timeout_value(),
+                "store": (request or {}).get("store"),
+                "tool_choice": (request or {}).get("tool_choice"),
+                "tool_names": [tool.get("name") for tool in tools],
+                "operation_tool_count": len(tools) - control_count,
+                "control_tool_count": control_count,
+                "instructions": (request or {}).get("instructions"),
+                "llm_input_payload": payload,
+                "tool_definitions": tools,
+                "started_at": started_at,
+                "completed_at": utc_now(),
+            },
+            "response": {
+                "response_id": _get_value(response, "id"),
+                "status": _get_value(response, "status"),
+                "incomplete_details": _get_value(response, "incomplete_details"),
+                "refusal": any(
+                    _get_value(content, "type") == "refusal"
+                    for item in (_get_value(response, "output") or [])
+                    for content in (_get_value(item, "content") or [])
+                ),
+                "function_call_count": len(function_calls),
+                "function_call_names": [_get_value(call, "name") for call in function_calls],
+                "raw_arguments": [_get_value(call, "arguments") for call in function_calls],
+                "normalized_action": action,
+                "validation_error": sanitize(error) if isinstance(error, OpenAIResponseValidationError) else None,
+            },
+            "usage": extract_usage(response),
+            "error_category": category,
+            "error_message": sanitize(error) if error else None,
+            "duration_ms": round((perf_counter() - started) * 1000, 3),
+        })
+
+
+def _trace_error_category(error: Exception | None) -> str | None:
+    if error is None:
+        return None
+    if isinstance(error, OpenAIConfigurationError):
+        return "configuration_error"
+    if isinstance(error, OpenAITimeoutError):
+        return "timeout"
+    if isinstance(error, OpenAIModelRefusalError):
+        return "provider_refusal"
+    if isinstance(error, OpenAIIncompleteResponseError):
+        return "provider_incomplete"
+    if isinstance(error, OpenAIResponseValidationError):
+        return "malformed_response"
+    if isinstance(error, OpenAIRequestError):
+        return "provider_request_error"
+    return "internal_error"
+
+
+def _safe_timeout_value() -> float | None:
+    try:
+        return float(OPENAI_TIMEOUT_SECONDS)
+    except (TypeError, ValueError):
+        return None
 
 
 # Explicit generic name for configuration code that selects this provider.
