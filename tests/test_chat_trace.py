@@ -1,14 +1,15 @@
 import json
 import threading
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from backend.agent_host import AgentContractError, AgentHost, TurnInput
 from backend.chat_trace import (
     ChatTraceRecorder, ChatTraceStore, CONSULTATION_MAX_BYTES, FULL_MAX_BYTES,
     aggregate_usage, bounded_json, build_bundle, detect_anomalies, extract_usage,
-    sanitize,
+    collect_environment, sanitize,
 )
 from tests.fake_llm_client import FakeLLMClient
 
@@ -79,6 +80,65 @@ class TruncationTest(unittest.TestCase):
         self.assertLessEqual(len(build_bundle(trace, "full").encode()), FULL_MAX_BYTES)
         self.assertIn("_original_bytes", bounded_json("x" * 300000, 1000))
 
+    def test_consultation_is_diagnostic_summary_and_keeps_tail(self) -> None:
+        schema = {"input_schema": {"properties": {"huge": "x" * 50000}}, "output_schema": {"type": "object"}}
+        payload = {"prior_observations": [], "available_operations": {"providers": [schema]}, "private_blob": "x" * 50000}
+        usage_1 = {"input_tokens": 12000, "cached_input_tokens": 100, "output_tokens": 200, "reasoning_tokens": 50, "total_tokens": 12200}
+        usage_2 = {"input_tokens": 12000, "cached_input_tokens": 200, "output_tokens": 422, "reasoning_tokens": 60, "total_tokens": 12422}
+        trace = {
+            "turn_id": "turn", "completed_at": "now", "overall_status": "warning",
+            "environment": {"git_dirty": False}, "user_input": {"text": "旅行一覧を見せて"},
+            "final_answer": "旅行一覧はまだ登録されていません。", "error_category": None,
+            "error_message": "diagnostic error retained", "total_duration_ms": 10358,
+            "token_usage": {"input_tokens_total": 24000, "cached_input_tokens_total": 300, "output_tokens_total": 622, "reasoning_tokens_total": 110, "total_tokens": 24622},
+            "anomaly_flags": detect_anomalies({"completed_at": "now", "total_duration_ms": 10358, "token_usage": {"total_tokens": 24622}, "llm_calls": [{"step": 1, "duration_ms": 7675, "usage": usage_1}], "stages": {}}),
+            "llm_calls": [
+                {"step": 1, "request": {"model": "gpt", "tool_names": ["travel_get_trips"], "operation_tool_count": 1, "control_tool_count": 3, "llm_input_payload": payload, "tool_definitions": [schema]}, "response": {"status": "completed", "function_call_count": 1, "function_call_names": ["travel_get_trips"], "normalized_action": {"action": "call_operation", "provider_id": "travel", "operation_id": "get_trips", "arguments": {}}}, "usage": usage_1, "duration_ms": 7675},
+                {"step": 2, "request": {"model": "gpt", "tool_names": ["jarvis_control_answer"], "operation_tool_count": 0, "control_tool_count": 1, "llm_input_payload": {**payload, "prior_observations": [{}]}, "tool_definitions": [schema]}, "response": {"status": "completed", "function_call_count": 1, "function_call_names": ["jarvis_control_answer"], "normalized_action": {"action": "answer"}}, "usage": usage_2, "duration_ms": 2000},
+            ],
+            "stages": {
+                "context_assembly": {"status": "success", "output": {"turn_context": {"active_entities": [], "pending_question": None}, "conversation_context_count": 1, "memory_context_count": 0, "activation_candidates_count": 0, "capability_context_count": 2, "session_info": {"session_id": "safe"}}, "duration_ms": 1},
+                "operation_catalog": {"status": "success", "output": {"provider_count": 2, "operation_count": 3, "implemented_operation_count": 2, "available_operation_names": ["travel.get_trips", "jarvis.get_capabilities"], "catalog": schema}, "duration_ms": 1},
+                "action_validation_1": {"status": "success", "output": {"action": "call_operation", "provider_id": "travel", "operation_id": "get_trips"}},
+                "runtime_execution": {"status": "success", "input": {"provider_id": "travel", "operation_id": "get_trips", "runtime_arguments": {}, "role": "admin", "confirmed": False}, "output": {"success": True, "execution_mode": "local_travel_read", "result": {"trips": [], "source": "local_travel_read"}}, "duration_ms": 10},
+                "observation_build": {"status": "success", "output": {"status": "success", "provider_id": "travel", "operation_id": "get_trips", "counts": {"trip_count": 0}, "facts": {"trip_count": 0, "titles": []}, "limitations": [], "provenance": {"source": "local_travel_read"}, "entities": [], "raw_result": {"large": "x" * 50000}}, "duration_ms": 1},
+                "action_validation_2": {"status": "success", "output": {"action": "answer"}},
+            },
+        }
+        consultation = build_bundle(trace, "consultation")
+        self.assertLessEqual(len(consultation.encode()), CONSULTATION_MAX_BYTES)
+        for omitted in ('"input_schema"', '"output_schema"', '"tool_definitions"', '"llm_input_payload"', '"catalog"'):
+            self.assertNotIn(omitted, consultation)
+        for retained in ("travel.get_trips", '"selected_provider": "travel"', '"success": true', "local_travel_read", '"trip_count": 0', "Final Answer", "旅行一覧はまだ登録", "Token Usage", "llm_call_1", "llm_call_2", "diagnostic error retained"):
+            self.assertIn(retained, consultation)
+        full = build_bundle(trace, "full")
+        self.assertLessEqual(len(full.encode()), FULL_MAX_BYTES)
+        self.assertIn("llm_input_payload", full)
+        self.assertIn("tool_definitions", full)
+
+
+class GitEnvironmentTest(unittest.TestCase):
+    def _run(self, stdout="", returncode=0):
+        result = Mock(stdout=stdout, returncode=returncode)
+        if returncode:
+            return Mock(side_effect=RuntimeError("git failed"))
+        return Mock(return_value=result)
+
+    def test_clean_and_dirty_are_booleans_and_use_project_root(self) -> None:
+        for status, expected in (("", False), (" M file.py\n", True)):
+            calls = [Mock(stdout="sha\n"), Mock(stdout="branch\n"), Mock(stdout=status)]
+            with patch("backend.chat_trace.subprocess.run", side_effect=calls) as run:
+                env = collect_environment(Path("/tmp/project"), "Jarvis", {})
+            self.assertIs(env["git_dirty"], expected)
+            self.assertEqual(env["project_root"], "/tmp/project")
+            self.assertEqual(run.call_args_list[2].args[0][:3], ["git", "-C", "/tmp/project"])
+
+    def test_git_failure_is_unknown_and_does_not_escape(self) -> None:
+        with patch("backend.chat_trace.subprocess.run", side_effect=RuntimeError("secret stderr")):
+            env = collect_environment(Path("/tmp/project"), "Jarvis", {})
+        self.assertEqual(env["git_dirty"], "unknown")
+        self.assertNotIn("secret stderr", json.dumps(env))
+
 
 class UsageAndAnomalyTest(unittest.TestCase):
     def test_responses_usage_and_two_call_total(self) -> None:
@@ -95,6 +155,7 @@ class UsageAndAnomalyTest(unittest.TestCase):
 
     def test_missing_usage_is_null(self) -> None:
         self.assertTrue(all(value is None for value in extract_usage(object()).values()))
+        self.assertTrue(all(value is None for value in aggregate_usage([{"usage": {}}]).values()))
 
     def test_deterministic_pipeline_anomalies(self) -> None:
         trace = {
@@ -111,6 +172,19 @@ class UsageAndAnomalyTest(unittest.TestCase):
         self.assertIn("OPERATION_AFTER_OBSERVATION", codes)
         self.assertIn("SAME_OPERATION_SELECTED_TWICE", codes)
         self.assertIn("LLM_USAGE_MISSING", codes)
+
+    def test_performance_thresholds_are_warnings(self) -> None:
+        trace = {"completed_at": "now", "total_duration_ms": 10000, "token_usage": {"total_tokens": 20000}, "llm_calls": [{"step": 1, "duration_ms": 5000, "usage": {"total_tokens": 20000}}], "stages": {}}
+        flags = detect_anomalies(trace)
+        self.assertEqual({"HIGH_TOKEN_USAGE", "SLOW_LLM_CALL", "SLOW_TURN"}, {flag["code"] for flag in flags})
+        self.assertTrue(all(flag["severity"] == "warning" for flag in flags))
+
+    def test_performance_below_threshold_and_missing_usage_have_no_token_warning(self) -> None:
+        trace = {"completed_at": "now", "total_duration_ms": 9999, "token_usage": {}, "llm_calls": [{"step": 1, "duration_ms": 4999, "usage": {"total_tokens": None}}], "stages": {}}
+        codes = {flag["code"] for flag in detect_anomalies(trace)}
+        self.assertNotIn("HIGH_TOKEN_USAGE", codes)
+        self.assertNotIn("SLOW_LLM_CALL", codes)
+        self.assertNotIn("SLOW_TURN", codes)
 
 
 class PipelineRecorderTest(unittest.TestCase):

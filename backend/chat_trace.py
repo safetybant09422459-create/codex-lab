@@ -24,6 +24,11 @@ FULL_MAX_BYTES = 200 * 1024
 FIELD_MAX_BYTES = 32 * 1024
 LIST_ITEM_LIMIT = 20
 REDACTED = "[REDACTED]"
+HIGH_TOKEN_USAGE_THRESHOLD = 20_000
+SLOW_LLM_CALL_THRESHOLD_MS = 5_000
+SLOW_TURN_THRESHOLD_MS = 10_000
+CONSULTATION_NAME_LIMIT = 30
+CONSULTATION_PREVIEW_CHARS = 600
 
 STAGE_NAMES = (
     "turn_started", "context_assembly", "operation_catalog", "llm_call_1",
@@ -139,24 +144,30 @@ def empty_stage(name: str) -> dict[str, Any]:
 
 
 def collect_environment(root: Path, app_title: str, settings: dict[str, Any]) -> dict[str, Any]:
-    def git_value(*args: str) -> str | None:
+    project_root = root.resolve()
+
+    def git_value(*args: str, empty_is_value: bool = False) -> tuple[bool, str | None]:
         try:
-            return subprocess.run(
-                ["git", *args], cwd=root, check=True, capture_output=True,
+            output = subprocess.run(
+                ["git", "-C", str(project_root), *args], check=True, capture_output=True,
                 text=True, timeout=2,
-            ).stdout.strip() or None
+            ).stdout.strip()
+            return True, output if output or empty_is_value else None
         except Exception:
-            return None
+            return False, None
 
     try:
         sdk_version = importlib.metadata.version("openai")
     except importlib.metadata.PackageNotFoundError:
         sdk_version = None
-    status = git_value("status", "--porcelain")
+    sha_ok, sha = git_value("rev-parse", "HEAD")
+    branch_ok, branch = git_value("branch", "--show-current")
+    status_ok, status = git_value("status", "--porcelain", empty_is_value=True)
     return sanitize({
-        "git_commit_sha": git_value("rev-parse", "HEAD"),
-        "git_branch": git_value("branch", "--show-current"),
-        "git_dirty": None if status is None else bool(status),
+        "project_root": str(project_root),
+        "git_commit_sha": sha if sha_ok else None,
+        "git_branch": branch if branch_ok else None,
+        "git_dirty": bool(status) if status_ok else "unknown",
         "service_started_at": utc_now(),
         "python_version": platform.python_version(),
         "jarvis_app_title": app_title,
@@ -339,11 +350,11 @@ class ChatTraceRecorder:
         self.store.put(trace)
 
 
-def _empty_usage() -> dict[str, int]:
+def _empty_usage() -> dict[str, int | None]:
     return {
-        "input_tokens_total": 0, "cached_input_tokens_total": 0,
-        "output_tokens_total": 0, "reasoning_tokens_total": 0,
-        "total_tokens": 0,
+        "input_tokens_total": None, "cached_input_tokens_total": None,
+        "output_tokens_total": None, "reasoning_tokens_total": None,
+        "total_tokens": None,
     }
 
 
@@ -360,7 +371,7 @@ def extract_usage(response: Any) -> dict[str, int | None]:
     }
 
 
-def aggregate_usage(calls: list[dict[str, Any]]) -> dict[str, int]:
+def aggregate_usage(calls: list[dict[str, Any]]) -> dict[str, int | None]:
     result = _empty_usage()
     mapping = {
         "input_tokens": "input_tokens_total", "cached_input_tokens": "cached_input_tokens_total",
@@ -372,7 +383,7 @@ def aggregate_usage(calls: list[dict[str, Any]]) -> dict[str, int]:
         for source, target in mapping.items():
             value = usage.get(source)
             if isinstance(value, int):
-                result[target] += value
+                result[target] = (result[target] or 0) + value
     return result
 
 
@@ -405,6 +416,22 @@ def detect_anomalies(trace: dict[str, Any]) -> list[dict[str, Any]]:
             add("info", "LLM_USAGE_MISSING", f"llm_call_{step}", "Token usage was not returned", {"step": step})
         if call.get("error_category") and step == 2:
             add("error", "FINAL_LLM_FAILED", "llm_call_2", "Final LLM call failed", {"error_category": call.get("error_category")})
+        duration_ms = call.get("duration_ms")
+        if isinstance(duration_ms, (int, float)) and duration_ms >= SLOW_LLM_CALL_THRESHOLD_MS:
+            add("warning", "SLOW_LLM_CALL", f"llm_call_{step}", "LLM call duration reached the warning threshold", {
+                "step": step, "actual_duration_ms": duration_ms,
+                "threshold_ms": SLOW_LLM_CALL_THRESHOLD_MS,
+            })
+    total_tokens = (trace.get("token_usage") or {}).get("total_tokens")
+    if isinstance(total_tokens, int) and total_tokens >= HIGH_TOKEN_USAGE_THRESHOLD:
+        add("warning", "HIGH_TOKEN_USAGE", "turn_completed", "Turn token usage reached the warning threshold", {
+            "actual_total_tokens": total_tokens, "threshold": HIGH_TOKEN_USAGE_THRESHOLD,
+        })
+    total_duration_ms = trace.get("total_duration_ms")
+    if isinstance(total_duration_ms, (int, float)) and total_duration_ms >= SLOW_TURN_THRESHOLD_MS:
+        add("warning", "SLOW_TURN", "turn_completed", "Turn duration reached the warning threshold", {
+            "actual_duration_ms": total_duration_ms, "threshold_ms": SLOW_TURN_THRESHOLD_MS,
+        })
     av1, av2 = stages.get("action_validation_1", {}), stages.get("action_validation_2", {})
     if av1.get("status") == "error":
         add("error", "ACTION_VALIDATION_FAILED", "action_validation_1", "First Action contract validation failed", av1.get("error_message"))
@@ -460,24 +487,24 @@ def build_bundle(trace: dict[str, Any], mode: str) -> str:
     calls = safe.get("llm_calls", [])
     sections = [
         "Jarvis Chat Trace Bundle v1",
-        "\n1. Environment\n" + bounded_json(safe.get("environment"), 5000),
-        "\n2. Turn Summary\n" + bounded_json(trace_summary(safe), 4000),
-        "\n3. Primary Suspect\n" + bounded_json(anomaly or {"stage": "none", "message": "No anomaly detected"}, 3000),
-        "\n4. Anomaly Flags\n" + bounded_json(safe.get("anomaly_flags"), 5000),
-        "\n5. Pipeline Summary\n" + bounded_json([{"name": item.get("name"), "status": item.get("status"), "duration_ms": item.get("duration_ms"), "error_category": item.get("error_category")} for item in stages.values()], 5000),
-        "\n6. User Input\n" + bounded_json(safe.get("user_input"), 3000),
-        "\n7. Context Summary\n" + bounded_json(stages.get("context_assembly"), 4000),
-        "\n8. Operation Catalog Summary\n" + bounded_json(stages.get("operation_catalog"), 3000),
-        "\n9. LLM Call #1\n" + bounded_json(calls[0] if calls else None, 5000),
-        "\n10. Action #1\n" + bounded_json(stages.get("action_validation_1"), 3000),
-        "\n11. Runtime\n" + bounded_json(stages.get("runtime_execution"), 4000),
-        "\n12. Observation\n" + bounded_json(_consultation_observation(stages.get("observation_build")), 4000),
-        "\n13. LLM Call #2\n" + bounded_json(calls[1] if len(calls) > 1 else None, 5000),
-        "\n14. Final Action\n" + bounded_json(stages.get("action_validation_2"), 3000),
-        "\n15. Final Answer\n" + bounded_json(safe.get("final_answer"), 3000),
-        "\n16. Token Usage\n" + bounded_json(safe.get("token_usage"), 3000),
-        "\n17. Timings\n" + bounded_json({"total_duration_ms": safe.get("total_duration_ms"), "stages": {name: stage.get("duration_ms") for name, stage in stages.items()}}, 3000),
-        "\n18. Errors\n" + bounded_json({"error_category": safe.get("error_category"), "error_message": safe.get("error_message")}, 3000),
+        "\n1. Environment\n" + bounded_json(safe.get("environment"), 2000),
+        "\n2. Turn Summary\n" + bounded_json(trace_summary(safe), 1500),
+        "\n3. Primary Suspect\n" + bounded_json(anomaly or {"stage": "none", "message": "No anomaly detected"}, 1500),
+        "\n4. Anomaly Flags\n" + bounded_json(safe.get("anomaly_flags"), 2500),
+        "\n5. Pipeline Summary\n" + bounded_json([{"name": item.get("name"), "status": item.get("status"), "duration_ms": item.get("duration_ms"), "error_category": item.get("error_category")} for item in stages.values()], 2500),
+        "\n6. User Input\n" + bounded_json(safe.get("user_input"), 1500),
+        "\n7. Context Summary\n" + bounded_json(_consultation_context(stages.get("context_assembly")), 1800),
+        "\n8. Operation Catalog Summary\n" + bounded_json(_consultation_catalog(stages.get("operation_catalog"), stages), 1800),
+        "\n9. LLM Call #1 Request / Response / Usage Summary\n" + bounded_json(_consultation_llm_call(calls[0] if calls else None), 2500),
+        "\n10. Action #1\n" + bounded_json(_consultation_action(stages.get("action_validation_1")), 1500),
+        "\n11. Runtime Summary\n" + bounded_json(_consultation_runtime(stages.get("runtime_execution"), stages), 2200),
+        "\n12. Observation Summary\n" + bounded_json(_consultation_observation(stages.get("observation_build")), 2200),
+        "\n13. LLM Call #2 Request / Response / Usage Summary\n" + bounded_json(_consultation_llm_call(calls[1] if len(calls) > 1 else None), 2500),
+        "\n14. Final Action\n" + bounded_json(_consultation_action(stages.get("action_validation_2")), 1500),
+        "\n15. Final Answer\n" + bounded_json(safe.get("final_answer"), 2000),
+        "\n16. Token Usage\n" + bounded_json(_consultation_usage(calls, safe.get("token_usage")), 1800),
+        "\n17. Timings\n" + bounded_json({"total_duration_ms": safe.get("total_duration_ms"), "stages": {name: stage.get("duration_ms") for name, stage in stages.items()}}, 1800),
+        "\n18. Errors\n" + bounded_json({"error_category": safe.get("error_category"), "error_message": safe.get("error_message")}, 1800),
         "\n19. Truncation Notes\nLarge fields and arrays are bounded; markers preserve original byte/count metadata.",
     ]
     text = "\n".join(sections)
@@ -489,12 +516,159 @@ def build_bundle(trace: dict[str, Any], mode: str) -> str:
 def _consultation_observation(stage: Any) -> Any:
     if not isinstance(stage, dict):
         return stage
-    result = deepcopy(stage)
-    output = result.get("output")
-    if isinstance(output, dict) and "raw_result" in output:
-        raw = output["raw_result"]
-        output["raw_result"] = {"summary": _shape_summary(raw), "preview": sanitize(raw)}
+    output = stage.get("output") or {}
+    entities = output.get("entities") or []
+    return {
+        "status": stage.get("status"), "provider_id": output.get("provider_id"),
+        "operation_id": output.get("operation_id"), "counts": output.get("counts"),
+        "facts": _compact_value(output.get("facts")), "limitations": output.get("limitations"),
+        "provenance": output.get("provenance"), "entities_count": len(entities) if isinstance(entities, list) else None,
+        "raw_result_summary": _shape_summary(output.get("raw_result")),
+        "duration_ms": stage.get("duration_ms"), "error": stage.get("error_message"),
+    }
+
+
+def _consultation_context(stage: Any) -> Any:
+    if not isinstance(stage, dict):
+        return stage
+    output = stage.get("output") or {}
+    context = output.get("turn_context") or {}
+    active_entities = context.get("active_entities") or []
+    return {
+        "status": stage.get("status"),
+        "conversation_context_count": output.get("conversation_context_count"),
+        "memory_context_count": output.get("memory_context_count"),
+        "activation_candidates_count": output.get("activation_candidates_count"),
+        "capability_context_count": output.get("capability_context_count"),
+        "active_entity_count": len(active_entities) if isinstance(active_entities, list) else None,
+        "pending_question": context.get("pending_question"), "unresolved_intent": context.get("unresolved_intent"),
+        "current_topic": context.get("current_topic"), "session": _safe_session_summary(output.get("session_info")),
+        "duration_ms": stage.get("duration_ms"), "error": stage.get("error_message"),
+    }
+
+
+def _consultation_action(stage: Any) -> Any:
+    if not isinstance(stage, dict):
+        return stage
+    action = stage.get("output") or stage.get("input") or {}
+    return {
+        "status": stage.get("status"), "action": action.get("action"),
+        "provider_id": action.get("provider_id"), "operation_id": action.get("operation_id"),
+        "arguments": _compact_value(action.get("arguments")), "message": _preview(action.get("message"), CONSULTATION_PREVIEW_CHARS),
+        "duration_ms": stage.get("duration_ms"), "error_category": stage.get("error_category"),
+        "error_message": stage.get("error_message"),
+    }
+
+
+def _consultation_catalog(stage: Any, stages: dict[str, Any]) -> Any:
+    if not isinstance(stage, dict):
+        return stage
+    output = stage.get("output") or {}
+    names = output.get("available_operation_names") or []
+    action = ((stages.get("action_validation_1") or {}).get("output") or {})
+    return {
+        "status": stage.get("status"), "provider_count": output.get("provider_count"),
+        "operation_count": output.get("operation_count"),
+        "implemented_operation_count": output.get("implemented_operation_count"),
+        "available_operation_names": list(names[:CONSULTATION_NAME_LIMIT]),
+        "available_operation_names_count": len(names),
+        "available_operation_names_included_count": min(len(names), CONSULTATION_NAME_LIMIT),
+        "selected_provider": action.get("provider_id"), "selected_operation": action.get("operation_id"),
+        "duration_ms": stage.get("duration_ms"), "error": stage.get("error_message"),
+    }
+
+
+def _consultation_llm_call(call: Any) -> Any:
+    if not isinstance(call, dict):
+        return call
+    request, response = call.get("request") or {}, call.get("response") or {}
+    payload = request.get("llm_input_payload") or {}
+    operations = payload.get("available_operations")
+    action = response.get("normalized_action") or {}
+    names = request.get("tool_names") or []
+    return {
+        "request": {
+            "step": call.get("step"), "model": request.get("model"),
+            "reasoning_effort": request.get("reasoning_effort"), "verbosity": request.get("verbosity"),
+            "max_output_tokens": request.get("max_output_tokens"), "timeout_seconds": request.get("timeout_seconds"),
+            "store": request.get("store"), "tool_choice": request.get("tool_choice"),
+            "operation_tool_count": request.get("operation_tool_count"), "control_tool_count": request.get("control_tool_count"),
+            "tool_names": list(names[:CONSULTATION_NAME_LIMIT]), "tool_names_count": len(names),
+            "include_operations": bool(operations), "input_payload_bytes": _json_bytes(payload),
+            "available_operations_bytes": _json_bytes(operations),
+            "prior_observation_count": len(payload.get("prior_observations") or []), "duration_ms": call.get("duration_ms"),
+        },
+        "response": {
+            "response_id": response.get("response_id"), "response_status": response.get("status"),
+            "incomplete_details": response.get("incomplete_details"), "refusal": response.get("refusal"),
+            "function_call_count": response.get("function_call_count"),
+            "function_call_name": (response.get("function_call_names") or [None])[0],
+            "normalized_action": action.get("action"), "provider_id": action.get("provider_id"),
+            "operation_id": action.get("operation_id"), "sanitized_arguments": _compact_value(action.get("arguments")),
+            "error_category": call.get("error_category"), "error_message": call.get("error_message"),
+            "token_usage": _usage_or_null(call.get("usage")), "duration_ms": call.get("duration_ms"),
+        },
+    }
+
+
+def _consultation_runtime(stage: Any, stages: dict[str, Any]) -> Any:
+    if not isinstance(stage, dict):
+        return stage
+    input_value, output = stage.get("input") or {}, stage.get("output") or {}
+    observation = ((stages.get("observation_build") or {}).get("output") or {})
+    counts = observation.get("counts") or {}
+    result = output.get("result")
+    source = output.get("source")
+    if source is None and isinstance(result, dict):
+        source = result.get("source")
+    return {
+        "status": stage.get("status"), "provider_id": input_value.get("provider_id"),
+        "operation_id": input_value.get("operation_id"), "arguments": _compact_value(input_value.get("runtime_arguments")),
+        "role": input_value.get("role"), "confirmed": input_value.get("confirmed"),
+        "success": output.get("success"), "permission_allowed": output.get("permission_allowed"),
+        "permission_denied": output.get("permission_denied"), "confirmation_required": output.get("confirmation_required"),
+        "blocked": output.get("blocked"), "execution_mode": output.get("execution_mode"), "source": source,
+        "result_counts": counts or _deterministic_result_counts(result), "result_keys": _shape_summary(result).get("keys"),
+        "error": stage.get("error_message") or output.get("reason") or output.get("errors"),
+        "duration_ms": stage.get("duration_ms"),
+    }
+
+
+def _consultation_usage(calls: list[Any], turn_total: Any) -> dict[str, Any]:
+    result = {f"llm_call_{index}": _usage_or_null(call.get("usage") if isinstance(call, dict) else None) for index, call in enumerate(calls, 1)}
+    result["turn_total"] = turn_total
     return result
+
+
+def _usage_or_null(usage: Any) -> dict[str, Any]:
+    usage = usage if isinstance(usage, dict) else {}
+    return {name: usage.get(name) for name in ("input_tokens", "cached_input_tokens", "output_tokens", "reasoning_tokens", "total_tokens")}
+
+
+def _safe_session_summary(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return value
+    return {key: value.get(key) for key in ("session_id", "channel", "conversation_started_at", "turn_count") if key in value}
+
+
+def _json_bytes(value: Any) -> int | None:
+    try:
+        return len(json.dumps(value, ensure_ascii=False, default=str).encode("utf-8"))
+    except Exception:
+        return None
+
+
+def _compact_value(value: Any) -> Any:
+    safe = sanitize(value)
+    if len(json.dumps(safe, ensure_ascii=False, default=str).encode("utf-8")) <= 1200:
+        return safe
+    return {"summary": _shape_summary(safe), "preview": _preview(safe, CONSULTATION_PREVIEW_CHARS)}
+
+
+def _deterministic_result_counts(value: Any) -> dict[str, int]:
+    if not isinstance(value, dict):
+        return {}
+    return {f"{key[:-1] if key.endswith('s') else key}_count": len(item) for key, item in value.items() if isinstance(item, list)}
 
 
 def _shape_summary(value: Any) -> dict[str, Any]:

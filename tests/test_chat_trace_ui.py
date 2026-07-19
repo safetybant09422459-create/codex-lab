@@ -24,6 +24,12 @@ class ChatTraceUiTest(unittest.TestCase):
         self.assertIn("textContent", JS)
         self.assertIn("reasoning", JS)
         self.assertIn("anomaly_flags", JS)
+        self.assertIn("performance_anomalies", JS)
+        self.assertIn('flag.code === "HIGH_TOKEN_USAGE"', JS)
+        self.assertIn('flag.code === "SLOW_LLM_CALL"', JS)
+        self.assertIn('flag.code === "SLOW_TURN"', JS)
+        self.assertIn("llm_calls:", JS)
+        self.assertIn("turn_total:", JS)
 
     def test_general_screen_does_not_initialize_developer_trace(self) -> None:
         self.assertIn("initChatTrace();", APP)

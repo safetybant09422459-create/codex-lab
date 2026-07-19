@@ -45,11 +45,16 @@ function renderList() {
 
 function renderDetail(trace) {
   const stages = trace.stages || {};
-  const anomaly = (trace.anomaly_flags || [])[0] || null;
+  const anomalyFlags = trace.anomaly_flags || [];
+  const anomaly = anomalyFlags[0] || null;
+  const performanceAnomalies = anomalyFlags.filter((flag) => (
+    flag.code === "HIGH_TOKEN_USAGE" || flag.code === "SLOW_LLM_CALL" || flag.code === "SLOW_TURN"
+  ));
   el("chat-trace-summary").textContent = JSON.stringify({
     overall_status: trace.overall_status,
     primary_suspect: anomaly ? { stage: anomaly.stage, reason: anomaly.message } : "異常候補なし",
-    anomaly_flags: trace.anomaly_flags || [],
+    performance_anomalies: performanceAnomalies,
+    anomaly_flags: anomalyFlags,
     pipeline: Object.keys(stages).map((name) => ({ name, status: stages[name].status, duration_ms: stages[name].duration_ms })),
   }, null, 2);
   el("chat-trace-detail-json").textContent = JSON.stringify({
@@ -63,7 +68,7 @@ function renderDetail(trace) {
   }, null, 2);
   const usage = trace.token_usage || {};
   el("chat-trace-metrics").textContent = JSON.stringify({
-    calls: (trace.llm_calls || []).map((call) => ({
+    llm_calls: (trace.llm_calls || []).map((call) => ({
       step: call.step,
       input: formatToken(call.usage && call.usage.input_tokens),
       cached: formatToken(call.usage && call.usage.cached_input_tokens),
