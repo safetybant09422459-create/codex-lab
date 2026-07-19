@@ -1,5 +1,6 @@
 import json
 import re
+from copy import deepcopy
 from threading import Lock
 from time import perf_counter
 from typing import Any
@@ -14,6 +15,13 @@ from .config import (
     OPENAI_REASONING_EFFORT,
     OPENAI_TIMEOUT_SECONDS,
     OPENAI_VERBOSITY,
+)
+from .native_tools import (
+    NativeToolArgumentsError,
+    NativeToolRegistry,
+    NativeToolSchemaError,
+    compile_registry,
+    normalize_arguments,
 )
 
 
@@ -56,7 +64,7 @@ class OpenAIModelProviderAdapter:
 
     def complete(self, payload: LLMInputPayload) -> dict[str, Any]:
         _validate_configuration()
-        request = _build_action_request(payload)
+        request, registry = _build_action_request_with_registry(payload)
         try:
             response = _get_client().responses.create(**request)
         except Exception as exc:
@@ -66,9 +74,9 @@ class OpenAIModelProviderAdapter:
 
         _raise_for_unsuccessful_action_response(response)
         try:
-            structured_output = json.loads(_extract_response_text(response))
-            raw_action = structured_output["llm_action"]
-            action = ACTION_ADAPTER.validate_python(raw_action)
+            action = ACTION_ADAPTER.validate_python(
+                _normalize_native_tool_response(response, registry)
+            )
         except (
             json.JSONDecodeError,
             KeyError,
@@ -120,19 +128,21 @@ def _validate_configuration() -> None:
 
 
 def _build_action_request(payload: LLMInputPayload) -> dict[str, Any]:
+    request, _registry = _build_action_request_with_registry(payload)
+    return request
+
+
+def _build_action_request_with_registry(
+    payload: LLMInputPayload,
+) -> tuple[dict[str, Any], NativeToolRegistry]:
     inference_settings = _inference_settings()
     text_settings = dict(inference_settings.pop("text", {}))
-    text_settings["format"] = {
-        "type": "json_schema",
-        "name": "jarvis_llm_action_v1",
-        "strict": True,
-        "schema": _action_output_schema(),
-    }
+    registry = compile_registry(payload.available_operations)
     request = {
         "model": OPENAI_MODEL,
         "instructions": (
-            "Return exactly one Jarvis LLM Action matching the supplied JSON "
-            "schema. Use only the supplied context and operation catalog. "
+            "Return exactly one Jarvis action by calling exactly one supplied tool. "
+            "Use only the supplied context and operation catalog. "
             "Select call_operation when an available operation is needed to "
             "answer the user. After a prior observation, use that observation "
             "to return a terminal action and do not call another operation. "
@@ -141,9 +151,109 @@ def _build_action_request(payload: LLMInputPayload) -> dict[str, Any]:
         "input": json.dumps(payload.model_dump(mode="json"), ensure_ascii=False),
         "store": False,
         "text": text_settings,
+        "tools": _native_tool_definitions(
+            payload.available_operations,
+            registry,
+            include_operations=not payload.prior_observations,
+        ),
+        "tool_choice": "required",
     }
     request.update(inference_settings)
-    return request
+    return request, registry
+
+
+def _conversation_update_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "transition": {"type": "string", "enum": [
+                "continue_topic", "switch_topic", "answer_pending_question",
+                "respond_to_confirmation", "start_request",
+                "continue_unresolved_intent", "end_conversation",
+            ]},
+            "current_topic": {"type": ["string", "null"]},
+            "previous_topic": {"type": ["string", "null"]},
+            "pending_question": {"type": ["string", "null"]},
+            "unresolved_intent": {"type": ["string", "null"]},
+        },
+        "required": ["transition", "current_topic", "previous_topic", "pending_question", "unresolved_intent"],
+    }
+
+
+def _native_tool_definitions(catalog: dict[str, Any], registry: NativeToolRegistry, *, include_operations: bool) -> list[dict[str, Any]]:
+    operations = {
+        (operation.get("provider_id"), operation.get("operation_id")): operation
+        for provider in catalog.get("providers", [])
+        for operation in provider.get("operations", [])
+    }
+    tools: list[dict[str, Any]] = []
+    if include_operations:
+        for entry in registry.entries.values():
+            operation = operations[(entry.provider_id, entry.operation_id)]
+            tools.append({
+                "type": "function", "name": entry.name, "strict": True,
+                "description": operation.get("description") or f"{entry.provider_id}.{entry.operation_id}",
+                "parameters": {
+                    "type": "object", "additionalProperties": False,
+                    "properties": {"arguments": entry.openai_schema, "conversation_update": _conversation_update_schema()},
+                    "required": ["arguments", "conversation_update"],
+                },
+            })
+    message_schema = {
+        "type": "object", "additionalProperties": False,
+        "properties": {"message": {"type": "string", "minLength": 1}, "conversation_update": _conversation_update_schema()},
+        "required": ["message", "conversation_update"],
+    }
+    for action in ("answer", "ask_clarification", "request_confirmation", "refuse"):
+        tools.append({
+            "type": "function", "name": f"jarvis_control_{action}", "strict": True,
+            "description": f"Return the Jarvis terminal action: {action}.",
+            "parameters": deepcopy(message_schema),
+        })
+    return tools
+
+
+def _normalize_native_tool_response(response: Any, registry: NativeToolRegistry) -> dict[str, Any]:
+    calls = [item for item in (getattr(response, "output", None) or []) if getattr(item, "type", None) == "function_call"]
+    if len(calls) != 1:
+        raise OpenAIResponseValidationError(f"OpenAI must return exactly one function call; received {len(calls)}")
+    call = calls[0]
+    name = getattr(call, "name", None)
+    raw_arguments = getattr(call, "arguments", None)
+    try:
+        values = json.loads(raw_arguments) if isinstance(raw_arguments, str) else raw_arguments
+    except json.JSONDecodeError:
+        raise OpenAIResponseValidationError("OpenAI returned malformed tool arguments") from None
+    if not isinstance(name, str) or not isinstance(values, dict):
+        raise OpenAIResponseValidationError("OpenAI returned an invalid function call")
+    prefix = "jarvis_control_"
+    if name.startswith(prefix):
+        action = name[len(prefix):]
+        if action not in {"answer", "ask_clarification", "request_confirmation", "refuse"}:
+            raise OpenAIResponseValidationError(f"Unknown control tool: {name}")
+        if set(values) != {"message", "conversation_update"}:
+            raise OpenAIResponseValidationError("Control tool arguments do not match its schema")
+        return {
+            "contract_version": "1", "action": action,
+            "message": values.get("message"),
+            "conversation_update": values.get("conversation_update"),
+        }
+    try:
+        if set(values) != {"arguments", "conversation_update"}:
+            raise NativeToolArgumentsError(
+                "Operation tool arguments do not match its wrapper schema"
+            )
+        entry = registry.resolve(name)
+        arguments = normalize_arguments(values.get("arguments"), entry)
+    except (NativeToolSchemaError, NativeToolArgumentsError) as exc:
+        raise OpenAIResponseValidationError(str(exc)) from None
+    return {
+        "contract_version": "1", "action": "call_operation",
+        "provider_id": entry.provider_id, "operation_id": entry.operation_id,
+        "arguments": arguments,
+        "conversation_update": values.get("conversation_update"),
+    }
 
 
 def _strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:

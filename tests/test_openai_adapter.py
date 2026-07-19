@@ -5,6 +5,12 @@ from unittest.mock import patch
 
 from backend import openai_adapter
 from backend.agent_host import LLMInputPayload, Principal
+from backend.provider_registry import ProviderRegistry
+from backend.travel_executor import TravelProvider
+from backend.observation import ObservationEnvelope
+from backend.photo_executor import PhotoProvider
+from backend.gift_executor import GiftProvider
+from backend.jarvis_provider import JarvisProvider
 
 
 class FakeResponses:
@@ -27,6 +33,15 @@ class OpenAIAdapterTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         openai_adapter._client = None
+
+    @staticmethod
+    def current_catalog() -> dict[str, object]:
+        registry = ProviderRegistry()
+        registry.register(TravelProvider())
+        registry.register(PhotoProvider())
+        registry.register(GiftProvider(repository=object()))
+        registry.register(JarvisProvider(registry.catalog, registry.capability_catalog))
+        return registry.catalog()
 
     @staticmethod
     def action_payload() -> LLMInputPayload:
@@ -65,6 +80,26 @@ class OpenAIAdapterTest(unittest.TestCase):
     @classmethod
     def structured_answer(cls) -> str:
         return json.dumps({"llm_action": cls.answer_action()})
+
+    @classmethod
+    def native_answer(cls) -> object:
+        action = cls.answer_action()
+        values = {
+            "message": action["message"],
+            "conversation_update": {
+                key: value
+                for key, value in action["conversation_update"].items()
+                if key != "active_entities"
+            },
+        }
+        return SimpleNamespace(
+            output_text="",
+            output=[SimpleNamespace(
+                type="function_call",
+                name="jarvis_control_answer",
+                arguments=json.dumps(values),
+            )],
+        )
 
     def assert_schema_has_no_references(self, node: object) -> None:
         if isinstance(node, dict):
@@ -107,7 +142,7 @@ class OpenAIAdapterTest(unittest.TestCase):
         client = FakeClient()
         client.responses.create = lambda **kwargs: (
             client.responses.calls.append(kwargs)
-            or SimpleNamespace(output_text=self.structured_answer())
+            or self.native_answer()
         )
 
         with (
@@ -127,14 +162,130 @@ class OpenAIAdapterTest(unittest.TestCase):
         self.assertEqual(sent_payload["normalized_input"]["text"], "旅行一覧を見せて")
         self.assertEqual(request["model"], "test-model")
         self.assertFalse(request["store"])
-        self.assertEqual(request["text"]["format"]["type"], "json_schema")
-        self.assertTrue(request["text"]["format"]["strict"])
-        output_schema = request["text"]["format"]["schema"]
-        self.assertEqual(output_schema["type"], "object")
-        self.assertIn("llm_action", output_schema["properties"])
-        self.assert_schema_has_no_references(output_schema)
+        self.assertEqual(request["tool_choice"], "required")
+        self.assertEqual(len(request["tools"]), 4)
+        self.assertNotIn("format", request["text"])
         self.assertNotIn("test-secret", repr(request))
         self.assertEqual(result["action"], "answer")
+
+    def test_first_request_has_operation_and_four_control_tools(self) -> None:
+        payload = self.action_payload()
+        payload.available_operations = self.current_catalog()
+        request, registry = openai_adapter._build_action_request_with_registry(payload)
+
+        names = {tool["name"] for tool in request["tools"]}
+        controls = {
+            "jarvis_control_answer",
+            "jarvis_control_ask_clarification",
+            "jarvis_control_request_confirmation",
+            "jarvis_control_refuse",
+        }
+        self.assertTrue(registry.entries)
+        self.assertEqual(names, controls | set(registry.entries))
+
+    def test_request_after_observation_has_only_four_control_tools(self) -> None:
+        payload = self.action_payload()
+        payload.available_operations = self.current_catalog()
+        payload.prior_observations = [ObservationEnvelope(
+            provider_id="travel", operation_id="get_trips", status="success",
+            raw_result={"success": True}, facts={},
+            provenance={"provider_id": "travel", "operation_id": "get_trips"},
+            observed_at="2026-07-19T00:00:00+00:00",
+        )]
+        request, registry = openai_adapter._build_action_request_with_registry(payload)
+
+        self.assertTrue(registry.entries)
+        self.assertEqual(
+            {tool["name"] for tool in request["tools"]},
+            {
+                "jarvis_control_answer",
+                "jarvis_control_ask_clarification",
+                "jarvis_control_request_confirmation",
+                "jarvis_control_refuse",
+            },
+        )
+
+    def test_all_control_tools_normalize_to_common_actions(self) -> None:
+        _request, registry = openai_adapter._build_action_request_with_registry(
+            self.action_payload()
+        )
+        update = {
+            "transition": "end_conversation", "current_topic": None,
+            "previous_topic": None, "pending_question": None,
+            "unresolved_intent": None,
+        }
+        for action in ("answer", "ask_clarification", "request_confirmation", "refuse"):
+            with self.subTest(action=action):
+                response = SimpleNamespace(output=[SimpleNamespace(
+                    type="function_call", name=f"jarvis_control_{action}",
+                    arguments=json.dumps({"message": "message", "conversation_update": update}),
+                )])
+                normalized = openai_adapter._normalize_native_tool_response(response, registry)
+                self.assertEqual(normalized["action"], action)
+
+    def test_operation_arguments_normalize_without_semantic_change(self) -> None:
+        payload = self.action_payload()
+        payload.available_operations = {
+            "providers": [{"provider_id": "travel", "operations": [{
+                "provider_id": "travel", "operation_id": "get_trip",
+                "availability": "implemented", "description": "Get trip",
+                "input_schema": {
+                    "type": "object", "properties": {
+                        "trip_id": {"type": "string"},
+                        "optional_note": {"type": "string"},
+                    }, "required": ["trip_id"],
+                },
+            }]}],
+        }
+        _request, registry = openai_adapter._build_action_request_with_registry(payload)
+        response = SimpleNamespace(output=[SimpleNamespace(
+            type="function_call", name="jarvis__travel__get_trip",
+            arguments=json.dumps({
+                "arguments": {"trip_id": "trip-1", "optional_note": None},
+                "conversation_update": {
+                    "transition": "continue_unresolved_intent", "current_topic": None,
+                    "previous_topic": None, "pending_question": None,
+                    "unresolved_intent": None,
+                },
+            }),
+        )])
+
+        normalized = openai_adapter._normalize_native_tool_response(response, registry)
+        self.assertEqual(normalized["provider_id"], "travel")
+        self.assertEqual(normalized["operation_id"], "get_trip")
+        self.assertEqual(normalized["arguments"], {"trip_id": "trip-1"})
+
+    def test_invalid_native_tool_names_and_arguments_fail_closed(self) -> None:
+        payload = self.action_payload()
+        payload.available_operations = self.current_catalog()
+        _request, registry = openai_adapter._build_action_request_with_registry(payload)
+        update = {
+            "transition": "start_request", "current_topic": None,
+            "previous_topic": None, "pending_question": None,
+            "unresolved_intent": None,
+        }
+        invalid_calls = [
+            SimpleNamespace(type="function_call", name="unknown", arguments="{}"),
+            SimpleNamespace(type="function_call", name="jarvis_control_answer", arguments="{"),
+            SimpleNamespace(
+                type="function_call", name="jarvis_control_answer",
+                arguments=json.dumps({
+                    "message": "message", "conversation_update": update,
+                    "unexpected": True,
+                }),
+            ),
+        ]
+        operation = next(iter(registry.entries.values()))
+        invalid_calls.append(SimpleNamespace(
+            type="function_call", name=operation.name,
+            arguments=json.dumps({"arguments": {"unexpected": True}, "conversation_update": update}),
+        ))
+        for call in invalid_calls:
+            with self.subTest(name=call.name):
+                with self.assertRaises(openai_adapter.OpenAIResponseValidationError):
+                    openai_adapter._normalize_native_tool_response(
+                        SimpleNamespace(output=[call]), registry
+                    )
 
     def test_action_output_schema_is_self_contained(self) -> None:
         self.assert_schema_has_no_references(openai_adapter._action_output_schema())
@@ -243,9 +394,27 @@ class OpenAIAdapterTest(unittest.TestCase):
                 "unresolved_intent": None,
             },
         }
-        client.responses.create = lambda **_kwargs: SimpleNamespace(
-            output_text=json.dumps({"llm_action": action})
-        )
+        registry_payload = self.action_payload()
+        registry_payload.available_operations = {
+            "contract_version": "1",
+            "providers": [{"provider_id": "travel", "operations": [{
+                "provider_id": "travel", "operation_id": "get_trips",
+                "availability": "implemented", "description": "List trips",
+                "input_schema": {"type": "object", "properties": {}},
+            }]}],
+        }
+        client.responses.create = lambda **_kwargs: SimpleNamespace(output=[
+            SimpleNamespace(
+                type="function_call", name="jarvis__travel__get_trips",
+                arguments=json.dumps({
+                    "arguments": {},
+                    "conversation_update": {
+                        key: value for key, value in action["conversation_update"].items()
+                        if key != "active_entities"
+                    },
+                }),
+            )
+        ])
 
         with (
             patch.object(openai_adapter, "OPENAI_API_KEY", "test-secret"),
@@ -253,7 +422,7 @@ class OpenAIAdapterTest(unittest.TestCase):
             patch.object(openai_adapter, "_create_client", return_value=client),
         ):
             result = openai_adapter.OpenAIModelProviderAdapter().complete(
-                self.action_payload()
+                registry_payload
             )
 
         self.assertEqual(result, action)
@@ -261,8 +430,11 @@ class OpenAIAdapterTest(unittest.TestCase):
     def test_provider_reasoning_item_is_not_returned_or_saved(self) -> None:
         client = FakeClient()
         client.responses.create = lambda **_kwargs: SimpleNamespace(
-            output_text=self.structured_answer(),
-            output=[SimpleNamespace(type="reasoning", content="hidden thought")],
+            output_text="",
+            output=[
+                SimpleNamespace(type="reasoning", content="hidden thought"),
+                *self.native_answer().output,
+            ],
         )
 
         with (
