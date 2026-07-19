@@ -617,9 +617,15 @@ def _consultation_llm_call(call: Any) -> Any:
             "operation_tool_count": operation_tool_count, "control_tool_count": request.get("control_tool_count"),
             "tool_names": list(names[:CONSULTATION_NAME_LIMIT]), "tool_names_count": len(names),
             "include_operations": isinstance(operation_tool_count, int) and operation_tool_count > 0,
-            "operation_catalog_present": operations is not None,
-            "input_payload_bytes": _json_bytes(payload),
-            "available_operations_bytes": _json_bytes(operations),
+            "operation_catalog_present": request.get(
+                "operation_catalog_present", operations is not None
+            ),
+            "input_payload_bytes": request.get(
+                "input_payload_bytes", _json_bytes(payload)
+            ),
+            "available_operations_bytes": request.get(
+                "available_operations_bytes", _json_bytes(operations)
+            ),
             "prior_observation_count": len(payload.get("prior_observations") or []), "duration_ms": call.get("duration_ms"),
         },
         "response": {

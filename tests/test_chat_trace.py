@@ -115,7 +115,7 @@ class TruncationTest(unittest.TestCase):
             "anomaly_flags": detect_anomalies({"completed_at": "now", "total_duration_ms": 10358, "token_usage": {"total_tokens": 24622}, "llm_calls": [{"step": 1, "duration_ms": 7675, "usage": usage_1}], "stages": {}}),
             "llm_calls": [
                 {"step": 1, "request": {"model": "gpt", "tool_names": ["travel_get_trips"], "operation_tool_count": 1, "control_tool_count": 3, "llm_input_payload": payload, "tool_definitions": [schema]}, "response": {"status": "completed", "function_call_count": 1, "function_call_names": ["travel_get_trips"], "normalized_action": {"action": "call_operation", "provider_id": "travel", "operation_id": "get_trips", "arguments": {}}}, "usage": usage_1, "duration_ms": 7675},
-                {"step": 2, "request": {"model": "gpt", "tool_names": ["jarvis_control_answer"], "operation_tool_count": 0, "control_tool_count": 1, "llm_input_payload": {**payload, "prior_observations": [{}]}, "tool_definitions": [schema]}, "response": {"status": "completed", "function_call_count": 1, "function_call_names": ["jarvis_control_answer"], "normalized_action": {"action": "answer"}}, "usage": usage_2, "duration_ms": 2000},
+                {"step": 2, "request": {"model": "gpt", "tool_names": ["jarvis_control_answer"], "operation_tool_count": 0, "control_tool_count": 1, "llm_input_payload": {"prior_observations": [{}], "private_blob": "x" * 50000}, "tool_definitions": [schema]}, "response": {"status": "completed", "function_call_count": 1, "function_call_names": ["jarvis_control_answer"], "normalized_action": {"action": "answer"}}, "usage": usage_2, "duration_ms": 2000},
             ],
             "stages": {
                 "context_assembly": {"status": "success", "output": {"turn_context": {"conversation_state": {"active_entities": [{"id": "trip-1"}], "pending_question": "いつ？", "unresolved_intent": "旅行の確認", "current_topic": "travel"}}, "conversation_context_count": 1, "memory_context_count": 0, "activation_candidates_count": 0, "capability_context_count": 2, "session_info": {"session_id": "safe"}}, "duration_ms": 1},
@@ -136,7 +136,8 @@ class TruncationTest(unittest.TestCase):
         self.assertIn('"current_topic": "travel"', consultation)
         self.assertIn('"include_operations": true', consultation)
         self.assertIn('"include_operations": false', consultation)
-        self.assertEqual(consultation.count('"operation_catalog_present": true'), 2)
+        self.assertEqual(consultation.count('"operation_catalog_present": true'), 1)
+        self.assertEqual(consultation.count('"operation_catalog_present": false'), 1)
         full = build_bundle(trace, "full")
         self.assertLessEqual(len(full.encode()), FULL_MAX_BYTES)
         self.assertIn("llm_input_payload", full)

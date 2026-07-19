@@ -112,12 +112,12 @@ class AgentHostTest(unittest.TestCase):
         greeting_input = self.turn_input.model_copy(
             update={"normalized_input": {"text": "こんにちは"}}
         )
-        result = AgentHost(FakeLLMClient(answer_action()), runtime).run_turn(
-            greeting_input
-        )
+        llm = FakeLLMClient(answer_action())
+        result = AgentHost(llm, runtime).run_turn(greeting_input)
 
         self.assertEqual(result.action.action, "answer")
         self.assertEqual(result.observations, [])
+        self.assertEqual(len(llm.payloads), 1)
         runtime.execute_provider_operation.assert_not_called()
 
     def test_fake_llm_call_operation_runs_through_runtime(self) -> None:
