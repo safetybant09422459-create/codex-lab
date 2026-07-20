@@ -1,6 +1,5 @@
 import json
 import re
-from copy import deepcopy
 from threading import Lock
 from time import perf_counter
 from typing import Any
@@ -30,6 +29,10 @@ _REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh"}
 _VERBOSITY_LEVELS = {"low", "medium", "high"}
 _client: Any | None = None
 _client_lock = Lock()
+_DECISION_TOOL_NAME = "jarvis_action"
+_TERMINAL_ACTIONS = (
+    "answer", "ask_clarification", "request_confirmation", "refuse"
+)
 
 
 class OpenAIConfigurationError(RuntimeError):
@@ -118,8 +121,20 @@ class OpenAIModelProviderAdapter:
             item for item in (_get_value(response, "output") or [])
             if _get_value(item, "type") == "function_call"
         ]
-        control_count = sum(
-            1 for tool in tools if str(tool.get("name", "")).startswith("jarvis_control_")
+        decision_count = sum(
+            1 for tool in tools if tool.get("name") == _DECISION_TOOL_NAME
+        )
+        operation_choice_count = sum(
+            1
+            for tool in tools
+            for branch in (
+                ((tool.get("parameters") or {}).get("properties") or {})
+                .get("action_payload", {})
+                .get("anyOf", [])
+            )
+            if ((branch.get("properties") or {}).get("action") or {}).get(
+                "const"
+            ) == "call_operation"
         )
         request_input_payload: dict[str, Any] = {}
         raw_request_input = (request or {}).get("input")
@@ -142,17 +157,26 @@ class OpenAIModelProviderAdapter:
                 "store": (request or {}).get("store"),
                 "tool_choice": (request or {}).get("tool_choice"),
                 "tool_names": [tool.get("name") for tool in tools],
-                "operation_tool_count": len(tools) - control_count,
-                "control_tool_count": control_count,
+                "tool_names_count": len(tools),
+                "decision_tool_count": decision_count,
+                "operation_choice_count": operation_choice_count,
+                "operation_tool_count": 0,
+                "control_tool_count": 0,
                 "instructions": (request or {}).get("instructions"),
                 "llm_input_payload": request_input_payload,
                 "operation_catalog_present": "available_operations" in request_input_payload,
                 "input_payload_bytes": len(raw_request_input.encode("utf-8"))
                 if isinstance(raw_request_input, str) else 0,
+                "instructions_bytes": len(
+                    str((request or {}).get("instructions", "")).encode("utf-8")
+                ),
                 "available_operations_bytes": len(json.dumps(
                     request_operations, ensure_ascii=False
                 ).encode("utf-8")) if request_operations is not None else 0,
                 "tool_definitions": tools,
+                "tool_definitions_bytes": len(json.dumps(
+                    tools, ensure_ascii=False
+                ).encode("utf-8")),
                 "started_at": started_at,
                 "completed_at": utc_now(),
             },
@@ -256,20 +280,28 @@ def _build_action_request_with_registry(
         "model": OPENAI_MODEL,
         "instructions": (
             "Return exactly one Jarvis action by calling exactly one supplied tool. "
-            "Use only the supplied context and any supplied operation index. Choose a terminal "
-            "action when the conversation context alone is enough to respond. "
+            "Use only the supplied context and any supplied operation index. Decide the action "
+            "by prioritizing the latest user message in current_request above all historical "
+            "context. historical_context, including conversation history, conversation state, "
+            "active entities, memory or activation context, and past observations, is reference-only. "
+            "Its presence alone is never a reason to call an operation. Do not continue prior "
+            "Provider context unless the latest user message explicitly or semantically refers to "
+            "or continues that prior topic or entity. A previous operation call does not establish "
+            "that another operation is needed. Even immediately after a Provider operation, answer "
+            "greetings, thanks, acknowledgements, and casual conversation with a terminal answer. "
+            "If historical context contains an unresolved intent or pending question, do not resume "
+            "it unless the latest user message answers or continues it. Choose a terminal action "
+            "when the supplied context alone is enough to respond. "
             "Use an operation only when external data, saved data, current state, "
-            "or a side effect is required. Greetings, acknowledgements, thanks, "
-            "and general conversation do not require operations. The Jarvis "
+            "or a side effect is genuinely required for the latest request. The Jarvis "
             "self-diagnostic operations get_capabilities, get_provider_status, "
             "and get_operation_catalog provide external, current facts about "
             "Jarvis capabilities, limitations, Provider status, and the Operation "
             "Catalog. Select the appropriate one only when those current facts "
-            "are required to answer the user. Do not use them for greetings, "
-            "acknowledgements, thanks, general "
-            "conversation, preparation for a normal answer, a just-in-case check, "
-            "or preflight before another operation. If the conversation context "
-            "alone can answer the user, choose answer. If no operation is needed, "
+            "are genuinely required for the latest request. Do not use them for context checking, "
+            "conversation resumption, preparation for a normal answer, a just-in-case check, "
+            "or preflight before another operation. If the supplied context "
+            "alone can answer the latest user message, choose answer. If no operation is needed, "
             "choose answer. "
             "After a prior observation, use that observation to return a terminal "
             "action and do not call another operation. "
@@ -291,10 +323,31 @@ def _build_action_request_with_registry(
 
 def _request_input_payload(payload: LLMInputPayload) -> dict[str, Any]:
     """Project the source contract into the smaller payload sent to the model."""
-    request_input = payload.model_dump(mode="json")
-    if payload.prior_observations:
-        request_input.pop("available_operations", None)
-    else:
+    source = payload.model_dump(mode="json")
+    request_input = {
+        "current_request": {
+            "normalized_input": source["normalized_input"],
+            "turn_id": source["turn_id"],
+            "session_id": source["session_id"],
+            "principal": source["principal"],
+            "channel": source["channel"],
+            "persona_context": source["persona_context"],
+            "session_info": source["session_info"],
+            "runtime_policy": source["runtime_policy"],
+            "prior_observations": source["prior_observations"],
+        },
+        "historical_context": {
+            "usage": "reference_only",
+            "conversation_context": source["conversation_context"],
+            "conversation_state": source["conversation_state"],
+            "memory_context": source["memory_context"],
+            "activation_candidates": source["activation_candidates"],
+        },
+        "contract_version": source["contract_version"],
+        "context_version": source["context_version"],
+        "capability_context": source["capability_context"],
+    }
+    if not payload.prior_observations:
         request_input["available_operations"] = _compact_operation_index(
             payload.available_operations
         )
@@ -353,36 +406,42 @@ def _conversation_update_schema() -> dict[str, Any]:
 
 
 def _native_tool_definitions(catalog: dict[str, Any], registry: NativeToolRegistry, *, include_operations: bool) -> list[dict[str, Any]]:
-    operations = {
-        (operation.get("provider_id"), operation.get("operation_id")): operation
-        for provider in catalog.get("providers", [])
-        for operation in provider.get("operations", [])
-    }
-    tools: list[dict[str, Any]] = []
+    action_branches: list[dict[str, Any]] = []
+    for action in _TERMINAL_ACTIONS:
+        action_branches.append({
+            "type": "object", "additionalProperties": False,
+            "properties": {
+                "action": {"type": "string", "const": action},
+                "message": {"type": "string", "minLength": 1},
+            },
+            "required": ["action", "message"],
+        })
     if include_operations:
         for entry in registry.entries.values():
-            operation = operations[(entry.provider_id, entry.operation_id)]
-            tools.append({
-                "type": "function", "name": entry.name, "strict": True,
-                "description": operation.get("description") or f"{entry.provider_id}.{entry.operation_id}",
-                "parameters": {
-                    "type": "object", "additionalProperties": False,
-                    "properties": {"arguments": entry.openai_schema, "conversation_update": _conversation_update_schema()},
-                    "required": ["arguments", "conversation_update"],
+            action_branches.append({
+                "type": "object", "additionalProperties": False,
+                "properties": {
+                    "action": {"type": "string", "const": "call_operation"},
+                    "provider_id": {"type": "string", "const": entry.provider_id},
+                    "operation_id": {"type": "string", "const": entry.operation_id},
+                    "arguments": entry.openai_schema,
                 },
+                "required": [
+                    "action", "provider_id", "operation_id", "arguments"
+                ],
             })
-    message_schema = {
-        "type": "object", "additionalProperties": False,
-        "properties": {"message": {"type": "string", "minLength": 1}, "conversation_update": _conversation_update_schema()},
-        "required": ["message", "conversation_update"],
-    }
-    for action in ("answer", "ask_clarification", "request_confirmation", "refuse"):
-        tools.append({
-            "type": "function", "name": f"jarvis_control_{action}", "strict": True,
-            "description": f"Return the Jarvis terminal action: {action}.",
-            "parameters": deepcopy(message_schema),
-        })
-    return tools
+    return [{
+        "type": "function", "name": _DECISION_TOOL_NAME, "strict": True,
+        "description": "Return exactly one Jarvis terminal or operation action.",
+        "parameters": {
+            "type": "object", "additionalProperties": False,
+            "properties": {
+                "action_payload": {"anyOf": action_branches},
+                "conversation_update": _conversation_update_schema(),
+            },
+            "required": ["action_payload", "conversation_update"],
+        },
+    }]
 
 
 def _normalize_native_tool_response(response: Any, registry: NativeToolRegistry) -> dict[str, Any]:
@@ -398,25 +457,37 @@ def _normalize_native_tool_response(response: Any, registry: NativeToolRegistry)
         raise OpenAIResponseValidationError("OpenAI returned malformed tool arguments") from None
     if not isinstance(name, str) or not isinstance(values, dict):
         raise OpenAIResponseValidationError("OpenAI returned an invalid function call")
-    prefix = "jarvis_control_"
-    if name.startswith(prefix):
-        action = name[len(prefix):]
-        if action not in {"answer", "ask_clarification", "request_confirmation", "refuse"}:
-            raise OpenAIResponseValidationError(f"Unknown control tool: {name}")
-        if set(values) != {"message", "conversation_update"}:
-            raise OpenAIResponseValidationError("Control tool arguments do not match its schema")
+    if name != _DECISION_TOOL_NAME:
+        raise OpenAIResponseValidationError(f"Unknown decision tool: {name}")
+    if set(values) != {"action_payload", "conversation_update"}:
+        raise OpenAIResponseValidationError(
+            "Decision tool arguments do not match its schema"
+        )
+    action_payload = values.get("action_payload")
+    if not isinstance(action_payload, dict):
+        raise OpenAIResponseValidationError("Decision action_payload must be an object")
+    action = action_payload.get("action")
+    if action in _TERMINAL_ACTIONS:
+        if set(action_payload) != {"action", "message"}:
+            raise OpenAIResponseValidationError(
+                "Terminal action payload does not match its schema"
+            )
         return {
             "contract_version": "1", "action": action,
-            "message": values.get("message"),
+            "message": action_payload.get("message"),
             "conversation_update": values.get("conversation_update"),
         }
+    if action != "call_operation" or set(action_payload) != {
+        "action", "provider_id", "operation_id", "arguments"
+    }:
+        raise OpenAIResponseValidationError(
+            "Operation action payload does not match its schema"
+        )
     try:
-        if set(values) != {"arguments", "conversation_update"}:
-            raise NativeToolArgumentsError(
-                "Operation tool arguments do not match its wrapper schema"
-            )
-        entry = registry.resolve(name)
-        arguments = normalize_arguments(values.get("arguments"), entry)
+        entry = registry.resolve_operation(
+            action_payload.get("provider_id"), action_payload.get("operation_id")
+        )
+        arguments = normalize_arguments(action_payload.get("arguments"), entry)
     except (NativeToolSchemaError, NativeToolArgumentsError) as exc:
         raise OpenAIResponseValidationError(str(exc)) from None
     return {

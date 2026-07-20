@@ -46,6 +46,21 @@ class NativeToolRegistry:
         except KeyError as exc:
             raise NativeToolSchemaError(f"Unknown native tool: {name}") from exc
 
+    def resolve_operation(
+        self, provider_id: str, operation_id: str
+    ) -> NativeToolEntry:
+        matches = [
+            entry
+            for entry in self.entries.values()
+            if entry.provider_id == provider_id
+            and entry.operation_id == operation_id
+        ]
+        if len(matches) != 1:
+            raise NativeToolSchemaError(
+                f"Unknown operation: {provider_id}.{operation_id}"
+            )
+        return matches[0]
+
 
 def compile_registry(catalog: dict[str, Any]) -> NativeToolRegistry:
     entries: dict[str, NativeToolEntry] = {}

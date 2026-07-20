@@ -606,6 +606,7 @@ def _consultation_llm_call(call: Any) -> Any:
     payload = request.get("llm_input_payload") or {}
     operations = payload.get("available_operations")
     operation_tool_count = request.get("operation_tool_count")
+    operation_choice_count = request.get("operation_choice_count")
     action = response.get("normalized_action") or {}
     names = request.get("tool_names") or []
     return {
@@ -615,18 +616,34 @@ def _consultation_llm_call(call: Any) -> Any:
             "max_output_tokens": request.get("max_output_tokens"), "timeout_seconds": request.get("timeout_seconds"),
             "store": request.get("store"), "tool_choice": request.get("tool_choice"),
             "operation_tool_count": operation_tool_count, "control_tool_count": request.get("control_tool_count"),
-            "tool_names": list(names[:CONSULTATION_NAME_LIMIT]), "tool_names_count": len(names),
-            "include_operations": isinstance(operation_tool_count, int) and operation_tool_count > 0,
+            "decision_tool_count": request.get("decision_tool_count"),
+            "operation_choice_count": operation_choice_count,
+            "tool_names": list(names[:CONSULTATION_NAME_LIMIT]),
+            "tool_names_count": request.get("tool_names_count", len(names)),
+            "include_operations": (
+                isinstance(operation_choice_count, int)
+                and operation_choice_count > 0
+            ) if operation_choice_count is not None else (
+                isinstance(operation_tool_count, int)
+                and operation_tool_count > 0
+            ),
             "operation_catalog_present": request.get(
                 "operation_catalog_present", operations is not None
             ),
             "input_payload_bytes": request.get(
                 "input_payload_bytes", _json_bytes(payload)
             ),
+            "instructions_bytes": request.get("instructions_bytes"),
+            "tool_definitions_bytes": request.get(
+                "tool_definitions_bytes",
+                _json_bytes(request.get("tool_definitions") or []),
+            ),
             "available_operations_bytes": request.get(
                 "available_operations_bytes", _json_bytes(operations)
             ),
-            "prior_observation_count": len(payload.get("prior_observations") or []), "duration_ms": call.get("duration_ms"),
+            "prior_observation_count": len(
+                (payload.get("current_request") or {}).get("prior_observations") or []
+            ), "duration_ms": call.get("duration_ms"),
         },
         "response": {
             "response_id": response.get("response_id"), "response_status": response.get("status"),
