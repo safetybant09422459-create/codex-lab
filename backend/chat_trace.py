@@ -626,7 +626,9 @@ def _consultation_llm_call(call: Any) -> Any:
             "available_operations_bytes": request.get(
                 "available_operations_bytes", _json_bytes(operations)
             ),
-            "prior_observation_count": len(payload.get("prior_observations") or []), "duration_ms": call.get("duration_ms"),
+            "prior_observation_count": len(
+                (payload.get("current_request") or {}).get("prior_observations") or []
+            ), "duration_ms": call.get("duration_ms"),
         },
         "response": {
             "response_id": response.get("response_id"), "response_status": response.get("status"),
