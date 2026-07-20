@@ -98,8 +98,13 @@ class OpenAIAdapterTest(unittest.TestCase):
             output_text="",
             output=[SimpleNamespace(
                 type="function_call",
-                name="jarvis_control_answer",
-                arguments=json.dumps(values),
+                name="jarvis_action",
+                arguments=json.dumps({
+                    "action_payload": {
+                        "action": "answer", "message": values["message"]
+                    },
+                    "conversation_update": values["conversation_update"],
+                }),
             )],
         )
 
@@ -168,25 +173,19 @@ class OpenAIAdapterTest(unittest.TestCase):
         self.assertEqual(request["model"], "test-model")
         self.assertFalse(request["store"])
         self.assertEqual(request["tool_choice"], "required")
-        self.assertEqual(len(request["tools"]), 4)
+        self.assertEqual(len(request["tools"]), 1)
+        self.assertEqual(request["tools"][0]["name"], "jarvis_action")
         self.assertNotIn("format", request["text"])
         self.assertNotIn("test-secret", repr(request))
         self.assertEqual(result["action"], "answer")
 
-    def test_first_request_has_operation_and_four_control_tools(self) -> None:
+    def test_first_request_has_one_decision_tool_with_every_operation(self) -> None:
         payload = self.action_payload()
         payload.available_operations = self.current_catalog()
         request, registry = openai_adapter._build_action_request_with_registry(payload)
 
-        names = {tool["name"] for tool in request["tools"]}
-        controls = {
-            "jarvis_control_answer",
-            "jarvis_control_ask_clarification",
-            "jarvis_control_request_confirmation",
-            "jarvis_control_refuse",
-        }
         self.assertTrue(registry.entries)
-        self.assertEqual(names, controls | set(registry.entries))
+        self.assertEqual([tool["name"] for tool in request["tools"]], ["jarvis_action"])
         sent_payload = json.loads(request["input"])
         operation_index = sent_payload["available_operations"]
         self.assertTrue(operation_index["providers"])
@@ -203,16 +202,32 @@ class OpenAIAdapterTest(unittest.TestCase):
         self.assertIn("what_it_can_do", indexed)
         self.assertIn("what_it_cannot_do", indexed)
         self.assertIn("limitations", indexed)
-        native_operation = next(
-            tool for tool in request["tools"] if tool["name"] in registry.entries
-        )
-        registry_entry = registry.entries[native_operation["name"]]
+        parameters = request["tools"][0]["parameters"]
+        branches = parameters["properties"]["action_payload"]["anyOf"]
+        operation_branches = [
+            branch for branch in branches
+            if branch["properties"]["action"].get("const") == "call_operation"
+        ]
+        choices = [(
+            branch["properties"]["provider_id"]["const"],
+            branch["properties"]["operation_id"]["const"],
+        ) for branch in operation_branches]
+        expected = [(entry.provider_id, entry.operation_id) for entry in registry.entries.values()]
+        self.assertCountEqual(choices, expected)
+        self.assertEqual(len(choices), len(set(choices)))
+        for branch in operation_branches:
+            entry = registry.resolve_operation(*(
+                branch["properties"][key]["const"]
+                for key in ("provider_id", "operation_id")
+            ))
+            self.assertEqual(branch["properties"]["arguments"], entry.openai_schema)
+            self.assertNotIn("description", branch)
         self.assertEqual(
-            native_operation["parameters"]["properties"]["arguments"],
-            registry_entry.openai_schema,
+            json.dumps(parameters, ensure_ascii=False).count('"conversation_update"'),
+            2,
         )
 
-    def test_request_after_observation_has_only_four_control_tools(self) -> None:
+    def test_request_after_observation_has_one_terminal_decision_tool(self) -> None:
         payload = self.action_payload()
         payload.available_operations = self.current_catalog()
         payload.prior_observations = [ObservationEnvelope(
@@ -224,15 +239,10 @@ class OpenAIAdapterTest(unittest.TestCase):
         request, registry = openai_adapter._build_action_request_with_registry(payload)
 
         self.assertTrue(registry.entries)
-        self.assertEqual(
-            {tool["name"] for tool in request["tools"]},
-            {
-                "jarvis_control_answer",
-                "jarvis_control_ask_clarification",
-                "jarvis_control_request_confirmation",
-                "jarvis_control_refuse",
-            },
-        )
+        self.assertEqual([tool["name"] for tool in request["tools"]], ["jarvis_action"])
+        branches = request["tools"][0]["parameters"]["properties"]["action_payload"]["anyOf"]
+        self.assertEqual(len(branches), 4)
+        self.assertNotIn("call_operation", json.dumps(branches))
         sent_payload = json.loads(request["input"])
         self.assertNotIn("available_operations", sent_payload)
         self.assertEqual(
@@ -431,6 +441,23 @@ class OpenAIAdapterTest(unittest.TestCase):
                 len(sent_request["input"].encode("utf-8")),
             )
         first_request, second_request = (call["request"] for call in calls)
+        self.assertEqual(first_request["tool_names"], ["jarvis_action"])
+        self.assertEqual(first_request["tool_names_count"], 1)
+        self.assertEqual(first_request["decision_tool_count"], 1)
+        self.assertGreater(first_request["operation_choice_count"], 0)
+        self.assertEqual(first_request["operation_tool_count"], 0)
+        self.assertEqual(second_request["tool_names_count"], 1)
+        self.assertEqual(second_request["decision_tool_count"], 1)
+        self.assertEqual(second_request["operation_choice_count"], 0)
+        for traced, sent in zip((first_request, second_request), client.responses.calls):
+            self.assertEqual(
+                traced["instructions_bytes"],
+                len(sent["instructions"].encode("utf-8")),
+            )
+            self.assertEqual(
+                traced["tool_definitions_bytes"],
+                len(json.dumps(sent["tools"], ensure_ascii=False).encode("utf-8")),
+            )
         self.assertTrue(first_request["operation_catalog_present"])
         first_sent_payload = json.loads(client.responses.calls[0]["input"])
         self.assertEqual(
@@ -459,8 +486,11 @@ class OpenAIAdapterTest(unittest.TestCase):
         for action in ("answer", "ask_clarification", "request_confirmation", "refuse"):
             with self.subTest(action=action):
                 response = SimpleNamespace(output=[SimpleNamespace(
-                    type="function_call", name=f"jarvis_control_{action}",
-                    arguments=json.dumps({"message": "message", "conversation_update": update}),
+                    type="function_call", name="jarvis_action",
+                    arguments=json.dumps({
+                        "action_payload": {"action": action, "message": "message"},
+                        "conversation_update": update,
+                    }),
                 )])
                 normalized = openai_adapter._normalize_native_tool_response(response, registry)
                 self.assertEqual(normalized["action"], action)
@@ -481,9 +511,13 @@ class OpenAIAdapterTest(unittest.TestCase):
         }
         _request, registry = openai_adapter._build_action_request_with_registry(payload)
         response = SimpleNamespace(output=[SimpleNamespace(
-            type="function_call", name="jarvis__travel__get_trip",
+            type="function_call", name="jarvis_action",
             arguments=json.dumps({
-                "arguments": {"trip_id": "trip-1", "optional_note": None},
+                "action_payload": {
+                    "action": "call_operation", "provider_id": "travel",
+                    "operation_id": "get_trip",
+                    "arguments": {"trip_id": "trip-1", "optional_note": None},
+                },
                 "conversation_update": {
                     "transition": "continue_unresolved_intent", "current_topic": None,
                     "previous_topic": None, "pending_question": None,
@@ -508,19 +542,38 @@ class OpenAIAdapterTest(unittest.TestCase):
         }
         invalid_calls = [
             SimpleNamespace(type="function_call", name="unknown", arguments="{}"),
-            SimpleNamespace(type="function_call", name="jarvis_control_answer", arguments="{"),
+            SimpleNamespace(type="function_call", name="jarvis_action", arguments="{"),
             SimpleNamespace(
-                type="function_call", name="jarvis_control_answer",
+                type="function_call", name="jarvis_action",
                 arguments=json.dumps({
-                    "message": "message", "conversation_update": update,
+                    "action_payload": {"action": "answer", "message": "message"},
+                    "conversation_update": update,
                     "unexpected": True,
                 }),
             ),
         ]
-        operation = next(iter(registry.entries.values()))
         invalid_calls.append(SimpleNamespace(
-            type="function_call", name=operation.name,
-            arguments=json.dumps({"arguments": {"unexpected": True}, "conversation_update": update}),
+            type="function_call", name="jarvis_action",
+            arguments=json.dumps({
+                "action_payload": {
+                    "action": "call_operation", "provider_id": "unknown",
+                    "operation_id": "unknown", "arguments": {},
+                },
+                "conversation_update": update,
+            }),
+        ))
+        known = next(iter(registry.entries.values()))
+        invalid_calls.append(SimpleNamespace(
+            type="function_call", name="jarvis_action",
+            arguments=json.dumps({
+                "action_payload": {
+                    "action": "call_operation",
+                    "provider_id": known.provider_id,
+                    "operation_id": known.operation_id,
+                    "arguments": {"unexpected": True},
+                },
+                "conversation_update": update,
+            }),
         ))
         for call in invalid_calls:
             with self.subTest(name=call.name):
@@ -528,6 +581,42 @@ class OpenAIAdapterTest(unittest.TestCase):
                     openai_adapter._normalize_native_tool_response(
                         SimpleNamespace(output=[call]), registry
                     )
+
+    def test_single_tool_is_smaller_than_repeated_wrapper_schemas(self) -> None:
+        payload = self.action_payload()
+        payload.available_operations = self.current_catalog()
+        request, registry = openai_adapter._build_action_request_with_registry(payload)
+        update = openai_adapter._conversation_update_schema()
+        repeated = []
+        for entry in registry.entries.values():
+            repeated.append({
+                "type": "function", "name": entry.name, "strict": True,
+                "parameters": {
+                    "type": "object", "additionalProperties": False,
+                    "properties": {
+                        "arguments": entry.openai_schema,
+                        "conversation_update": update,
+                    },
+                    "required": ["arguments", "conversation_update"],
+                },
+            })
+        for action in openai_adapter._TERMINAL_ACTIONS:
+            repeated.append({
+                "type": "function", "name": f"jarvis_control_{action}",
+                "strict": True,
+                "parameters": {
+                    "type": "object", "additionalProperties": False,
+                    "properties": {
+                        "message": {"type": "string", "minLength": 1},
+                        "conversation_update": update,
+                    },
+                    "required": ["message", "conversation_update"],
+                },
+            })
+        serialized = lambda value: len(
+            json.dumps(value, ensure_ascii=False).encode("utf-8")
+        )
+        self.assertLess(serialized(request["tools"]), serialized(repeated))
 
     def test_action_output_schema_is_self_contained(self) -> None:
         self.assert_schema_has_no_references(openai_adapter._action_output_schema())
@@ -647,9 +736,12 @@ class OpenAIAdapterTest(unittest.TestCase):
         }
         client.responses.create = lambda **_kwargs: SimpleNamespace(output=[
             SimpleNamespace(
-                type="function_call", name="jarvis__travel__get_trips",
+                type="function_call", name="jarvis_action",
                 arguments=json.dumps({
-                    "arguments": {},
+                    "action_payload": {
+                        "action": "call_operation", "provider_id": "travel",
+                        "operation_id": "get_trips", "arguments": {},
+                    },
                     "conversation_update": {
                         key: value for key, value in action["conversation_update"].items()
                         if key != "active_entities"
