@@ -256,20 +256,28 @@ def _build_action_request_with_registry(
         "model": OPENAI_MODEL,
         "instructions": (
             "Return exactly one Jarvis action by calling exactly one supplied tool. "
-            "Use only the supplied context and any supplied operation index. Choose a terminal "
-            "action when the conversation context alone is enough to respond. "
+            "Use only the supplied context and any supplied operation index. Decide the action "
+            "by prioritizing the latest user message in current_request above all historical "
+            "context. historical_context, including conversation history, conversation state, "
+            "active entities, memory or activation context, and past observations, is reference-only. "
+            "Its presence alone is never a reason to call an operation. Do not continue prior "
+            "Provider context unless the latest user message explicitly or semantically refers to "
+            "or continues that prior topic or entity. A previous operation call does not establish "
+            "that another operation is needed. Even immediately after a Provider operation, answer "
+            "greetings, thanks, acknowledgements, and casual conversation with a terminal answer. "
+            "If historical context contains an unresolved intent or pending question, do not resume "
+            "it unless the latest user message answers or continues it. Choose a terminal action "
+            "when the supplied context alone is enough to respond. "
             "Use an operation only when external data, saved data, current state, "
-            "or a side effect is required. Greetings, acknowledgements, thanks, "
-            "and general conversation do not require operations. The Jarvis "
+            "or a side effect is genuinely required for the latest request. The Jarvis "
             "self-diagnostic operations get_capabilities, get_provider_status, "
             "and get_operation_catalog provide external, current facts about "
             "Jarvis capabilities, limitations, Provider status, and the Operation "
             "Catalog. Select the appropriate one only when those current facts "
-            "are required to answer the user. Do not use them for greetings, "
-            "acknowledgements, thanks, general "
-            "conversation, preparation for a normal answer, a just-in-case check, "
-            "or preflight before another operation. If the conversation context "
-            "alone can answer the user, choose answer. If no operation is needed, "
+            "are genuinely required for the latest request. Do not use them for context checking, "
+            "conversation resumption, preparation for a normal answer, a just-in-case check, "
+            "or preflight before another operation. If the supplied context "
+            "alone can answer the latest user message, choose answer. If no operation is needed, "
             "choose answer. "
             "After a prior observation, use that observation to return a terminal "
             "action and do not call another operation. "
@@ -291,10 +299,31 @@ def _build_action_request_with_registry(
 
 def _request_input_payload(payload: LLMInputPayload) -> dict[str, Any]:
     """Project the source contract into the smaller payload sent to the model."""
-    request_input = payload.model_dump(mode="json")
-    if payload.prior_observations:
-        request_input.pop("available_operations", None)
-    else:
+    source = payload.model_dump(mode="json")
+    request_input = {
+        "current_request": {
+            "normalized_input": source["normalized_input"],
+            "turn_id": source["turn_id"],
+            "session_id": source["session_id"],
+            "principal": source["principal"],
+            "channel": source["channel"],
+            "persona_context": source["persona_context"],
+            "session_info": source["session_info"],
+            "runtime_policy": source["runtime_policy"],
+            "prior_observations": source["prior_observations"],
+        },
+        "historical_context": {
+            "usage": "reference_only",
+            "conversation_context": source["conversation_context"],
+            "conversation_state": source["conversation_state"],
+            "memory_context": source["memory_context"],
+            "activation_candidates": source["activation_candidates"],
+        },
+        "contract_version": source["contract_version"],
+        "context_version": source["context_version"],
+        "capability_context": source["capability_context"],
+    }
+    if not payload.prior_observations:
         request_input["available_operations"] = _compact_operation_index(
             payload.available_operations
         )

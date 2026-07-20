@@ -161,7 +161,10 @@ class OpenAIAdapterTest(unittest.TestCase):
         request = client.responses.calls[0]
         sent_payload = json.loads(str(request["input"]))
         self.assertEqual(sent_payload["contract_version"], "1")
-        self.assertEqual(sent_payload["normalized_input"]["text"], "旅行一覧を見せて")
+        self.assertEqual(
+            sent_payload["current_request"]["normalized_input"]["text"],
+            "旅行一覧を見せて",
+        )
         self.assertEqual(request["model"], "test-model")
         self.assertFalse(request["store"])
         self.assertEqual(request["tool_choice"], "required")
@@ -232,7 +235,9 @@ class OpenAIAdapterTest(unittest.TestCase):
         )
         sent_payload = json.loads(request["input"])
         self.assertNotIn("available_operations", sent_payload)
-        self.assertEqual(len(sent_payload["prior_observations"]), 1)
+        self.assertEqual(
+            len(sent_payload["current_request"]["prior_observations"]), 1
+        )
         self.assertNotIn('"input_schema"', request["input"])
         self.assertNotIn('"output_schema"', request["input"])
         self.assertNotIn('"what_it_can_do"', request["input"])
@@ -281,9 +286,18 @@ class OpenAIAdapterTest(unittest.TestCase):
         )["instructions"]
 
         self.assertIn("Use an operation only when", instructions)
-        self.assertIn("conversation context alone is enough", instructions)
+        self.assertIn("latest user message in current_request", instructions)
+        self.assertIn("above all historical context", instructions)
+        self.assertIn("active entities", instructions)
+        self.assertIn("reference-only", instructions)
+        self.assertIn("presence alone is never a reason", instructions)
+        self.assertIn("explicitly or semantically refers", instructions)
+        self.assertIn("previous operation call", instructions)
+        self.assertIn("terminal answer", instructions)
+        self.assertIn("unresolved intent or pending question", instructions)
+        self.assertIn("do not resume", instructions)
         self.assertIn("If no operation is needed, choose answer", instructions)
-        self.assertIn("Greetings", instructions)
+        self.assertIn("greetings", instructions)
         self.assertIn("get_capabilities", instructions)
         self.assertIn("get_provider_status", instructions)
         self.assertIn("get_operation_catalog", instructions)
@@ -291,8 +305,47 @@ class OpenAIAdapterTest(unittest.TestCase):
         self.assertIn("preflight", instructions)
         self.assertIn("just-in-case check", instructions)
         self.assertIn("preparation for a normal answer", instructions)
-        self.assertIn("conversation context alone can answer", instructions)
+        self.assertIn("context checking", instructions)
+        self.assertIn("conversation resumption", instructions)
+        self.assertIn("latest user message", instructions)
         self.assertIn("prior observation", instructions)
+
+    def test_request_projection_separates_current_request_from_history(self) -> None:
+        payload = self.action_payload()
+        payload.normalized_input = {"text": "こんにちは"}
+        payload.conversation_context = [{
+            "user_input": {"text": "旅行一覧を見せて"},
+            "assistant_final_response": "旅行は1件です。",
+        }]
+        payload.conversation_state = {
+            "active_entities": [{"entity_type": "trip", "entity_id": "trip-1"}]
+        }
+        original = payload.model_dump(mode="json")
+
+        sent = openai_adapter._request_input_payload(payload)
+
+        self.assertEqual(
+            sent["current_request"]["normalized_input"], {"text": "こんにちは"}
+        )
+        self.assertEqual(sent["historical_context"]["usage"], "reference_only")
+        self.assertEqual(
+            sent["historical_context"]["conversation_context"],
+            payload.conversation_context,
+        )
+        self.assertEqual(
+            sent["historical_context"]["conversation_state"],
+            payload.conversation_state,
+        )
+        self.assertNotIn("normalized_input", sent)
+        self.assertNotIn("normalized_input", sent["historical_context"])
+        self.assertEqual(
+            json.dumps(sent, ensure_ascii=False).count("こんにちは"), 1
+        )
+        self.assertEqual(payload.model_dump(mode="json"), original)
+        self.assertEqual(
+            payload.available_operations,
+            {"contract_version": "1", "providers": []},
+        )
 
     def test_compact_index_preserves_declarative_jarvis_metadata(self) -> None:
         index = openai_adapter._compact_operation_index(self.current_catalog())
@@ -358,8 +411,21 @@ class OpenAIAdapterTest(unittest.TestCase):
             adapter.complete(second_payload)
 
         calls = store.get("turn-1")["llm_calls"]
-        for call, sent_request in zip(calls, client.responses.calls):
+        for index, (call, sent_request) in enumerate(
+            zip(calls, client.responses.calls)
+        ):
             traced = call["request"]
+            sent_input = json.loads(sent_request["input"])
+            self.assertEqual(
+                traced["llm_input_payload"]["current_request"],
+                sent_input["current_request"],
+            )
+            self.assertEqual(
+                traced["llm_input_payload"]["historical_context"],
+                sent_input["historical_context"],
+            )
+            if index == 1:
+                self.assertEqual(traced["llm_input_payload"], sent_input)
             self.assertEqual(
                 traced["input_payload_bytes"],
                 len(sent_request["input"].encode("utf-8")),

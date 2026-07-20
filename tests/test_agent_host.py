@@ -10,6 +10,10 @@ from backend.agent_host import (
     TurnInput,
 )
 from backend.audit import AuditLogger
+from backend.conversation_state import (
+    ConversationTurnState,
+    InMemoryConversationStateStore,
+)
 from backend.executors import ExecutorRegistry
 from backend.llm_client import LLMClient
 from backend.openai_adapter import OpenAIModelProviderAdapter
@@ -119,6 +123,69 @@ class AgentHostTest(unittest.TestCase):
         self.assertEqual(result.observations, [])
         self.assertEqual(len(llm.payloads), 1)
         runtime.execute_provider_operation.assert_not_called()
+
+    def test_independent_greeting_with_provider_history_ends_after_one_llm_call(self) -> None:
+        store = InMemoryConversationStateStore()
+        store.append_turn("session-1", ConversationTurnState(
+            user_input={"text": "旅行一覧を見せて"},
+            assistant_final_response="旅行は1件あります。",
+            last_llm_action=answer_action("旅行は1件あります。"),
+            last_observations=[{
+                "provider_id": "travel",
+                "operation_id": "get_trips",
+                "status": "success",
+                "facts": {"trip_count": 1},
+            }],
+            active_entities=[{
+                "entity_type": "trip",
+                "entity_id": "trip-1",
+                "display_name": "家族旅行",
+            }],
+        ))
+        llm = FakeLLMClient(answer_action("こんにちは。"))
+        greeting = self.turn_input.model_copy(
+            update={"normalized_input": {"text": "こんにちは"}}
+        )
+
+        result = AgentHost(
+            llm, self.runtime, conversation_store=store
+        ).run_turn(greeting)
+
+        self.assertEqual(result.action.action, "answer")
+        self.assertEqual(len(llm.payloads), 1)
+        self.assertTrue(llm.payloads[0].conversation_context)
+        self.assertTrue(
+            llm.payloads[0].conversation_state["active_entities"]
+        )
+        self.repository.get_trips.assert_not_called()
+
+    def test_request_referring_to_provider_history_keeps_operation_path(self) -> None:
+        store = InMemoryConversationStateStore()
+        store.append_turn("session-1", ConversationTurnState(
+            user_input={"text": "旅行一覧を見せて"},
+            assistant_final_response="旅行は1件あります。",
+            last_llm_action=answer_action("旅行は1件あります。"),
+            active_entities=[{
+                "entity_type": "trip",
+                "entity_id": "trip-1",
+                "display_name": "家族旅行",
+            }],
+        ))
+        llm = FakeLLMClient([
+            call_action(),
+            answer_action("その旅行を確認しました。"),
+        ])
+        referring_request = self.turn_input.model_copy(
+            update={"normalized_input": {"text": "その旅行をもう一度確認して"}}
+        )
+
+        result = AgentHost(
+            llm, self.runtime, conversation_store=store
+        ).run_turn(referring_request)
+
+        self.assertEqual(result.action.action, "answer")
+        self.assertEqual(len(llm.payloads), 2)
+        self.repository.get_trips.assert_called_once_with()
 
     def test_fake_llm_call_operation_runs_through_runtime(self) -> None:
         runtime = Mock()
