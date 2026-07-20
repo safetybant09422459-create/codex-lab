@@ -121,6 +121,16 @@ class OpenAIModelProviderAdapter:
         control_count = sum(
             1 for tool in tools if str(tool.get("name", "")).startswith("jarvis_control_")
         )
+        request_input_payload: dict[str, Any] = {}
+        raw_request_input = (request or {}).get("input")
+        if isinstance(raw_request_input, str):
+            try:
+                decoded_input = json.loads(raw_request_input)
+                if isinstance(decoded_input, dict):
+                    request_input_payload = decoded_input
+            except json.JSONDecodeError:
+                pass
+        request_operations = request_input_payload.get("available_operations")
         self.trace_recorder.record_llm_call(payload.turn_id, {
             "step": step,
             "request": {
@@ -135,7 +145,13 @@ class OpenAIModelProviderAdapter:
                 "operation_tool_count": len(tools) - control_count,
                 "control_tool_count": control_count,
                 "instructions": (request or {}).get("instructions"),
-                "llm_input_payload": payload,
+                "llm_input_payload": request_input_payload,
+                "operation_catalog_present": "available_operations" in request_input_payload,
+                "input_payload_bytes": len(raw_request_input.encode("utf-8"))
+                if isinstance(raw_request_input, str) else 0,
+                "available_operations_bytes": len(json.dumps(
+                    request_operations, ensure_ascii=False
+                ).encode("utf-8")) if request_operations is not None else 0,
                 "tool_definitions": tools,
                 "started_at": started_at,
                 "completed_at": utc_now(),
@@ -235,17 +251,31 @@ def _build_action_request_with_registry(
     inference_settings = _inference_settings()
     text_settings = dict(inference_settings.pop("text", {}))
     registry = compile_registry(payload.available_operations)
+    request_input = _request_input_payload(payload)
     request = {
         "model": OPENAI_MODEL,
         "instructions": (
             "Return exactly one Jarvis action by calling exactly one supplied tool. "
-            "Use only the supplied context and operation catalog. "
-            "Select call_operation when an available operation is needed to "
-            "answer the user. After a prior observation, use that observation "
-            "to return a terminal action and do not call another operation. "
+            "Use only the supplied context and any supplied operation index. Choose a terminal "
+            "action when the conversation context alone is enough to respond. "
+            "Use an operation only when external data, saved data, current state, "
+            "or a side effect is required. Greetings, acknowledgements, thanks, "
+            "and general conversation do not require operations. The Jarvis "
+            "self-diagnostic operations get_capabilities, get_provider_status, "
+            "and get_operation_catalog provide external, current facts about "
+            "Jarvis capabilities, limitations, Provider status, and the Operation "
+            "Catalog. Select the appropriate one only when those current facts "
+            "are required to answer the user. Do not use them for greetings, "
+            "acknowledgements, thanks, general "
+            "conversation, preparation for a normal answer, a just-in-case check, "
+            "or preflight before another operation. If the conversation context "
+            "alone can answer the user, choose answer. If no operation is needed, "
+            "choose answer. "
+            "After a prior observation, use that observation to return a terminal "
+            "action and do not call another operation. "
             "Do not include reasoning, analysis, or hidden thought."
         ),
-        "input": json.dumps(payload.model_dump(mode="json"), ensure_ascii=False),
+        "input": json.dumps(request_input, ensure_ascii=False),
         "store": False,
         "text": text_settings,
         "tools": _native_tool_definitions(
@@ -257,6 +287,50 @@ def _build_action_request_with_registry(
     }
     request.update(inference_settings)
     return request, registry
+
+
+def _request_input_payload(payload: LLMInputPayload) -> dict[str, Any]:
+    """Project the source contract into the smaller payload sent to the model."""
+    request_input = payload.model_dump(mode="json")
+    if payload.prior_observations:
+        request_input.pop("available_operations", None)
+    else:
+        request_input["available_operations"] = _compact_operation_index(
+            payload.available_operations
+        )
+    return request_input
+
+
+def _compact_operation_index(catalog: dict[str, Any]) -> dict[str, Any]:
+    """Keep only metadata needed for model selection; schemas remain in tools."""
+    return {
+        "contract_version": catalog.get("contract_version"),
+        "providers": [
+            {
+                "provider_id": provider.get("provider_id"),
+                "operations": [
+                    {
+                        key: operation.get(key)
+                        for key in (
+                            "provider_id",
+                            "operation_id",
+                            "description",
+                            "availability",
+                            "mode",
+                            "risk_level",
+                            "confirmation_required",
+                            "what_it_can_do",
+                            "what_it_cannot_do",
+                            "limitations",
+                        )
+                        if key in operation
+                    }
+                    for operation in provider.get("operations", [])
+                ],
+            }
+            for provider in catalog.get("providers", [])
+        ],
+    }
 
 
 def _conversation_update_schema() -> dict[str, Any]:

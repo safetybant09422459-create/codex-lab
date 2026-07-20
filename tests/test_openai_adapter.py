@@ -1,5 +1,6 @@
 import json
 import unittest
+from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -11,6 +12,7 @@ from backend.observation import ObservationEnvelope
 from backend.photo_executor import PhotoProvider
 from backend.gift_executor import GiftProvider
 from backend.jarvis_provider import JarvisProvider
+from backend.chat_trace import ChatTraceRecorder, ChatTraceStore
 
 
 class FakeResponses:
@@ -182,6 +184,30 @@ class OpenAIAdapterTest(unittest.TestCase):
         }
         self.assertTrue(registry.entries)
         self.assertEqual(names, controls | set(registry.entries))
+        sent_payload = json.loads(request["input"])
+        operation_index = sent_payload["available_operations"]
+        self.assertTrue(operation_index["providers"])
+        serialized_index = json.dumps(operation_index)
+        self.assertNotIn('"input_schema"', serialized_index)
+        self.assertNotIn('"output_schema"', serialized_index)
+        self.assertNotIn('"examples"', serialized_index)
+        indexed = operation_index["providers"][0]["operations"][0]
+        self.assertIn("operation_id", indexed)
+        self.assertIn("description", indexed)
+        self.assertIn("availability", indexed)
+        self.assertIn("risk_level", indexed)
+        self.assertIn("confirmation_required", indexed)
+        self.assertIn("what_it_can_do", indexed)
+        self.assertIn("what_it_cannot_do", indexed)
+        self.assertIn("limitations", indexed)
+        native_operation = next(
+            tool for tool in request["tools"] if tool["name"] in registry.entries
+        )
+        registry_entry = registry.entries[native_operation["name"]]
+        self.assertEqual(
+            native_operation["parameters"]["properties"]["arguments"],
+            registry_entry.openai_schema,
+        )
 
     def test_request_after_observation_has_only_four_control_tools(self) -> None:
         payload = self.action_payload()
@@ -204,6 +230,156 @@ class OpenAIAdapterTest(unittest.TestCase):
                 "jarvis_control_refuse",
             },
         )
+        sent_payload = json.loads(request["input"])
+        self.assertNotIn("available_operations", sent_payload)
+        self.assertEqual(len(sent_payload["prior_observations"]), 1)
+        self.assertNotIn('"input_schema"', request["input"])
+        self.assertNotIn('"output_schema"', request["input"])
+        self.assertNotIn('"what_it_can_do"', request["input"])
+        self.assertNotIn('"what_it_cannot_do"', request["input"])
+        self.assertNotIn("Display or choose photos", request["input"])
+
+    def test_compact_index_preserves_boundaries_without_mutating_catalog(self) -> None:
+        catalog = {
+            "contract_version": "1",
+            "providers": [{
+                "provider_id": "photo",
+                "operations": [{
+                    "provider_id": "photo",
+                    "operation_id": "get_recent_photos",
+                    "description": "Get recent photo metadata",
+                    "availability": "implemented",
+                    "risk_level": "low",
+                    "confirmation_required": False,
+                    "what_it_can_do": "Summarize recent photo metadata.",
+                    "what_it_cannot_do": "Display or choose photos.",
+                    "limitations": ["Metadata only."],
+                    "input_schema": {"type": "object", "properties": {}},
+                    "output_schema": {"type": "object"},
+                    "examples": [{"request": "Show photos"}],
+                    "implementation_metadata": "x" * 1000,
+                }],
+            }],
+        }
+        original = deepcopy(catalog)
+
+        index = openai_adapter._compact_operation_index(catalog)
+        operation = index["providers"][0]["operations"][0]
+
+        self.assertEqual(operation["what_it_can_do"], "Summarize recent photo metadata.")
+        self.assertEqual(operation["what_it_cannot_do"], "Display or choose photos.")
+        self.assertEqual(operation["limitations"], ["Metadata only."])
+        for excluded in (
+            "input_schema", "output_schema", "examples", "implementation_metadata"
+        ):
+            self.assertNotIn(excluded, operation)
+        self.assertEqual(catalog, original)
+
+    def test_action_instructions_prefer_answer_without_required_operation(self) -> None:
+        instructions = openai_adapter._build_action_request(
+            self.action_payload()
+        )["instructions"]
+
+        self.assertIn("Use an operation only when", instructions)
+        self.assertIn("conversation context alone is enough", instructions)
+        self.assertIn("If no operation is needed, choose answer", instructions)
+        self.assertIn("Greetings", instructions)
+        self.assertIn("get_capabilities", instructions)
+        self.assertIn("get_provider_status", instructions)
+        self.assertIn("get_operation_catalog", instructions)
+        self.assertIn("self-diagnostic operations", instructions)
+        self.assertIn("preflight", instructions)
+        self.assertIn("just-in-case check", instructions)
+        self.assertIn("preparation for a normal answer", instructions)
+        self.assertIn("conversation context alone can answer", instructions)
+        self.assertIn("prior observation", instructions)
+
+    def test_compact_index_preserves_declarative_jarvis_metadata(self) -> None:
+        index = openai_adapter._compact_operation_index(self.current_catalog())
+        jarvis = next(
+            provider for provider in index["providers"]
+            if provider["provider_id"] == "jarvis"
+        )
+        operations = {
+            operation["operation_id"]: operation
+            for operation in jarvis["operations"]
+        }
+
+        self.assertEqual(
+            set(operations),
+            {"get_capabilities", "get_provider_status", "get_operation_catalog"},
+        )
+        self.assertIn(
+            "Capability Catalog", operations["get_capabilities"]["limitations"][0]
+        )
+        self.assertIn(
+            "Capability Catalog", operations["get_provider_status"]["limitations"][0]
+        )
+        self.assertIn(
+            "local catalog", operations["get_operation_catalog"]["limitations"][0]
+        )
+        serialized = json.dumps(jarvis, ensure_ascii=False).lower()
+        for routing_phrase in (
+            "use only when",
+            "user asks",
+            "greetings",
+            "general conversation",
+            "preflight",
+            "just-in-case",
+            "preparation for",
+        ):
+            self.assertNotIn(routing_phrase, serialized)
+
+    def test_trace_uses_the_actual_projected_request_input(self) -> None:
+        store = ChatTraceStore()
+        recorder = ChatTraceRecorder(store, {})
+        recorder.start_turn("turn-1", "session-1", {"text": "hello"})
+        client = FakeClient()
+        client.responses.create = lambda **kwargs: (
+            client.responses.calls.append(kwargs) or self.native_answer()
+        )
+        first_payload = self.action_payload()
+        first_payload.available_operations = self.current_catalog()
+        second_payload = first_payload.model_copy(deep=True)
+        second_payload.prior_observations = [ObservationEnvelope(
+            provider_id="travel", operation_id="get_trips", status="success",
+            raw_result={"success": True}, facts={"trip_count": 0},
+            provenance={"provider_id": "travel", "operation_id": "get_trips"},
+            observed_at="2026-07-19T00:00:00+00:00",
+        )]
+
+        with (
+            patch.object(openai_adapter, "OPENAI_API_KEY", "test-secret"),
+            patch.object(openai_adapter, "OPENAI_MODEL", "test-model"),
+            patch.object(openai_adapter, "_create_client", return_value=client),
+        ):
+            adapter = openai_adapter.OpenAIModelProviderAdapter(recorder)
+            adapter.complete(first_payload)
+            adapter.complete(second_payload)
+
+        calls = store.get("turn-1")["llm_calls"]
+        for call, sent_request in zip(calls, client.responses.calls):
+            traced = call["request"]
+            self.assertEqual(
+                traced["input_payload_bytes"],
+                len(sent_request["input"].encode("utf-8")),
+            )
+        first_request, second_request = (call["request"] for call in calls)
+        self.assertTrue(first_request["operation_catalog_present"])
+        first_sent_payload = json.loads(client.responses.calls[0]["input"])
+        self.assertEqual(
+            first_request["available_operations_bytes"],
+            len(json.dumps(
+                first_sent_payload["available_operations"], ensure_ascii=False
+            ).encode("utf-8")),
+        )
+        self.assertFalse(second_request["operation_catalog_present"])
+        self.assertEqual(second_request["available_operations_bytes"], 0)
+        second_input = client.responses.calls[1]["input"]
+        for operation_id in (
+            "get_capabilities", "get_provider_status", "get_operation_catalog"
+        ):
+            self.assertNotIn(operation_id, second_input)
 
     def test_all_control_tools_normalize_to_common_actions(self) -> None:
         _request, registry = openai_adapter._build_action_request_with_registry(

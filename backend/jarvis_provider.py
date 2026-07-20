@@ -25,47 +25,53 @@ class JarvisProvider(DomainProvider):
             ProviderOperationSpec(
                 operation_id="get_capabilities",
                 what_it_can_do=(
-                    "Return structured facts about currently available Jarvis "
-                    "providers, operations, planned features, and limitations."
+                    "Return structured facts about currently declared Jarvis "
+                    "providers, operations, capabilities, planned features, and "
+                    "limitations."
                 ),
                 what_it_cannot_do=(
-                    "It cannot interpret user intent, enable features, or compose "
-                    "a conversational answer."
+                    "It cannot change state, enable features, interpret user "
+                    "intent, or compose a conversational answer."
                 ),
                 examples=({"arguments": {}},),
                 limitations=(
-                    "Availability reflects the current local Operation Catalog.",
+                    "The result reflects the current local Operation Catalog and "
+                    "Capability Catalog.",
+                    "The operation is read-only and has no side effects.",
                 ),
             ),
             ProviderOperationSpec(
                 operation_id="get_provider_status",
                 what_it_can_do=(
-                    "Return the known Domain Provider areas and their current "
+                    "Return the declared Domain Provider areas and their current "
                     "active, partial, or planned status."
                 ),
                 what_it_cannot_do=(
-                    "It cannot activate providers or infer which provider a user "
-                    "intended to use."
+                    "It cannot activate Providers, interpret user intent, select a "
+                    "Provider, or change Provider state."
                 ),
                 examples=({"arguments": {}},),
                 limitations=(
+                    "The result reflects the current Capability Catalog.",
                     "Partial and planned areas are not executable unless they also "
-                    "appear in the Operation Catalog.",
+                    "appear as implemented in the Operation Catalog.",
+                    "The operation is read-only and has no side effects.",
                 ),
             ),
             ProviderOperationSpec(
                 operation_id="get_operation_catalog",
                 what_it_can_do=(
-                    "Return a deterministic summary of the Runtime Operation "
-                    "Catalog for explanation by the LLM."
+                    "Return a deterministic structured summary of the Runtime "
+                    "Operation Catalog."
                 ),
                 what_it_cannot_do=(
-                    "It cannot select, execute, rank, or describe operations based "
-                    "on user intent."
+                    "It cannot interpret user intent or select, execute, rank, or "
+                    "change Operations."
                 ),
                 examples=({"arguments": {}},),
                 limitations=(
                     "Only operations registered in the local catalog are included.",
+                    "The operation is read-only and has no side effects.",
                 ),
             ),
         )
